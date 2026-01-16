@@ -1,0 +1,201 @@
+:root{
+  --bg:#0b1020;
+  --panel:#111a33;
+  --panel2:#0f1730;
+  --text:#e7ecff;
+  --muted:#a9b4dd;
+  --line:rgba(255,255,255,.08);
+  --good:#16a34a;
+  --warn:#f59e0b;
+  --bad:#ef4444;
+  --accent:#6d28d9;
+  --shadow:0 18px 45px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  background: radial-gradient(1200px 600px at 30% -10%, rgba(109,40,217,.35), transparent 60%),
+              radial-gradient(900px 500px at 120% 20%, rgba(34,211,238,.18), transparent 55%),
+              var(--bg);
+  color:var(--text);
+}
+
+.app{display:flex; min-height:100%}
+
+.sidebar{
+  width:260px;
+  padding:18px 16px;
+  background:linear-gradient(180deg, rgba(17,26,51,.92), rgba(15,23,48,.9));
+  border-right:1px solid var(--line);
+  position:sticky;
+  top:0;
+  height:100vh;
+}
+
+.brand{display:flex; gap:12px; align-items:center; padding:12px 10px; border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow)}
+.logo{width:44px;height:44px;border-radius:16px;display:grid;place-items:center;font-weight:800;
+  background:linear-gradient(135deg, rgba(109,40,217,1), rgba(34,211,238,.9));
+}
+.brandTitle{font-size:15px;font-weight:800;letter-spacing:.2px}
+.brandSub{font-size:12px;color:var(--muted)}
+
+.nav{margin-top:18px; display:flex; flex-direction:column; gap:8px}
+.navBtn{
+  width:100%;
+  text-align:left;
+  padding:12px 12px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.03);
+  color:var(--text);
+  cursor:pointer;
+  transition:transform .05s ease, background .15s ease, border-color .15s ease;
+}
+.navBtn:hover{background:rgba(255,255,255,.06)}
+.navBtn:active{transform:scale(.99)}
+.navBtn.active{background:rgba(109,40,217,.18); border-color:rgba(109,40,217,.45)}
+
+.sideFooter{margin-top:14px; padding:12px 10px; border-radius:16px; border:1px solid var(--line); background:rgba(0,0,0,.12)}
+.tiny{font-size:12px;color:var(--muted); line-height:1.4}
+
+.main{flex:1; padding:18px 18px 30px}
+
+.topbar{
+  display:flex;
+  gap:16px;
+  align-items:flex-end;
+  justify-content:space-between;
+  padding:14px 14px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:rgba(17,26,51,.55);
+  backdrop-filter: blur(10px);
+  box-shadow:var(--shadow);
+}
+
+.pageTitle{font-size:20px;font-weight:900}
+.pageSub{font-size:12px;color:var(--muted); margin-top:2px}
+
+.topRight{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; justify-content:flex-end}
+.field{display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--muted)}
+.field select{
+  height:38px;
+  min-width:170px;
+  padding:8px 10px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,.18);
+  color:var(--text);
+  outline:none;
+}
+
+.btn{
+  height:38px;
+  padding:0 14px;
+  border-radius:12px;
+  border:1px solid rgba(109,40,217,.55);
+  background:rgba(109,40,217,.25);
+  color:var(--text);
+  cursor:pointer;
+  font-weight:700;
+}
+.btn:hover{background:rgba(109,40,217,.32)}
+
+.content{margin-top:14px}
+
+.tab{display:none}
+.tab.active{display:block}
+
+.grid{display:grid; gap:12px}
+.grid.cards{grid-template-columns:repeat(6, minmax(0, 1fr))}
+.grid.two{grid-template-columns:repeat(2, minmax(0, 1fr))}
+
+.card{
+  padding:14px 14px;
+  border-radius:18px;
+  border:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(17,26,51,.85), rgba(15,23,48,.72));
+  box-shadow:var(--shadow);
+}
+.card.warn{border-color:rgba(245,158,11,.35)}
+.cardLabel{font-size:12px; color:var(--muted)}
+.cardValue{font-size:22px; font-weight:950; margin-top:6px}
+.cardFoot{font-size:12px; color:var(--muted); margin-top:6px}
+
+.panel{
+  padding:14px 14px;
+  border-radius:18px;
+  border:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(17,26,51,.72), rgba(15,23,48,.62));
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.panelTitle{font-size:14px; font-weight:900}
+.panelSub{font-size:12px; color:var(--muted); margin-top:4px; margin-bottom:10px}
+
+.chart{
+  height:220px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,.12);
+  padding:10px;
+  overflow:hidden;
+}
+
+.list{display:flex; flex-direction:column; gap:8px}
+.row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:10px 10px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,.12);
+}
+.row .left{min-width:0}
+.row .title{font-weight:800; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:360px}
+.row .sub{font-size:12px; color:var(--muted); margin-top:2px}
+.row .value{font-weight:900; font-size:13px}
+
+.kv{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.kv .kvItem{padding:10px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.12)}
+.kv .k{font-size:12px; color:var(--muted)}
+.kv .v{font-size:13px; font-weight:800; margin-top:4px; word-break:break-word}
+
+.tableWrap{overflow:auto; border:1px solid var(--line); border-radius:14px}
+.table{width:100%; border-collapse:collapse; min-width:980px}
+.table th, .table td{padding:10px 10px; border-bottom:1px solid var(--line); font-size:12px}
+.table th{font-size:12px; color:var(--muted); text-align:left; background:rgba(0,0,0,.18)}
+.table tr:hover td{background:rgba(255,255,255,.03)}
+.right{text-align:right}
+
+.pill{display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px; border:1px solid var(--line); background:rgba(0,0,0,.18); font-size:11px}
+.pill.good{border-color:rgba(22,163,74,.35)}
+.pill.warn{border-color:rgba(245,158,11,.35)}
+.pill.bad{border-color:rgba(239,68,68,.35)}
+
+.toast{
+  position:fixed;
+  bottom:16px;
+  left:50%;
+  transform:translateX(-50%);
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(17,26,51,.9);
+  box-shadow:var(--shadow);
+  font-size:12px;
+  color:var(--text);
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .18s ease;
+}
+.toast.show{opacity:1}
+
+@media (max-width: 1100px){
+  .sidebar{display:none}
+  .grid.cards{grid-template-columns:repeat(2, minmax(0, 1fr))}
+  .grid.two{grid-template-columns:1fr}
+  .table{min-width:900px}
+}
