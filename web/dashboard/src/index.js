@@ -23,7 +23,11 @@ const app = express();
 ================================ */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const WEB_DIR = path.join(__dirname, "../web");
+
+// 👉 THIS IS YOUR REAL WEB ROOT
+const WEB_ROOT = path.join(__dirname, "../web");
+const DASHBOARD_DIR = path.join(WEB_ROOT, "dashboard");
+const DEV_DIR = path.join(DASHBOARD_DIR, "dev");
 
 /* ===============================
    Global Middlewares
@@ -49,23 +53,25 @@ app.get("/", (_req, res) => {
    STATIC WEB UIs
 ================================ */
 
-// Local Hub Web Dashboard (LAN usage)
-app.use(
-  "/dashboard",
-  express.static(path.join(WEB_DIR, "dashboard"))
-);
+// Local Hub Web Dashboard
+app.use("/dashboard", express.static(DASHBOARD_DIR));
 
-// Developer Portal UI
-app.use(
-  "/dev",
-  express.static(path.join(WEB_DIR, "dashboard/dev"))
-);
+/**
+ * 🔥 DEVELOPER PORTAL (FORCED)
+ * This guarantees /dev ALWAYS works
+ */
 
-// Force /dev to always load index.html
+// Serve static assets (css/js)
+app.use("/dev", express.static(DEV_DIR));
+
+// Force-load index.html for /dev
 app.get("/dev", (_req, res) => {
-  res.sendFile(
-    path.join(WEB_DIR, "dashboard/dev/index.html")
-  );
+  res.sendFile(path.join(DEV_DIR, "index.html"));
+});
+
+// Force-load index.html for any /dev/*
+app.get("/dev/*", (_req, res) => {
+  res.sendFile(path.join(DEV_DIR, "index.html"));
 });
 
 /* ===============================
@@ -78,7 +84,7 @@ app.use("/api/dashboard", dashboardRoutes);
 // Developer-only APIs
 app.use("/api/dev", devRoutes);
 
-// Public license claim (device activation)
+// License activation
 app.use("/api/license", licenseRoutes);
 
 // Core APIs
@@ -91,5 +97,10 @@ app.use("/api/sync", authMiddleware, syncRoutes);
 ================================ */
 const PORT = parseInt(process.env.PORT || "8080", 10);
 app.listen(PORT, () => {
-  console.log(`✅ SuperPOSNG Cloud Sync running on :${PORT}`);
+  console.log("====================================");
+  console.log("✅ SuperPOSNG Cloud Sync Server LIVE");
+  console.log("🌐 Dashboard:", "/dashboard");
+  console.log("🧑‍💻 Developer Portal:", "/dev");
+  console.log("🚀 Port:", PORT);
+  console.log("====================================");
 });
