@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SuperPOSNG Hub Dashboard</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">SP</div>
+        <div>
+          <div class="brandTitle">SuperPOSNG</div>
+          <div class="brandSub">Local Hub Dashboard</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="navBtn active" data-tab="overview">Overview</button>
+        <button class="navBtn" data-tab="sales">Sales</button>
+        <button class="navBtn" data-tab="products">Products</button>
+        <button class="navBtn" data-tab="debtors">Debtors</button>
+        <button class="navBtn" data-tab="staff">Staff Performance</button>
+      </nav>
+
+      <div class="sideFooter">
+        <div class="tiny" id="serverTime">—</div>
+        <div class="tiny">Tip: Open this on any phone/PC in your hotspot/LAN.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topLeft">
+          <div class="pageTitle" id="pageTitle">Overview</div>
+          <div class="pageSub" id="shopHint">Loading shop…</div>
+        </div>
+        <div class="topRight">
+          <label class="field">
+            <span>Shop</span>
+            <select id="shopSelect"></select>
+          </label>
+          <label class="field">
+            <span>Range</span>
+            <select id="rangeSelect">
+              <option value="7">Last 7 days</option>
+              <option value="30" selected>Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last 365 days</option>
+            </select>
+          </label>
+          <button id="btnRefresh" class="btn">Refresh</button>
+        </div>
+      </header>
+
+      <section class="content">
+        <!-- OVERVIEW -->
+        <section class="tab active" id="tab-overview">
+          <div class="grid cards">
+            <div class="card">
+              <div class="cardLabel">Revenue</div>
+              <div class="cardValue" id="mRevenue">—</div>
+              <div class="cardFoot" id="mSalesCount">—</div>
+            </div>
+            <div class="card">
+              <div class="cardLabel">Paid</div>
+              <div class="cardValue" id="mPaid">—</div>
+              <div class="cardFoot">Payments received</div>
+            </div>
+            <div class="card warn">
+              <div class="cardLabel">Outstanding</div>
+              <div class="cardValue" id="mOutstanding">—</div>
+              <div class="cardFoot">Unpaid balance (from sales)</div>
+            </div>
+            <div class="card">
+              <div class="cardLabel">Debtors Owed</div>
+              <div class="cardValue" id="mTotalOwed">—</div>
+              <div class="cardFoot" id="mDebtorsCount">—</div>
+            </div>
+            <div class="card">
+              <div class="cardLabel">Products</div>
+              <div class="cardValue" id="mProducts">—</div>
+              <div class="cardFoot" id="mLowStock">—</div>
+            </div>
+            <div class="card">
+              <div class="cardLabel">Staffs</div>
+              <div class="cardValue" id="mStaffs">—</div>
+              <div class="cardFoot">With recorded sales</div>
+            </div>
+          </div>
+
+          <div class="grid two">
+            <div class="panel">
+              <div class="panelTitle">Revenue Trend</div>
+              <div class="panelSub" id="trendSub">—</div>
+              <div class="chart" id="chartTrend"></div>
+            </div>
+            <div class="panel">
+              <div class="panelTitle">Top Products (Qty Sold)</div>
+              <div class="panelSub">From synced sales items</div>
+              <div id="topProducts" class="list"></div>
+            </div>
+          </div>
+
+          <div class="grid two">
+            <div class="panel">
+              <div class="panelTitle">Payment Methods</div>
+              <div class="panelSub">Count of receipts</div>
+              <div id="payMethods" class="list"></div>
+            </div>
+            <div class="panel">
+              <div class="panelTitle">Quick Shop Profile</div>
+              <div class="panelSub">From cloud profile sync</div>
+              <div class="kv" id="shopProfileKv"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SALES -->
+        <section class="tab" id="tab-sales">
+          <div class="panel">
+            <div class="panelTitle">Recent Sales</div>
+            <div class="panelSub">Showing newest first (up to 200)</div>
+            <div class="tableWrap">
+              <table class="table" id="salesTable">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Receipt</th>
+                    <th>Customer</th>
+                    <th>Staff</th>
+                    <th class="right">Total</th>
+                    <th class="right">Paid</th>
+                    <th class="right">Remaining</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- PRODUCTS -->
+        <section class="tab" id="tab-products">
+          <div class="panel">
+            <div class="panelTitle">Products</div>
+            <div class="panelSub">Sorted by low stock first</div>
+            <div class="tableWrap">
+              <table class="table" id="productsTable">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>SKU</th>
+                    <th>Barcode</th>
+                    <th class="right">Price</th>
+                    <th class="right">Stock</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- DEBTORS -->
+        <section class="tab" id="tab-debtors">
+          <div class="panel">
+            <div class="panelTitle">Debtors</div>
+            <div class="panelSub">Sorted by highest owed</div>
+            <div class="tableWrap">
+              <table class="table" id="debtorsTable">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Phone</th>
+                    <th class="right">Total Owed</th>
+                    <th>Last Receipt</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- STAFF -->
+        <section class="tab" id="tab-staff">
+          <div class="panel">
+            <div class="panelTitle">Staff Performance</div>
+            <div class="panelSub">Based on synced sales in selected range</div>
+            <div class="tableWrap">
+              <table class="table" id="staffTable">
+                <thead>
+                  <tr>
+                    <th>Staff</th>
+                    <th class="right">Receipts</th>
+                    <th class="right">Revenue</th>
+                    <th class="right">Paid</th>
+                    <th class="right">Remaining</th>
+                    <th class="right">Items Sold</th>
+                    <th class="right">Avg Sale</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

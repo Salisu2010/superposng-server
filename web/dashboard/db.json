@@ -1,0 +1,1669 @@
+{
+  "shops": [
+    {
+      "shopId": "JEc5aEowezKj",
+      "shopCode": "SPNG-G8YUSZ",
+      "shopName": "Daurawa Enterprises",
+      "createdAt": 1768415996927,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "gqV_dm9FWRJ-",
+      "shopCode": "SPNG-EEC0TO",
+      "shopName": "Daurawa Enterprises",
+      "createdAt": 1768416025568,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "r7QDOku8q0jr",
+      "shopCode": "SPNG-U3KOLY",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768419533733,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "hQ2DGU0YEMVp",
+      "shopCode": "SPNG-XTDBXJ",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768421614862,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "82banQijhqEW",
+      "shopCode": "SPNG-9O8GIN",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768424351535,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "Ul4EdU3iCvYH",
+      "shopCode": "SPNG-D68TS9",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768460429178,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "3z2XZUcBdSnL",
+      "shopCode": "SPNG-FNWUBH",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768465929801,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "1R02Mtbn7SAU",
+      "shopCode": "SPNG-HPIJFN",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768469994398,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234",
+      "address": "Federal Low-cost Kontagora",
+      "phone": "08038481961",
+      "whatsapp": "08096442937",
+      "tagline": "",
+      "currency": "N",
+      "footer": "Thanks",
+      "updatedAt": 1768479733445
+    },
+    {
+      "shopId": "k-cnN46mOaMp",
+      "shopCode": "SPNG-JPJEQX",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768504260059,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "",
+      "address": "Federal Low-cost Kontagora",
+      "phone": "08038481961",
+      "whatsapp": "08096442937",
+      "tagline": "",
+      "currency": "N",
+      "footer": "Thanks for your patronage",
+      "updatedAt": 1768505783990
+    },
+    {
+      "shopId": "0rrhsYKOFyXW",
+      "shopCode": "SPNG-9MM704",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768507540172,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234",
+      "address": "Federal Low-cost Kontagora",
+      "phone": "08038481961",
+      "whatsapp": "08096442937",
+      "tagline": "",
+      "currency": "NGN",
+      "footer": "Thanks for your patronage",
+      "updatedAt": 1768508992670
+    },
+    {
+      "shopId": "v3pBYFk7_-Mi",
+      "shopCode": "SPNG-OC9TWU",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768509464801,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234",
+      "address": "Federal Low-cost Kontagora",
+      "phone": "08038481961",
+      "whatsapp": "08096442937",
+      "tagline": "",
+      "currency": "NGN",
+      "footer": "Thanks for your patronage",
+      "updatedAt": 1768509645017
+    },
+    {
+      "shopId": "7QclRMcEUxMZ",
+      "shopCode": "SPNG-8ONI0B",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768510834798,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234"
+    },
+    {
+      "shopId": "7s-LbZWRGDwB",
+      "shopCode": "SPNG-EDX5HX",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1768513848212,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234",
+      "address": "Federal Low-cost Kontagora",
+      "phone": "08038481961",
+      "whatsapp": "08096442937",
+      "tagline": "",
+      "currency": "NGN",
+      "footer": "Thanks for your patronage",
+      "updatedAt": 1768514440696
+    }
+  ],
+  "devices": [
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "JEc5aEowezKj",
+      "role": "ADMIN",
+      "pairedAt": 1768415996927,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "gqV_dm9FWRJ-",
+      "role": "ADMIN",
+      "pairedAt": 1768416025568,
+      "isActive": true
+    },
+    {
+      "deviceId": "cc78b2fa66209138",
+      "shopId": "7s-LbZWRGDwB",
+      "role": "CASHIER",
+      "pairedAt": 1768514089069,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "r7QDOku8q0jr",
+      "role": "ADMIN",
+      "pairedAt": 1768419533733,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "hQ2DGU0YEMVp",
+      "role": "ADMIN",
+      "pairedAt": 1768421614862,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "82banQijhqEW",
+      "role": "ADMIN",
+      "pairedAt": 1768424351535,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "Ul4EdU3iCvYH",
+      "role": "ADMIN",
+      "pairedAt": 1768460429178,
+      "isActive": true
+    },
+    {
+      "deviceId": "35edf560bd3bfc93",
+      "shopId": "7s-LbZWRGDwB",
+      "role": "CASHIER",
+      "pairedAt": 1768513881427,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "3z2XZUcBdSnL",
+      "role": "ADMIN",
+      "pairedAt": 1768465929801,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "1R02Mtbn7SAU",
+      "role": "ADMIN",
+      "pairedAt": 1768469994398,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "k-cnN46mOaMp",
+      "role": "ADMIN",
+      "pairedAt": 1768504260059,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "0rrhsYKOFyXW",
+      "role": "ADMIN",
+      "pairedAt": 1768507540172,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "v3pBYFk7_-Mi",
+      "role": "ADMIN",
+      "pairedAt": 1768509464801,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "7QclRMcEUxMZ",
+      "role": "ADMIN",
+      "pairedAt": 1768510834798,
+      "isActive": true
+    },
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "7s-LbZWRGDwB",
+      "role": "ADMIN",
+      "pairedAt": 1768513848213,
+      "isActive": true
+    }
+  ],
+  "pairCodes": [
+    {
+      "pairingCode": "PAIR-_PCUQJ",
+      "shopId": "JEc5aEowezKj",
+      "createdAt": 1768416006622,
+      "expiresAt": 1768416606622,
+      "used": false
+    },
+    {
+      "pairingCode": "PAIR-QO4AOS",
+      "shopId": "gqV_dm9FWRJ-",
+      "createdAt": 1768417400590,
+      "expiresAt": 1768418000590,
+      "used": false
+    },
+    {
+      "pairingCode": "PAIR-CRTFOR",
+      "shopId": "gqV_dm9FWRJ-",
+      "createdAt": 1768419030062,
+      "expiresAt": 1768419630062,
+      "used": true,
+      "usedAt": 1768419053104,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-O9AUPZ",
+      "shopId": "r7QDOku8q0jr",
+      "createdAt": 1768419546315,
+      "expiresAt": 1768420146315,
+      "used": false
+    },
+    {
+      "pairingCode": "PAIR-8REJNG",
+      "shopId": "r7QDOku8q0jr",
+      "createdAt": 1768419789474,
+      "expiresAt": 1768420389474,
+      "used": true,
+      "usedAt": 1768419818713,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-NMORMI",
+      "shopId": "hQ2DGU0YEMVp",
+      "createdAt": 1768421668617,
+      "expiresAt": 1768422268617,
+      "used": true,
+      "usedAt": 1768421730799,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-TBFUN0",
+      "shopId": "82banQijhqEW",
+      "createdAt": 1768424357320,
+      "expiresAt": 1768424957320,
+      "used": true,
+      "usedAt": 1768424428193,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-DHJFX3",
+      "shopId": "Ul4EdU3iCvYH",
+      "createdAt": 1768460439028,
+      "expiresAt": 1768461039028,
+      "used": true,
+      "usedAt": 1768460464051,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-O3YL6_",
+      "shopId": "Ul4EdU3iCvYH",
+      "createdAt": 1768460597950,
+      "expiresAt": 1768461197950,
+      "used": true,
+      "usedAt": 1768460638912,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-8QWHOS",
+      "shopId": "Ul4EdU3iCvYH",
+      "createdAt": 1768465099886,
+      "expiresAt": 1768465699886,
+      "used": true,
+      "usedAt": 1768465123184,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-VJNJO2",
+      "shopId": "3z2XZUcBdSnL",
+      "createdAt": 1768465935240,
+      "expiresAt": 1768466535240,
+      "used": true,
+      "usedAt": 1768465954351,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-N7DIXI",
+      "shopId": "3z2XZUcBdSnL",
+      "createdAt": 1768466067504,
+      "expiresAt": 1768466667504,
+      "used": true,
+      "usedAt": 1768466103917,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-IBMG5X",
+      "shopId": "1R02Mtbn7SAU",
+      "createdAt": 1768470001962,
+      "expiresAt": 1768470601962,
+      "used": true,
+      "usedAt": 1768470025649,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-G1HCZO",
+      "shopId": "1R02Mtbn7SAU",
+      "createdAt": 1768470154591,
+      "expiresAt": 1768470754591,
+      "used": true,
+      "usedAt": 1768470176998,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-9ATJDV",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768504266741,
+      "expiresAt": 1768504866741,
+      "used": true,
+      "usedAt": 1768504286236,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-VIAQSY",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768504320857,
+      "expiresAt": 1768504920857,
+      "used": true,
+      "usedAt": 1768504341102,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-MF7P6I",
+      "shopId": "0rrhsYKOFyXW",
+      "createdAt": 1768507543725,
+      "expiresAt": 1768508143724,
+      "used": true,
+      "usedAt": 1768507566029,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-BEXPEI",
+      "shopId": "0rrhsYKOFyXW",
+      "createdAt": 1768507635939,
+      "expiresAt": 1768508235939,
+      "used": true,
+      "usedAt": 1768507678669,
+      "usedByDeviceId": "cc78b2fa66209138"
+    },
+    {
+      "pairingCode": "PAIR-MUCHLN",
+      "shopId": "v3pBYFk7_-Mi",
+      "createdAt": 1768509469474,
+      "expiresAt": 1768510069473,
+      "used": true,
+      "usedAt": 1768509489041,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-QL6U_8",
+      "shopId": "7QclRMcEUxMZ",
+      "createdAt": 1768510840340,
+      "expiresAt": 1768511440339,
+      "used": true,
+      "usedAt": 1768510857801,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-PAIF9F",
+      "shopId": "7s-LbZWRGDwB",
+      "createdAt": 1768513861805,
+      "expiresAt": 1768514461804,
+      "used": true,
+      "usedAt": 1768513881427,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    },
+    {
+      "pairingCode": "PAIR-IFGNTT",
+      "shopId": "7s-LbZWRGDwB",
+      "createdAt": 1768514065536,
+      "expiresAt": 1768514665536,
+      "used": true,
+      "usedAt": 1768514089069,
+      "usedByDeviceId": "cc78b2fa66209138"
+    }
+  ],
+  "products": [
+    {
+      "cost": 3000,
+      "productId": "3",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "3",
+      "sku": "PLU1768395104298",
+      "stock": 277,
+      "barcode": "6182000129456",
+      "lowStockLevel": 20,
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460489251
+    },
+    {
+      "cost": 155000,
+      "productId": "1",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "1",
+      "sku": "PLU1768394112220",
+      "stock": 8,
+      "barcode": "356136682553856",
+      "lowStockLevel": 2,
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460489251
+    },
+    {
+      "cost": 190,
+      "productId": "2",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "2",
+      "sku": "PLU1768394162271",
+      "stock": 500,
+      "barcode": "6156000264042",
+      "lowStockLevel": 50,
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460489251
+    },
+    {
+      "cost": 28000,
+      "productId": "5",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "5",
+      "sku": "PLU1768405009281",
+      "stock": 9,
+      "barcode": "2004830413755",
+      "lowStockLevel": 3,
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460489251
+    },
+    {
+      "cost": 2500,
+      "productId": "4",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "4",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 10,
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460489251
+    },
+    {
+      "cost": 3000,
+      "productId": "3",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "3",
+      "sku": "PLU1768395104298",
+      "stock": 277,
+      "barcode": "6182000129456",
+      "lowStockLevel": 20,
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465977733
+    },
+    {
+      "cost": 155000,
+      "productId": "1",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "1",
+      "sku": "PLU1768394112220",
+      "stock": 8,
+      "barcode": "356136682553856",
+      "lowStockLevel": 2,
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465977733
+    },
+    {
+      "cost": 190,
+      "productId": "2",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "2",
+      "sku": "PLU1768394162271",
+      "stock": 500,
+      "barcode": "6156000264042",
+      "lowStockLevel": 50,
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465977733
+    },
+    {
+      "cost": 28000,
+      "productId": "5",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "5",
+      "sku": "PLU1768405009281",
+      "stock": 9,
+      "barcode": "2004830413755",
+      "lowStockLevel": 3,
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465977733
+    },
+    {
+      "cost": 2500,
+      "productId": "4",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "4",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 10,
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465977733
+    },
+    {
+      "cost": 3000,
+      "productId": "3",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "3",
+      "sku": "PLU1768395104298",
+      "stock": 277,
+      "barcode": "6182000129456",
+      "lowStockLevel": 20,
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768470049358
+    },
+    {
+      "cost": 155000,
+      "productId": "1",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "1",
+      "sku": "PLU1768394112220",
+      "stock": 3,
+      "barcode": "356136682553856",
+      "lowStockLevel": 2,
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768479788321
+    },
+    {
+      "cost": 190,
+      "productId": "2",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "2",
+      "sku": "PLU1768394162271",
+      "stock": 499,
+      "barcode": "6156000264042",
+      "lowStockLevel": 50,
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768477710215
+    },
+    {
+      "cost": 28000,
+      "productId": "5",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "5",
+      "sku": "PLU1768405009281",
+      "stock": 9,
+      "barcode": "2004830413755",
+      "lowStockLevel": 3,
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768470049358
+    },
+    {
+      "cost": 2500,
+      "productId": "4",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "4",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 10,
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768470049358
+    },
+    {
+      "cost": 0,
+      "productId": "1",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "1",
+      "sku": "PLU1768395104298",
+      "stock": 275,
+      "barcode": "6182000129456",
+      "lowStockLevel": 5,
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504145497
+    },
+    {
+      "cost": 0,
+      "productId": "2",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "2",
+      "sku": "PLU1768394112220",
+      "stock": 1,
+      "barcode": "356136682553856",
+      "lowStockLevel": 5,
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504145497
+    },
+    {
+      "cost": 0,
+      "productId": "3",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "3",
+      "sku": "PLU1768394162271",
+      "stock": 499,
+      "barcode": "6156000264042",
+      "lowStockLevel": 5,
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504145497
+    },
+    {
+      "cost": 0,
+      "productId": "4",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "4",
+      "sku": "PLU1768405009281",
+      "stock": 9,
+      "barcode": "2004830413755",
+      "lowStockLevel": 5,
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504145497
+    },
+    {
+      "cost": 0,
+      "productId": "5",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "5",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 5,
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504145497
+    },
+    {
+      "cost": 0,
+      "productId": "1",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "1",
+      "sku": "PLU1768395104298",
+      "stock": 260,
+      "barcode": "6182000129456",
+      "lowStockLevel": 5,
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768505106608
+    },
+    {
+      "cost": 0,
+      "productId": "2",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "2",
+      "sku": "PLU1768394112220",
+      "stock": 0,
+      "barcode": "356136682553856",
+      "lowStockLevel": 5,
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768504708947
+    },
+    {
+      "cost": 0,
+      "productId": "3",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "3",
+      "sku": "PLU1768394162271",
+      "stock": 499,
+      "barcode": "6156000264042",
+      "lowStockLevel": 5,
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768504455683
+    },
+    {
+      "cost": 0,
+      "productId": "4",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "4",
+      "sku": "PLU1768405009281",
+      "stock": 6,
+      "barcode": "2004830413755",
+      "lowStockLevel": 5,
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768505621057
+    },
+    {
+      "cost": 0,
+      "productId": "5",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "5",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 5,
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768504455683
+    },
+    {
+      "cost": 75000,
+      "productId": "3",
+      "price": 80000,
+      "name": "CLA6 Screen",
+      "id": "3",
+      "sku": "PLU1768303011070",
+      "stock": 7,
+      "barcode": "2008508828230",
+      "lowStockLevel": 3,
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507875463
+    },
+    {
+      "cost": 29000,
+      "productId": "5",
+      "price": 33200,
+      "name": "LI6 Screen",
+      "id": "5",
+      "sku": "PLU1768303116145",
+      "stock": 0,
+      "barcode": "2004520427765",
+      "lowStockLevel": 2,
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507620325
+    },
+    {
+      "cost": 75000,
+      "productId": "4",
+      "price": 81200,
+      "name": "S686LN",
+      "id": "4",
+      "sku": "PLU1768303084332",
+      "stock": 5,
+      "barcode": "2000845572814",
+      "lowStockLevel": 2,
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507620325
+    },
+    {
+      "cost": 1000,
+      "productId": "1",
+      "price": 1500,
+      "name": "Water Gum",
+      "id": "1",
+      "sku": "PLU1768302197984",
+      "stock": 40,
+      "barcode": "2000502322189",
+      "lowStockLevel": 5,
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507620325
+    },
+    {
+      "cost": 80000,
+      "productId": "6",
+      "price": 83000,
+      "name": "X6850 Screen",
+      "id": "6",
+      "sku": "PLU1768309102204",
+      "stock": 9,
+      "barcode": "2007919763451",
+      "lowStockLevel": 5,
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507620325
+    },
+    {
+      "cost": 75000,
+      "productId": "2",
+      "price": 79200,
+      "name": "X6880 Screen",
+      "id": "2",
+      "sku": "PLU1768302964382",
+      "stock": 10,
+      "barcode": "2007738698996",
+      "lowStockLevel": 2,
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507620325
+    },
+    {
+      "cost": 3000,
+      "productId": "3",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "3",
+      "sku": "PLU1768395104298",
+      "stock": 277,
+      "barcode": "6182000129456",
+      "lowStockLevel": 20,
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509557510
+    },
+    {
+      "cost": 155000,
+      "productId": "1",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "1",
+      "sku": "PLU1768394112220",
+      "stock": 8,
+      "barcode": "356136682553856",
+      "lowStockLevel": 2,
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509557510
+    },
+    {
+      "cost": 190,
+      "productId": "2",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "2",
+      "sku": "PLU1768394162271",
+      "stock": 500,
+      "barcode": "6156000264042",
+      "lowStockLevel": 50,
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509557510
+    },
+    {
+      "cost": 28000,
+      "productId": "5",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "5",
+      "sku": "PLU1768405009281",
+      "stock": 9,
+      "barcode": "2004830413755",
+      "lowStockLevel": 3,
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509557510
+    },
+    {
+      "cost": 2500,
+      "productId": "4",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "4",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 10,
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509557510
+    },
+    {
+      "cost": 3000,
+      "productId": "3",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "3",
+      "sku": "PLU1768395104298",
+      "stock": 275,
+      "barcode": "6182000129456",
+      "lowStockLevel": 20,
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768514224256
+    },
+    {
+      "cost": 155000,
+      "productId": "1",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "1",
+      "sku": "PLU1768394112220",
+      "stock": 6,
+      "barcode": "356136682553856",
+      "lowStockLevel": 2,
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768514420054
+    },
+    {
+      "cost": 190,
+      "productId": "2",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "2",
+      "sku": "PLU1768394162271",
+      "stock": 500,
+      "barcode": "6156000264042",
+      "lowStockLevel": 50,
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768514147234
+    },
+    {
+      "cost": 28000,
+      "productId": "5",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "5",
+      "sku": "PLU1768405009281",
+      "stock": 9,
+      "barcode": "2004830413755",
+      "lowStockLevel": 3,
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768514147234
+    },
+    {
+      "cost": 2500,
+      "productId": "4",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "4",
+      "sku": "PLU1768396590405",
+      "stock": 47,
+      "barcode": "2005077765737",
+      "lowStockLevel": 10,
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768514147234
+    }
+  ],
+  "staffs": [
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa",
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460482374
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460482374
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "Ul4EdU3iCvYH",
+      "updatedAt": 1768460482374
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa Enterprisess",
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465974511
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465974511
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "3z2XZUcBdSnL",
+      "updatedAt": 1768465974511
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa",
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768470044277
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768470044277
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "1R02Mtbn7SAU",
+      "updatedAt": 1768470044277
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa",
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504118450
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504118450
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "ffmmTtId70C5",
+      "updatedAt": 1768504118450
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa",
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768504450740
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768504450740
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "k-cnN46mOaMp",
+      "updatedAt": 1768504450740
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507576117
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "0rrhsYKOFyXW",
+      "updatedAt": 1768507576117
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509525620
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "v3pBYFk7_-Mi",
+      "updatedAt": 1768509525620
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "7QclRMcEUxMZ",
+      "updatedAt": 1768510864141
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "7QclRMcEUxMZ",
+      "updatedAt": 1768510864141
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa",
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768513889187
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768513889187
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "7s-LbZWRGDwB",
+      "updatedAt": 1768513889187
+    }
+  ],
+  "sales": [
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 214050,
+      "remaining": 14050,
+      "customerName": "Aman Gupta",
+      "total": 214050,
+      "customerPhone": "08096784546",
+      "receiptNo": "R-1768470543312",
+      "paid": 200000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 21000,
+          "code": "PLU1768395104298",
+          "productId": 1,
+          "price": 3500,
+          "qty": 6,
+          "productName": "Gluta white Curved Big Size"
+        },
+        {
+          "total": 160000,
+          "code": "PLU1768394112220",
+          "productId": 2,
+          "price": 160000,
+          "qty": 1,
+          "productName": "Infinix Hot 60i"
+        },
+        {
+          "total": 250,
+          "code": "PLU1768394162271",
+          "productId": 3,
+          "price": 250,
+          "qty": 1,
+          "productName": "Mr. V Bottle Water"
+        },
+        {
+          "total": 30000,
+          "code": "PLU1768405009281",
+          "productId": 4,
+          "price": 30000,
+          "qty": 1,
+          "productName": "PCBA"
+        },
+        {
+          "total": 2800,
+          "code": "PLU1768396590405",
+          "productId": 5,
+          "price": 2800,
+          "qty": 1,
+          "productName": "Venus Gold Perfume"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "1R02Mtbn7SAU",
+      "createdAt": 1768470584845
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 7000,
+      "remaining": 0,
+      "customerName": "Sanusi Aman",
+      "total": 7000,
+      "customerPhone": "08095848466",
+      "receiptNo": "R-1768470947685",
+      "paid": 7000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 7000,
+          "code": "PLU1768395104298",
+          "productId": 1,
+          "price": 3500,
+          "qty": 2,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "1R02Mtbn7SAU",
+      "createdAt": 1768470979229
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 174000,
+      "remaining": 34000,
+      "customerName": "Mubarak",
+      "total": 174000,
+      "customerPhone": "08095648465",
+      "receiptNo": "R-1768477621695",
+      "paid": 140000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 14000,
+          "code": "PLU1768395104298",
+          "productId": 1,
+          "price": 3500,
+          "qty": 4,
+          "productName": "Gluta white Curved Big Size"
+        },
+        {
+          "total": 160000,
+          "code": "PLU1768394112220",
+          "productId": 2,
+          "price": 160000,
+          "qty": 1,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "1R02Mtbn7SAU",
+      "createdAt": 1768477710215
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 3500,
+      "remaining": 0,
+      "customerName": "Sani",
+      "total": 3500,
+      "customerPhone": "0805545465",
+      "receiptNo": "R-1768479581335",
+      "paid": 3500,
+      "paymentMethod": "MOBILE MONEY",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 3500,
+          "code": "PLU1768395104298",
+          "productId": 1,
+          "price": 3500,
+          "qty": 1,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "1R02Mtbn7SAU",
+      "createdAt": 1768479788321
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 7000,
+      "remaining": 0,
+      "customerName": "Samsung",
+      "total": 7000,
+      "customerPhone": "08888498786",
+      "receiptNo": "R-1768504496079",
+      "paid": 7000,
+      "paymentMethod": "CASH",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 7000,
+          "code": "6182000129456",
+          "productId": 1,
+          "price": 3500,
+          "qty": 2,
+          "sku": "PLU1768395104298",
+          "barcode": "6182000129456",
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768504513976
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 167000,
+      "remaining": 0,
+      "customerName": "Asda stores",
+      "total": 167000,
+      "customerPhone": "080384845653",
+      "receiptNo": "R-1768504682593",
+      "paid": 167000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 7000,
+          "code": "6182000129456",
+          "productId": 1,
+          "price": 3500,
+          "qty": 2,
+          "sku": "PLU1768395104298",
+          "barcode": "6182000129456",
+          "productName": "Gluta white Curved Big Size"
+        },
+        {
+          "total": 160000,
+          "code": "356136682553856",
+          "productId": 2,
+          "price": 160000,
+          "qty": 1,
+          "sku": "PLU1768394112220",
+          "barcode": "356136682553856",
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768504708947
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 3500,
+      "remaining": 0,
+      "customerName": "AMF bowling",
+      "total": 3500,
+      "customerPhone": "08065213216",
+      "receiptNo": "R-1768504866799",
+      "paid": 3500,
+      "paymentMethod": "CASH",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 3500,
+          "code": "6182000129456",
+          "productId": 1,
+          "price": 3500,
+          "qty": 1,
+          "sku": "PLU1768395104298",
+          "barcode": "6182000129456",
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768504891586
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 35000,
+      "remaining": 0,
+      "customerName": "Alh. Mudi",
+      "total": 35000,
+      "customerPhone": "08065213046",
+      "receiptNo": "R-1768505048362",
+      "paid": 35000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 35000,
+          "code": "6182000129456",
+          "productId": 1,
+          "price": 3500,
+          "qty": 10,
+          "sku": "PLU1768395104298",
+          "barcode": "6182000129456",
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768505106608
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 90000,
+      "remaining": 40000,
+      "customerName": "Jatau Ƙaraye",
+      "total": 90000,
+      "customerPhone": "08096442937",
+      "receiptNo": "R-1768505581246",
+      "paid": 50000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 90000,
+          "code": "2004830413755",
+          "productId": 4,
+          "price": 30000,
+          "qty": 3,
+          "sku": "PLU1768405009281",
+          "barcode": "2004830413755",
+          "productName": "PCBA"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "k-cnN46mOaMp",
+      "createdAt": 1768505621057
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 240000,
+      "remaining": 70000,
+      "customerName": "Armani Junior",
+      "total": 240000,
+      "customerPhone": "08069651312",
+      "receiptNo": "R-1768507835836",
+      "paid": 170000,
+      "paymentMethod": "CASH",
+      "staffUser": "cashier",
+      "items": [
+        {
+          "total": 240000,
+          "code": "2008508828230",
+          "productId": 1,
+          "price": 80000,
+          "qty": 3,
+          "sku": "PLU1768303011070",
+          "barcode": "2008508828230",
+          "productName": "CLA6 Screen"
+        }
+      ],
+      "staffId": 2,
+      "status": "PARTIAL",
+      "shopId": "0rrhsYKOFyXW",
+      "createdAt": 1768507875463
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 7000,
+      "remaining": 3500,
+      "customerName": "Mary Ann",
+      "total": 7000,
+      "customerPhone": "08096526395",
+      "receiptNo": "R-1768514188323",
+      "paid": 3500,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 7000,
+          "code": "6182000129456",
+          "productId": 1,
+          "price": 3500,
+          "qty": 2,
+          "sku": "PLU1768395104298",
+          "barcode": "6182000129456",
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "7s-LbZWRGDwB",
+      "createdAt": 1768514224256
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 320000,
+      "remaining": 40000,
+      "customerName": "Maryam Zakaria",
+      "total": 320000,
+      "customerPhone": "080546582855",
+      "receiptNo": "R-1768514340773",
+      "paid": 280000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 320000,
+          "code": "356136682553856",
+          "productId": 2,
+          "price": 160000,
+          "qty": 2,
+          "sku": "PLU1768394112220",
+          "barcode": "356136682553856",
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "7s-LbZWRGDwB",
+      "createdAt": 1768514420054
+    }
+  ],
+  "debtors": [
+    {
+      "shopId": "1R02Mtbn7SAU",
+      "customerName": "Aman Gupta",
+      "customerPhone": "08096784546",
+      "totalOwed": 14050,
+      "lastReceiptNo": "R-1768470543312",
+      "updatedAt": 1768470584845,
+      "createdAt": 1768470584845
+    },
+    {
+      "shopId": "1R02Mtbn7SAU",
+      "customerName": "Mubarak",
+      "customerPhone": "08095648465",
+      "totalOwed": 34000,
+      "lastReceiptNo": "R-1768477621695",
+      "createdAt": 1768477710215,
+      "updatedAt": 1768477710215
+    },
+    {
+      "shopId": "k-cnN46mOaMp",
+      "customerName": "Jatau Ƙaraye",
+      "customerPhone": "08096442937",
+      "totalOwed": 40000,
+      "lastReceiptNo": "R-1768505581246",
+      "createdAt": 1768505621057,
+      "updatedAt": 1768505621057
+    },
+    {
+      "shopId": "0rrhsYKOFyXW",
+      "customerName": "Armani Junior",
+      "customerPhone": "08069651312",
+      "totalOwed": 70000,
+      "lastReceiptNo": "R-1768507835836",
+      "createdAt": 1768507875463,
+      "updatedAt": 1768507875463
+    },
+    {
+      "shopId": "7s-LbZWRGDwB",
+      "customerName": "Mary Ann",
+      "customerPhone": "08096526395",
+      "totalOwed": 3500,
+      "lastReceiptNo": "R-1768514188323",
+      "createdAt": 1768514224256,
+      "updatedAt": 1768514224256
+    },
+    {
+      "shopId": "7s-LbZWRGDwB",
+      "customerName": "Maryam Zakaria",
+      "customerPhone": "080546582855",
+      "totalOwed": 40000,
+      "lastReceiptNo": "R-1768514340773",
+      "createdAt": 1768514420054,
+      "updatedAt": 1768514420054
+    }
+  ]
+}

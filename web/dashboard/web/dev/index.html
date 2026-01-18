@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SuperPOSNG Developer Portal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">SP</div>
+      <div>
+        <div class="title">SuperPOSNG</div>
+        <div class="subtitle">Developer Portal (Token & Device Activation)</div>
+      </div>
+    </div>
+    <div class="right">
+      <input id="devKey" type="password" placeholder="DEV KEY" />
+      <button id="btnSaveKey" class="btn">Save</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <h2>Activate Device</h2>
+      <div class="grid2">
+        <div>
+          <label>Device ID</label>
+          <input id="deviceId" placeholder="e.g. HUB-ABC123" />
+        </div>
+        <div>
+          <label>Shop ID (optional)</label>
+          <input id="shopId" placeholder="e.g. JEc5aEowezKj" />
+        </div>
+        <div>
+          <label>Token</label>
+          <input id="token" placeholder="SPNG-XXXX-XXXX" />
+        </div>
+        <div class="row">
+          <button id="btnAssign" class="btn primary">Activate Device</button>
+          <button id="btnSearchFromActivate" class="btn">Search</button>
+        </div>
+      </div>
+      <p class="hint">Workflow: customer sends you Device ID → you paste token + deviceId → Activate. Customer app clicks “Check Online Activation”.</p>
+    </section>
+
+    <section class="card">
+      <h2>Search Device / Token / Shop</h2>
+      <div class="grid3">
+        <div>
+          <label>Device ID</label>
+          <input id="searchDevice" placeholder="deviceId" />
+        </div>
+        <div>
+          <label>Token</label>
+          <input id="searchToken" placeholder="token" />
+        </div>
+        <div>
+          <label>Shop ID</label>
+          <input id="searchShop" placeholder="shopId" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="btnSearch" class="btn primary">Search</button>
+        <button id="btnClear" class="btn">Clear</button>
+      </div>
+
+      <div id="results" class="results"></div>
+    </section>
+
+    <section class="card">
+      <h2>Quick Actions</h2>
+      <div class="grid2">
+        <div>
+          <label>Target (License ID / Token / Device ID)</label>
+          <input id="target" placeholder="LIC-...  OR  SPNG-...  OR  DEVICEID" />
+        </div>
+        <div>
+          <label>Reason (optional)</label>
+          <input id="reason" placeholder="e.g. Customer changed phone" />
+        </div>
+        <div class="row">
+          <button id="btnReset" class="btn warn">Reset Activation</button>
+          <button id="btnRevoke" class="btn danger">Revoke Token</button>
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:14px;">
+        <div>
+          <label>Extend (Add Days)</label>
+          <input id="addDays" type="number" min="0" step="1" placeholder="e.g. 30" />
+        </div>
+        <div>
+          <label>Upgrade Plan (optional)</label>
+          <select id="plan">
+            <option value="">(no change)</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="QUARTERLY">QUARTERLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+        <div class="row">
+          <button id="btnExtend" class="btn primary">Extend / Upgrade</button>
+        </div>
+      </div>
+      <p class="hint">Tip: Use Search first, then paste the License ID into Target.</p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
