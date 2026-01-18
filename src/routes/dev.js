@@ -29,6 +29,11 @@ function genToken(prefix = "SPNG") {
   return `${prefix}-${part()}-${part()}`;
 }
 
+function normalizeToken(v) {
+  // Be forgiving: trim + remove whitespace, keep original separators like '-' or '|'.
+  return trim(v).replace(/\s+/g, "");
+}
+
 function planToDays(plan) {
   const p = trim(plan).toUpperCase();
   if (p === "YEARLY") return 365;
@@ -39,7 +44,7 @@ function planToDays(plan) {
 
 function findLicenseByAny(db, { licenseId, token, deviceId, shopId }) {
   const lid = trim(licenseId);
-  const tok = trim(token);
+  const tok = normalizeToken(token);
   const did = trim(deviceId);
   const sid = trim(shopId);
 
@@ -48,7 +53,7 @@ function findLicenseByAny(db, { licenseId, token, deviceId, shopId }) {
     if (byId) return byId;
   }
   if (tok) {
-    const byTok = db.licenses.find((x) => trim(x.token) === tok);
+    const byTok = db.licenses.find((x) => normalizeToken(x.token) === tok);
     if (byTok) return byTok;
   }
   if (did) {
@@ -107,12 +112,63 @@ r.post("/generate-token", requireDevKey, (req, res) => {
 });
 
 // -------------------------
+// DEV: Register/Import a token created elsewhere (e.g. Python)
+// Allows your existing workflow while keeping the portal usable.
+// -------------------------
+r.post("/register-token", requireDevKey, (req, res) => {
+  const db = readDB();
+
+  const tokenRaw = req.body?.token;
+  const token = normalizeToken(tokenRaw);
+  if (!token) return res.status(400).json({ ok: false, error: "token required" });
+
+  const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
+  const days = Math.max(1, parseInt(req.body?.days || planToDays(plan), 10));
+  const note = trim(req.body?.notes || "");
+
+  const createdAt = now();
+  // If caller supplies expiresAt, respect it; otherwise compute from days.
+  const expiresAtIn = parseInt(req.body?.expiresAt || "0", 10);
+  const expiresAt = (Number.isFinite(expiresAtIn) && expiresAtIn > 0)
+    ? expiresAtIn
+    : (createdAt + days * 24 * 60 * 60 * 1000);
+
+  let lic = findLicenseByAny(db, { token });
+  if (!lic) {
+    const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+    lic = {
+      licenseId,
+      token,
+      plan,
+      days,
+      status: "ISSUED",
+      createdAt,
+      expiresAt,
+      boundDeviceId: "",
+      boundShopId: "",
+      activatedAt: 0,
+      notes: note || "IMPORTED"
+    };
+    db.licenses.unshift(lic);
+  } else {
+    // Upsert/update basic fields without breaking existing bindings.
+    lic.plan = plan || lic.plan;
+    lic.days = days || lic.days;
+    lic.expiresAt = expiresAt || lic.expiresAt;
+    if (note) lic.notes = note;
+  }
+
+  writeDB(db);
+  res.json({ ok: true, license: lic, serverTime: createdAt });
+});
+
+// -------------------------
 // DEV: Assign token to device (for claim)
 // -------------------------
 r.post("/assign-token", requireDevKey, (req, res) => {
   const db = readDB();
   const deviceId = trim(req.body?.deviceId);
-  const token = trim(req.body?.token);
+  const token = normalizeToken(req.body?.token);
   const shopId = trim(req.body?.shopId);
   if (!deviceId) return res.status(400).json({ ok: false, error: "deviceId required" });
   if (!token) return res.status(400).json({ ok: false, error: "token required" });
@@ -148,20 +204,20 @@ r.post("/assign-token", requireDevKey, (req, res) => {
 r.get("/search", requireDevKey, (req, res) => {
   const db = readDB();
   const deviceId = trim(req.query?.deviceId);
-  const token = trim(req.query?.token);
+  const token = normalizeToken(req.query?.token);
   const shopId = trim(req.query?.shopId);
 
   const matches = [];
   for (const lic of db.licenses) {
     const hit =
-      (token && trim(lic.token) === token) ||
+      (token && normalizeToken(lic.token) === token) ||
       (deviceId && trim(lic.boundDeviceId) === deviceId) ||
       (shopId && trim(lic.boundShopId) === shopId);
     if (hit) matches.push(lic);
   }
   const pending = db.pendingActivations.filter((p) =>
     (deviceId && trim(p.deviceId) === deviceId) ||
-    (token && trim(p.token) === token) ||
+    (token && normalizeToken(p.token) === token) ||
     (shopId && trim(p.shopId) === shopId)
   );
 

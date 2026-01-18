@@ -166,6 +166,54 @@ async function doSearch() {
   toast("Search done");
 }
 
+function parsePipeTokenMeta(tok) {
+  // Expected: SPNG1|MONTHLY|YYYYMMDD|...
+  const t = (tok || "").trim();
+  if (!t.includes("|")) return null;
+  const parts = t.split("|").map((x) => x.trim());
+  if (parts.length < 3) return null;
+  const plan = (parts[1] || "MONTHLY").toUpperCase();
+  const ymd = parts[2] || "";
+  if (!/^[0-9]{8}$/.test(ymd)) return { plan };
+  const y = parseInt(ymd.slice(0, 4), 10);
+  const m = parseInt(ymd.slice(4, 6), 10) - 1;
+  const d = parseInt(ymd.slice(6, 8), 10);
+  const dt = new Date(Date.UTC(y, m, d, 0, 0, 0));
+  const expiresAt = dt.getTime();
+  return { plan, expiresAt };
+}
+
+async function doRegisterToken() {
+  const token = $("token").value.trim();
+  if (!token) {
+    toast("Enter a token first");
+    return;
+  }
+  const meta = parsePipeTokenMeta(token) || {};
+  const payload = { token, plan: meta.plan || "MONTHLY" };
+  if (meta.expiresAt) payload.expiresAt = meta.expiresAt;
+  await api("/api/dev/register-token", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  toast("Token registered");
+}
+
+async function doGenerateToken() {
+  const out = await api("/api/dev/generate-token", {
+    method: "POST",
+    body: JSON.stringify({ plan: "MONTHLY" })
+  });
+  const tok = (out && out.license && out.license.token) ? out.license.token : "";
+  if (tok) {
+    $("token").value = tok;
+    navigator.clipboard.writeText(tok).catch(() => {});
+    toast("Generated token copied");
+  } else {
+    toast("Generated");
+  }
+}
+
 async function doAssign() {
   const deviceId = $("deviceId").value.trim();
   const token = $("token").value.trim();
@@ -174,10 +222,26 @@ async function doAssign() {
     toast("Device ID and Token are required");
     return;
   }
-  const data = await api("/api/dev/assign-token", {
-    method: "POST",
-    body: JSON.stringify({ deviceId, token, shopId })
-  });
+  let data;
+  try {
+    data = await api("/api/dev/assign-token", {
+      method: "POST",
+      body: JSON.stringify({ deviceId, token, shopId })
+    });
+  } catch (e) {
+    // If token was created externally (e.g. Python) and isn't in server DB yet,
+    // auto-register it then retry once.
+    const msg = (e && e.message) ? String(e.message) : "";
+    if (/token not found/i.test(msg)) {
+      await doRegisterToken();
+      data = await api("/api/dev/assign-token", {
+        method: "POST",
+        body: JSON.stringify({ deviceId, token, shopId })
+      });
+    } else {
+      throw e;
+    }
+  }
   toast("Assigned. Customer can claim now.");
   // Auto-search
   $("searchDevice").value = deviceId;
@@ -190,7 +254,8 @@ function parseTarget(v) {
   const t = (v || "").trim();
   if (!t) return {};
   if (/^LIC-/i.test(t)) return { licenseId: t };
-  if (/^SPNG-/i.test(t) || t.includes("-")) return { token: t };
+  // Accept both legacy tokens (SPNG-XXXX-XXXX) and pipe tokens (SPNG1|MONTHLY|YYYYMMDD|...)
+  if (/^SPNG/i.test(t) || t.includes("-") || t.includes("|")) return { token: t };
   return { deviceId: t };
 }
 
@@ -246,6 +311,8 @@ $("btnSaveKey").addEventListener("click", () => {
 });
 
 $("btnAssign").addEventListener("click", () => doAssign().catch((e) => toast(e.message)));
+$("btnRegister").addEventListener("click", () => doRegisterToken().catch((e) => toast(e.message)));
+$("btnGenerate").addEventListener("click", () => doGenerateToken().catch((e) => toast(e.message)));
 $("btnSearchFromActivate").addEventListener("click", () => {
   $("searchDevice").value = $("deviceId").value.trim();
   $("searchToken").value = $("token").value.trim();
