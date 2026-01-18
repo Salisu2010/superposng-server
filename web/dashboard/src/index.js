@@ -24,12 +24,12 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// REAL folders (based on your repo)
+// 👇 REAL paths based on your server folder
 const WEB_ROOT = path.join(__dirname, "../web");
 const DEV_DIR = path.join(WEB_ROOT, "dev");
 
 /* ===============================
-   Global Middlewares
+   Middlewares
 ================================ */
 app.use(helmet());
 app.use(cors({ origin: true }));
@@ -43,16 +43,16 @@ app.get("/", (_req, res) => {
   res.json({
     ok: true,
     name: "SuperPOSNG Cloud Sync Server",
-    version: "1.0.2-dev-portal-fix",
+    version: "1.0.3-dev-final-fix",
     time: new Date().toISOString()
   });
 });
 
 /* ===============================
-   STATIC WEB UIs
+   🔥 DEVELOPER PORTAL (FINAL FIX)
 ================================ */
 
-// 🔥 Developer Portal (REAL PATH)
+// Serve static assets
 app.use("/dev", express.static(DEV_DIR));
 
 // Force index.html for /dev
@@ -60,7 +60,7 @@ app.get("/dev", (_req, res) => {
   res.sendFile(path.join(DEV_DIR, "index.html"));
 });
 
-// Support SPA routes under /dev/*
+// Support SPA routes like /dev/anything
 app.get("/dev/*", (_req, res) => {
   res.sendFile(path.join(DEV_DIR, "index.html"));
 });
@@ -68,17 +68,10 @@ app.get("/dev/*", (_req, res) => {
 /* ===============================
    API ROUTES
 ================================ */
-
-// Dashboard APIs
 app.use("/api/dashboard", dashboardRoutes);
-
-// Developer-only APIs
 app.use("/api/dev", devRoutes);
-
-// License activation
 app.use("/api/license", licenseRoutes);
 
-// Core APIs
 app.use("/api/shop", shopRoutes);
 app.use("/api/pair", pairRoutes);
 app.use("/api/sync", authMiddleware, syncRoutes);
@@ -89,8 +82,8 @@ app.use("/api/sync", authMiddleware, syncRoutes);
 const PORT = parseInt(process.env.PORT || "8080", 10);
 app.listen(PORT, () => {
   console.log("====================================");
-  console.log("✅ SuperPOSNG Cloud Sync Server LIVE");
-  console.log("🧑‍💻 Developer Portal:", "/dev");
+  console.log("✅ SuperPOSNG Server RUNNING");
+  console.log("🧑‍💻 Developer Portal: /dev");
   console.log("🚀 Port:", PORT);
   console.log("====================================");
 });
