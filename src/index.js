@@ -4,12 +4,15 @@ import { readDB, writeDB } from './db.js'
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import fs from "fs";
 
 import { authMiddleware } from "./middleware/auth.js";
 import shopRoutes from "./routes/shop.js";
 import pairRoutes from "./routes/pair.js";
 import syncRoutes from "./routes/sync.js";
 import dashboardRoutes from "./routes/dashboard.js";
+import devRoutes from "./routes/dev.js";
+import licenseRoutes from "./routes/license.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -39,7 +42,29 @@ app.get("/", (_req, res) => {
 
 // Local Hub Web Dashboard (no auth; intended for LAN use)
 app.use("/dashboard", express.static(path.join(WEB_DIR, "dashboard")));
+// Developer Portal UI
+app.use("/dev", express.static(path.join(WEB_DIR, "dev")));
+
+// Some hosts/proxies don't automatically redirect "/dev" -> "/dev/" for static mounts.
+// Guarantee that the root paths load index.html.
+function sendIndex(res, dirName) {
+  const file = path.join(WEB_DIR, dirName, "index.html");
+  if (fs.existsSync(file)) return res.sendFile(file);
+  return res.status(404).json({
+    ok: false,
+    message: `UI not found for /${dirName}. Make sure the web/${dirName} folder is deployed.`
+  });
+}
+
+app.get("/dev", (_req, res) => sendIndex(res, "dev"));
+app.get("/dashboard", (_req, res) => sendIndex(res, "dashboard"));
 app.use("/api/dashboard", dashboardRoutes);
+
+// Developer-only APIs
+app.use("/api/dev", devRoutes);
+
+// Public license claim endpoint for device activation
+app.use("/api/license", licenseRoutes);
 
 app.use("/api/shop", shopRoutes);
 app.use("/api/pair", pairRoutes);
