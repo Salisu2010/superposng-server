@@ -22,7 +22,7 @@
   </header>
 
   <main class="wrap">
-    <section class="card">
+        <section class="card">
       <h2>Token Generator</h2>
       <div class="grid2">
         <div>
@@ -36,6 +36,14 @@
         <div>
           <label>Custom Days (optional)</label>
           <input id="genDays" type="number" min="1" step="1" placeholder="leave blank to use plan default" />
+        </div>
+        <div>
+          <label>Device ID (required for Python-style token)</label>
+          <input id="genDeviceId" placeholder="e.g. D67D063816AB188B" />
+        </div>
+        <div>
+          <label>Shop ID (optional)</label>
+          <input id="genShopId" placeholder="e.g. D173D358DD24" />
         </div>
         <div class="row">
           <button id="btnGenerate" class="btn primary">Generate Token</button>
@@ -52,8 +60,9 @@
           <button id="btnCopyId" class="btn">Copy License ID</button>
         </div>
       </div>
-      <p class="hint">Format: <code>SPNG1|PLAN|YYYYMMDD|RANDOM</code>. You can also paste a Python-created token and click <b>Register Existing Token</b>.</p>
+      <p class="hint">Format: <code>SPNG1|PLAN|YYYYMMDD|RANDOM|DEVICE_ID|SHOP_ID</code>. If you leave Device ID empty, portal will generate the short format <code>SPNG1|PLAN|YYYYMMDD|RANDOM</code> for backward compatibility.</p>
     </section>
+
 
     <section class="card">
       <h2>Activate Device</h2>

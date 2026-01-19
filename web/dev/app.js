@@ -252,8 +252,8 @@ async function doGenerateToken() {
   // If admin already typed Device ID / Shop ID (for activation),
   // include them as token hints to match your Python generator format:
   // SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID
-  const hintDeviceId = ($("deviceId")?.value || "").trim();
-  const hintShopId = ($("shopId")?.value || "").trim();
+  const hintDeviceId = ($("genDeviceId")?.value || $("deviceId")?.value || "").trim();
+  const hintShopId = ($("genShopId")?.value || $("shopId")?.value || "").trim();
 
   const payload = { plan };
   if (Number.isFinite(days) && days > 0) payload.days = Math.floor(days);
@@ -452,6 +452,58 @@ if ($("btnCopyId")) {
   $("btnCopyId").addEventListener("click", () => {
     copyText(_lastGenerated?.licenseId || "");
     toast("Copied license ID");
+  });
+}
+
+// Sync generator Device/Shop with activation fields (optional convenience)
+if ($("genDeviceId")) {
+  $("genDeviceId").addEventListener("input", () => {
+    const v = $("genDeviceId").value.trim();
+    if ($("deviceId") && !$("deviceId").value.trim()) $("deviceId").value = v;
+  });
+}
+if ($("genShopId")) {
+  $("genShopId").addEventListener("input", () => {
+    const v = $("genShopId").value.trim();
+    if ($("shopId") && !$("shopId").value.trim()) $("shopId").value = v;
+  });
+}
+if ($("deviceId")) {
+  $("deviceId").addEventListener("input", () => {
+    const v = $("deviceId").value.trim();
+    if ($("genDeviceId") && !$("genDeviceId").value.trim()) $("genDeviceId").value = v;
+  });
+}
+if ($("shopId")) {
+  $("shopId").addEventListener("input", () => {
+    const v = $("shopId").value.trim();
+    if ($("genShopId") && !$("genShopId").value.trim()) $("genShopId").value = v;
+  });
+}
+
+// Sync generator Device/Shop with activation fields (optional convenience)
+if ($("genDeviceId")) {
+  $("genDeviceId").addEventListener("input", () => {
+    const v = $("genDeviceId").value.trim();
+    if ($("deviceId") && !$("deviceId").value.trim()) $("deviceId").value = v;
+  });
+}
+if ($("genShopId")) {
+  $("genShopId").addEventListener("input", () => {
+    const v = $("genShopId").value.trim();
+    if ($("shopId") && !$("shopId").value.trim()) $("shopId").value = v;
+  });
+}
+if ($("deviceId")) {
+  $("deviceId").addEventListener("input", () => {
+    const v = $("deviceId").value.trim();
+    if ($("genDeviceId") && !$("genDeviceId").value.trim()) $("genDeviceId").value = v;
+  });
+}
+if ($("shopId")) {
+  $("shopId").addEventListener("input", () => {
+    const v = $("shopId").value.trim();
+    if ($("genShopId") && !$("genShopId").value.trim()) $("genShopId").value = v;
   });
 }
 

@@ -1,0 +1,40 @@
+    <section class="card">
+      <h2>Token Generator</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="genPlan">
+            <option value="TRIAL">TRIAL (7 days)</option>
+            <option value="MONTHLY" selected>MONTHLY (30 days)</option>
+            <option value="YEARLY">YEARLY (365 days)</option>
+          </select>
+        </div>
+        <div>
+          <label>Custom Days (optional)</label>
+          <input id="genDays" type="number" min="1" step="1" placeholder="leave blank to use plan default" />
+        </div>
+        <div>
+          <label>Device ID (required for Python-style token)</label>
+          <input id="genDeviceId" placeholder="e.g. D67D063816AB188B" />
+        </div>
+        <div>
+          <label>Shop ID (optional)</label>
+          <input id="genShopId" placeholder="e.g. D173D358DD24" />
+        </div>
+        <div class="row">
+          <button id="btnGenerate" class="btn primary">Generate Token</button>
+          <button id="btnRegister" class="btn">Register Existing Token</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>Token</label>
+          <input id="genToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnCopyToken" class="btn">Copy Token</button>
+          <button id="btnCopyId" class="btn">Copy License ID</button>
+        </div>
+      </div>
+      <p class="hint">Format: <code>SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID</code>. You can also paste a Python-created token and click <b>Register Existing Token</b>.</p>
+    </section>
