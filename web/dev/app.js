@@ -222,11 +222,12 @@ async function doRevoke(resetOnly) {
 
 async function doExtend() {
   const target = $("target").value.trim();
-  const addDays = Number($("addDays").value || 0);
+  const addMonths = Number($("addMonths")?.value || 0);
   const plan = $("plan").value;
   const payload = Object.assign(parseTarget(target), {
-    addDays: Number.isFinite(addDays) ? addDays : 0,
-    plan: plan || ""
+    months: Number.isFinite(addMonths) ? addMonths : 0,
+    plan: plan || "",
+    androidId: ($("extendAndroidId")?.value || "").trim()
   });
   if (!payload.licenseId && !payload.token && !payload.deviceId) {
     toast("Target is required");
@@ -246,19 +247,13 @@ async function doExtend() {
 // ------------------------------
 async function doGenerateToken() {
   const plan = ($("genPlan")?.value || "MONTHLY").trim();
-  const daysRaw = ($("genDays")?.value || "").trim();
-  const days = daysRaw ? Number(daysRaw) : 0;
+  const deviceId = ($("genDeviceId")?.value || $("deviceId")?.value || "").trim();
+  if (!deviceId) {
+    toast("ANDROID_ID/Device ID is required");
+    return;
+  }
 
-  // If admin already typed Device ID / Shop ID (for activation),
-  // include them as token hints to match your Python generator format:
-  // SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID
-  const hintDeviceId = ($("genDeviceId")?.value || $("deviceId")?.value || "").trim();
-  const hintShopId = ($("genShopId")?.value || $("shopId")?.value || "").trim();
-
-  const payload = { plan };
-  if (Number.isFinite(days) && days > 0) payload.days = Math.floor(days);
-  if (hintDeviceId) payload.deviceId = hintDeviceId;
-  if (hintShopId) payload.shopId = hintShopId;
+  const payload = { plan, deviceId };
 
   const out = await api("/api/dev/generate-token", {
     method: "POST",
@@ -280,12 +275,9 @@ async function doRegisterExistingToken() {
     return;
   }
   const plan = ($("genPlan")?.value || "").trim();
-  const daysRaw = ($("genDays")?.value || "").trim();
-  const days = daysRaw ? Number(daysRaw) : 0;
   const payload = { token };
   // Optional override
   if (plan) payload.plan = plan;
-  if (Number.isFinite(days) && days > 0) payload.days = Math.floor(days);
 
   const out = await api("/api/dev/register-token", {
     method: "POST",
@@ -364,8 +356,8 @@ function renderTokenTable(out) {
         <td style="white-space:nowrap">
           ${actionBtn("Copy", "", { act: "copy", token })}
           ${actionBtn("Target", "", { act: "target", id })}
-          ${actionBtn("+30", "", { act: "add", id, days: 30 })}
-          ${actionBtn("+365", "", { act: "add", id, days: 365 })}
+          ${actionBtn("+1M", "", { act: "add", id, months: 1 })}
+          ${actionBtn("+12M", "", { act: "add", id, months: 12 })}
           ${actionBtn("Revoke", "danger", { act: "revoke", id })}
         </td>
       </tr>
@@ -397,7 +389,7 @@ function renderTokenTable(out) {
       const act = btn.getAttribute("data-act");
       const id = btn.getAttribute("data-id") || "";
       const token = btn.getAttribute("data-token") || "";
-      const days = Number(btn.getAttribute("data-days") || 0);
+      const months = Number(btn.getAttribute("data-months") || 0);
 
       if (act === "copy") {
         copyText(token);
@@ -412,7 +404,7 @@ function renderTokenTable(out) {
       }
       if (act === "add") {
         $("target").value = id;
-        $("addDays").value = String(days);
+        $("addMonths").value = String(months);
         await doExtend();
         await refreshTokenTable(false).catch(() => {});
         return;
@@ -455,55 +447,17 @@ if ($("btnCopyId")) {
   });
 }
 
-// Sync generator Device/Shop with activation fields (optional convenience)
+// Sync generator Device ID with activation field (optional convenience)
 if ($("genDeviceId")) {
   $("genDeviceId").addEventListener("input", () => {
     const v = $("genDeviceId").value.trim();
     if ($("deviceId") && !$("deviceId").value.trim()) $("deviceId").value = v;
   });
 }
-if ($("genShopId")) {
-  $("genShopId").addEventListener("input", () => {
-    const v = $("genShopId").value.trim();
-    if ($("shopId") && !$("shopId").value.trim()) $("shopId").value = v;
-  });
-}
 if ($("deviceId")) {
   $("deviceId").addEventListener("input", () => {
     const v = $("deviceId").value.trim();
     if ($("genDeviceId") && !$("genDeviceId").value.trim()) $("genDeviceId").value = v;
-  });
-}
-if ($("shopId")) {
-  $("shopId").addEventListener("input", () => {
-    const v = $("shopId").value.trim();
-    if ($("genShopId") && !$("genShopId").value.trim()) $("genShopId").value = v;
-  });
-}
-
-// Sync generator Device/Shop with activation fields (optional convenience)
-if ($("genDeviceId")) {
-  $("genDeviceId").addEventListener("input", () => {
-    const v = $("genDeviceId").value.trim();
-    if ($("deviceId") && !$("deviceId").value.trim()) $("deviceId").value = v;
-  });
-}
-if ($("genShopId")) {
-  $("genShopId").addEventListener("input", () => {
-    const v = $("genShopId").value.trim();
-    if ($("shopId") && !$("shopId").value.trim()) $("shopId").value = v;
-  });
-}
-if ($("deviceId")) {
-  $("deviceId").addEventListener("input", () => {
-    const v = $("deviceId").value.trim();
-    if ($("genDeviceId") && !$("genDeviceId").value.trim()) $("genDeviceId").value = v;
-  });
-}
-if ($("shopId")) {
-  $("shopId").addEventListener("input", () => {
-    const v = $("shopId").value.trim();
-    if ($("genShopId") && !$("genShopId").value.trim()) $("genShopId").value = v;
   });
 }
 

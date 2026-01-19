@@ -28,22 +28,13 @@
         <div>
           <label>Plan</label>
           <select id="genPlan">
-            <option value="TRIAL">TRIAL (7 days)</option>
-            <option value="MONTHLY" selected>MONTHLY (30 days)</option>
-            <option value="YEARLY">YEARLY (365 days)</option>
+            <option value="MONTHLY" selected>MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
           </select>
         </div>
         <div>
-          <label>Custom Days (optional)</label>
-          <input id="genDays" type="number" min="1" step="1" placeholder="leave blank to use plan default" />
-        </div>
-        <div>
-          <label>Device ID (required for Python-style token)</label>
+          <label>ANDROID_ID / Device ID (required)</label>
           <input id="genDeviceId" placeholder="e.g. D67D063816AB188B" />
-        </div>
-        <div>
-          <label>Shop ID (optional)</label>
-          <input id="genShopId" placeholder="e.g. D173D358DD24" />
         </div>
         <div class="row">
           <button id="btnGenerate" class="btn primary">Generate Token</button>
@@ -60,7 +51,7 @@
           <button id="btnCopyId" class="btn">Copy License ID</button>
         </div>
       </div>
-      <p class="hint">Format: <code>SPNG1|PLAN|YYYYMMDD|RANDOM|DEVICE_ID|SHOP_ID</code>. If you leave Device ID empty, portal will generate the short format <code>SPNG1|PLAN|YYYYMMDD|RANDOM</code> for backward compatibility.</p>
+      <p class="hint">Format: <code>SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code>. (Matches your Python + Android <code>LicenseUtil</code> exactly.)</p>
     </section>
 
 
@@ -130,17 +121,20 @@
 
       <div class="grid2" style="margin-top:14px;">
         <div>
-          <label>Extend (Add Days)</label>
-          <input id="addDays" type="number" min="0" step="1" placeholder="e.g. 30" />
+          <label>Extend (Months)</label>
+          <input id="addMonths" type="number" min="0" step="1" placeholder="e.g. 1" />
         </div>
         <div>
           <label>Upgrade Plan (optional)</label>
           <select id="plan">
             <option value="">(no change)</option>
             <option value="MONTHLY">MONTHLY</option>
-            <option value="QUARTERLY">QUARTERLY</option>
             <option value="YEARLY">YEARLY</option>
           </select>
+        </div>
+        <div>
+          <label>ANDROID_ID (only needed if Target is token w/out bound device)</label>
+          <input id="extendAndroidId" placeholder="paste device id if needed" />
         </div>
         <div class="row">
           <button id="btnExtend" class="btn primary">Extend / Upgrade</button>

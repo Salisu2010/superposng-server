@@ -1,5 +1,11 @@
 import { Router } from "express";
 import { readDB, writeDB } from "../db.js";
+import {
+  trim as _trim,
+  parseAndVerifySpng1,
+  devhash16,
+  daysLeftFromYmd,
+} from "../spng1.js";
 
 const r = Router();
 
@@ -7,8 +13,69 @@ function s(v) {
   return (v === null || v === undefined) ? "" : String(v);
 }
 function trim(v) {
-  return s(v).trim();
+  return _trim(v);
 }
+
+// ------------------------------------------------------------
+// Android Online Activation Check (SPNG1)
+// POST /api/license/check
+// body: { token, androidId }
+// Returns keys Android typically expects: ok, message, plan, expiryYmd, daysLeft
+// Also auto-registers a valid token into DB so revoke/extend works reliably.
+// ------------------------------------------------------------
+r.post("/check", (req, res) => {
+  const db = readDB();
+  const token = trim(req.body?.token);
+  const androidId = trim(req.body?.androidId || req.body?.deviceId);
+  if (!token) return res.status(400).json({ ok: false, message: "token required" });
+  if (!androidId) return res.status(400).json({ ok: false, message: "androidId required" });
+
+  const pv = parseAndVerifySpng1(token);
+  if (!pv.ok) return res.status(400).json({ ok: false, message: pv.error || "Token not valid" });
+
+  // Ensure token belongs to this device
+  let want = "";
+  try { want = devhash16(androidId); } catch (e) { /* ignore */ }
+  if (!want || want !== pv.devHash) {
+    return res.status(400).json({ ok: false, message: "Token not for this device" });
+  }
+
+  // Look up in DB (for revoke/extend)
+  const lic = Array.isArray(db.licenses)
+    ? db.licenses.find((x) => trim(x.token) === pv.token)
+    : null;
+
+  if (lic && trim(lic.status) === "REVOKED") {
+    return res.status(403).json({ ok: false, message: "Token revoked" });
+  }
+
+  // Auto-register if not found
+  if (!lic) {
+    const licenseId = `LIC-${Math.random().toString(16).slice(2, 10).toUpperCase()}`;
+    const rec = {
+      licenseId,
+      token: pv.token,
+      plan: pv.plan,
+      status: "ACTIVE",
+      createdAt: Date.now(),
+      expiresAt: pv.expiresAt,
+      expiryYmd: pv.expiryYmd,
+      devHash: pv.devHash,
+      boundDeviceId: androidId,
+      boundShopId: "",
+      activatedAt: Date.now(),
+      notes: "AUTO-REGISTERED BY /license/check"
+    };
+    db.licenses = Array.isArray(db.licenses) ? db.licenses : [];
+    db.licenses.unshift(rec);
+    writeDB(db);
+  }
+
+  const daysLeft = daysLeftFromYmd(pv.expiryYmd);
+  if (daysLeft <= 0) return res.status(403).json({ ok: false, message: "Token expired", plan: pv.plan, expiryYmd: parseInt(pv.expiryYmd, 10) || 0, daysLeft: 0 });
+
+  return res.json({ ok: true, message: "OK", plan: pv.plan, expiryYmd: parseInt(pv.expiryYmd, 10) || 0, daysLeft });
+});
 
 function licensePayload(lic) {
   return {

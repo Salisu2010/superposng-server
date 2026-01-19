@@ -1,6 +1,15 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { readDB, writeDB } from "../db.js";
+import {
+  trim as _trim,
+  genSpng1Token,
+  parseAndVerifySpng1,
+  ymdToExpiresAtUtc,
+  todayInLagos,
+  addMonthsYmd,
+  devhash16,
+} from "../spng1.js";
 
 const r = Router();
 
@@ -8,7 +17,7 @@ function s(v) {
   return (v === null || v === undefined) ? "" : String(v);
 }
 function trim(v) {
-  return s(v).trim();
+  return _trim(v);
 }
 function now() {
   return Date.now();
@@ -65,6 +74,22 @@ function parsePipeToken(token) {
   return { plan, expiresAt, deviceIdHint, shopIdHint };
 }
 
+function parseTokenAny(token) {
+  const sp = parseAndVerifySpng1(token);
+  if (sp.ok) {
+    return {
+      kind: "SPNG1",
+      plan: sp.plan,
+      expiryYmd: sp.expiryYmd,
+      expiresAt: sp.expiresAt,
+      devHash: sp.devHash,
+    };
+  }
+  const p = parsePipeToken(token);
+  if (p) return { kind: "LEGACY", ...p };
+  return null;
+}
+
 function planToDays(plan) {
   const p = trim(plan).toUpperCase();
   if (p === "YEARLY") return 365;
@@ -110,35 +135,35 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   const db = readDB();
 
   const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
-  const days = Math.max(1, parseInt(req.body?.days || planToDays(plan), 10));
   const createdAt = now();
-  const expiresAt = createdAt + days * 24 * 60 * 60 * 1000;
   const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 
-  // Standard token format:
-  //   SPNG1|PLAN|YYYYMMDD|RAND
-  // Optional extended format (compatible with your Python generator):
-  //   SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID
-  const hintDeviceId = trim(req.body?.deviceId);
-  const hintShopId = trim(req.body?.shopId);
-  const extra = [];
-  if (hintDeviceId) extra.push(hintDeviceId);
-  if (hintShopId) extra.push(hintShopId);
+  // ✅ EXACT Offline Token (Python/Android compatible):
+  //   SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12
+  const deviceId = trim(req.body?.deviceId);
+  if (!deviceId) return res.status(400).json({ ok: false, error: "deviceId required" });
 
-  let token = genPipeToken(plan, expiresAt, "SPNG1", extra);
-  for (let i = 0; i < 5; i++) {
-    if (!db.licenses.some((x) => trim(x.token) === token)) break;
-    token = genPipeToken(plan, expiresAt, "SPNG1", extra);
+  let token = "";
+  try {
+    token = genSpng1Token(plan, deviceId);
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e?.message || "Bad request" });
   }
+
+  const parsed = parseAndVerifySpng1(token);
+  const expiresAt = parsed.ok ? parsed.expiresAt : 0;
+  const expiryYmd = parsed.ok ? parsed.expiryYmd : "";
+  const devHash = parsed.ok ? parsed.devHash : "";
 
   const lic = {
     licenseId,
     token,
     plan,
-    days,
     status: "ISSUED",
     createdAt,
     expiresAt,
+    expiryYmd,
+    devHash,
     boundDeviceId: "",
     boundShopId: "",
     activatedAt: 0,
@@ -162,15 +187,14 @@ r.post("/register-token", requireDevKey, (req, res) => {
   const existing = db.licenses.find((x) => trim(x.token) === token);
   if (existing) return res.json({ ok: true, license: existing, already: true, serverTime: now() });
 
-  const parsed = parsePipeToken(token);
+  const parsedAny = parseTokenAny(token);
   const createdAt = now();
-  let plan = trim(req.body?.plan || (parsed?.plan || "MONTHLY")).toUpperCase();
+  let plan = trim(req.body?.plan || (parsedAny?.plan || "MONTHLY")).toUpperCase();
   if (!plan) plan = "MONTHLY";
-  const days = Math.max(1, parseInt(req.body?.days || planToDays(plan), 10));
   let expiresAt = parseInt(req.body?.expiresAt || "0", 10);
   if (!expiresAt || !Number.isFinite(expiresAt) || expiresAt <= 0) {
-    if (parsed?.expiresAt) expiresAt = parsed.expiresAt;
-    else expiresAt = createdAt + days * 24 * 60 * 60 * 1000;
+    if (parsedAny?.expiresAt) expiresAt = parsedAny.expiresAt;
+    else expiresAt = createdAt + planToDays(plan) * 24 * 60 * 60 * 1000;
   }
 
   const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
@@ -178,14 +202,13 @@ r.post("/register-token", requireDevKey, (req, res) => {
     licenseId,
     token,
     plan,
-    days,
     status: "ISSUED",
     createdAt,
     expiresAt,
-    // If the externally generated token embeds device/shop after RAND
-    // we treat them as hints only (won't overwrite later explicit binding).
-    boundDeviceId: trim(req.body?.boundDeviceId || parsed?.deviceIdHint || ""),
-    boundShopId: trim(req.body?.boundShopId || parsed?.shopIdHint || ""),
+    expiryYmd: parsedAny?.expiryYmd || (parsedAny?.expiresAt ? ymd(parsedAny.expiresAt) : ""),
+    devHash: parsedAny?.devHash || "",
+    boundDeviceId: trim(req.body?.boundDeviceId || ""),
+    boundShopId: trim(req.body?.boundShopId || ""),
     activatedAt: 0,
     notes: "IMPORTED"
   };
@@ -242,26 +265,33 @@ r.post("/assign-token", requireDevKey, (req, res) => {
   if (!deviceId) return res.status(400).json({ ok: false, error: "deviceId required" });
   if (!token) return res.status(400).json({ ok: false, error: "token required" });
 
-  // If token was created externally (e.g. Python) and not yet in DB, auto-import
-  // when it's in pipe format: SPNG1|PLAN|YYYYMMDD|XXXX
+  // If this is an SPNG1 offline token, it MUST match the target deviceId.
+  const pv = parseAndVerifySpng1(token);
+  if (pv.ok) {
+    const want = devhash16(deviceId);
+    if (want !== pv.devHash) {
+      return res.status(400).json({ ok: false, error: "token not for this device" });
+    }
+  }
+
+  // If token was created externally (e.g. Python/Dev Portal) and not yet in DB, auto-import.
   let lic = findLicenseByAny(db, { token });
   if (!lic) {
-    const parsed = parsePipeToken(token);
+    const parsed = parseTokenAny(token);
     if (parsed) {
       const createdAt = now();
-      const plan = (parsed.plan || "MONTHLY").toUpperCase();
-      const days = planToDays(plan);
       const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
       lic = {
         licenseId,
         token,
-        plan,
-        days,
+        plan: (parsed.plan || "MONTHLY").toUpperCase(),
         status: "ISSUED",
         createdAt,
-        expiresAt: parsed.expiresAt,
-        boundDeviceId: trim(parsed.deviceIdHint || ""),
-        boundShopId: trim(parsed.shopIdHint || ""),
+        expiresAt: parsed.expiresAt || 0,
+        expiryYmd: parsed.expiryYmd || (parsed.expiresAt ? ymd(parsed.expiresAt) : ""),
+        devHash: parsed.devHash || "",
+        boundDeviceId: "",
+        boundShopId: "",
         activatedAt: 0,
         notes: "AUTO-IMPORTED"
       };
@@ -362,31 +392,68 @@ r.post("/extend", requireDevKey, (req, res) => {
   const token = trim(req.body?.token);
   const deviceId = trim(req.body?.deviceId);
 
-  const addDays = parseInt(req.body?.addDays || "0", 10);
+  const months = parseInt(req.body?.months || "0", 10);
   const newPlan = trim(req.body?.plan || "").toUpperCase();
-  const setDays = parseInt(req.body?.days || "0", 10);
+  const reason = trim(req.body?.reason || "");
 
   const lic = findLicenseByAny(db, { licenseId, token, deviceId });
   if (!lic) return res.status(404).json({ ok: false, error: "license not found" });
   if (trim(lic.status) === "REVOKED") return res.status(400).json({ ok: false, error: "license revoked" });
 
-  if (newPlan) {
-    lic.plan = newPlan;
-    if (setDays > 0) lic.days = setDays;
-    else lic.days = planToDays(newPlan);
+  // ✅ SPNG1 rules: extend = re-issue new token (new expiry) + revoke old token.
+  // This keeps Android offline validation intact while allowing online revoke/extend.
+  const device = trim(req.body?.androidId || req.body?.deviceId || lic.boundDeviceId);
+  if (!device) return res.status(400).json({ ok: false, error: "deviceId/androidId required to extend" });
+
+  // Determine base date: max(today, current expiry date)
+  const t = todayInLagos();
+  const todayYmd = `${t.y}${String(t.m).padStart(2, "0")}${String(t.d).padStart(2, "0")}`;
+  const current = trim(lic.expiryYmd) || (() => {
+    const pv = parseAndVerifySpng1(lic.token);
+    return pv.ok ? pv.expiryYmd : "";
+  })();
+  const baseYmd = (/^\d{8}$/.test(current) && current > todayYmd) ? current : todayYmd;
+  const by = parseInt(baseYmd.slice(0,4),10);
+  const bm = parseInt(baseYmd.slice(4,6),10);
+  const bd = parseInt(baseYmd.slice(6,8),10);
+
+  const plan = (newPlan || trim(lic.plan) || "MONTHLY").toUpperCase();
+  const addM = Number.isFinite(months) && months > 0 ? months : (plan === "YEARLY" ? 12 : 1);
+  const next = addMonthsYmd({ y: by, m: bm, d: bd }, addM);
+
+  // New token must match device hash (Python/Android)
+  let newToken = "";
+  try {
+    newToken = genSpng1Token(plan, device, next.ymd);
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e?.message || "Bad request" });
   }
 
-  const base = Math.max(parseInt(lic.expiresAt || 0, 10), now());
-  let deltaDays = 0;
-  if (addDays && Number.isFinite(addDays) && addDays > 0) deltaDays = addDays;
-  // If upgrading plan but no addDays provided, extend to full plan length from now.
-  if (newPlan && deltaDays === 0) deltaDays = planToDays(lic.plan);
+  // Revoke old
+  lic.status = "REVOKED";
+  lic.notes = reason ? `REVOKED (EXTEND): ${reason}` : "REVOKED (EXTEND)";
 
-  lic.expiresAt = base + deltaDays * 24 * 60 * 60 * 1000;
-  lic.status = trim(lic.status) === "ISSUED" ? "ISSUED" : "ACTIVE";
+  // Insert new license
+  const licenseId2 = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+  const parsed2 = parseAndVerifySpng1(newToken);
+  const newLic = {
+    licenseId: licenseId2,
+    token: newToken,
+    plan,
+    status: "ACTIVE",
+    createdAt: now(),
+    expiresAt: parsed2.ok ? parsed2.expiresAt : ymdToExpiresAtUtc(next.ymd),
+    expiryYmd: parsed2.ok ? parsed2.expiryYmd : next.ymd,
+    devHash: parsed2.ok ? parsed2.devHash : devhash16(device),
+    boundDeviceId: trim(device),
+    boundShopId: trim(lic.boundShopId || ""),
+    activatedAt: now(),
+    notes: `EXTENDED_FROM ${trim(lic.licenseId)}`
+  };
 
+  db.licenses.unshift(newLic);
   writeDB(db);
-  res.json({ ok: true, license: lic, serverTime: now() });
+  res.json({ ok: true, old: lic, license: newLic, serverTime: now() });
 });
 
 export default r;
