@@ -23,6 +23,39 @@
 
   <main class="wrap">
     <section class="card">
+      <h2>Token Generator</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="genPlan">
+            <option value="TRIAL">TRIAL (7 days)</option>
+            <option value="MONTHLY" selected>MONTHLY (30 days)</option>
+            <option value="YEARLY">YEARLY (365 days)</option>
+          </select>
+        </div>
+        <div>
+          <label>Custom Days (optional)</label>
+          <input id="genDays" type="number" min="1" step="1" placeholder="leave blank to use plan default" />
+        </div>
+        <div class="row">
+          <button id="btnGenerate" class="btn primary">Generate Token</button>
+          <button id="btnRegister" class="btn">Register Existing Token</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>Token</label>
+          <input id="genToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnCopyToken" class="btn">Copy Token</button>
+          <button id="btnCopyId" class="btn">Copy License ID</button>
+        </div>
+      </div>
+      <p class="hint">Format: <code>SPNG1|PLAN|YYYYMMDD|RANDOM</code>. You can also paste a Python-created token and click <b>Register Existing Token</b>.</p>
+    </section>
+
+    <section class="card">
       <h2>Activate Device</h2>
       <div class="grid2">
         <div>
@@ -35,12 +68,10 @@
         </div>
         <div>
           <label>Token</label>
-          <input id="token" placeholder="SPNG-XXXX-XXXX  or  SPNG1|MONTHLY|20260218|D67D063" />
+          <input id="token" placeholder="SPNG-XXXX-XXXX" />
         </div>
         <div class="row">
           <button id="btnAssign" class="btn primary">Activate Device</button>
-          <button id="btnRegister" class="btn">Register Token</button>
-          <button id="btnGenerate" class="btn">Generate Token</button>
           <button id="btnSearchFromActivate" class="btn">Search</button>
         </div>
       </div>
@@ -107,6 +138,43 @@
         </div>
       </div>
       <p class="hint">Tip: Use Search first, then paste the License ID into Target.</p>
+    </section>
+
+    <section class="card">
+      <h2>Token Table</h2>
+      <div class="grid3">
+        <div>
+          <label>Search (token/license/device/shop)</label>
+          <input id="tblQ" placeholder="type to filter" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="tblStatus">
+            <option value="">All</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="REVOKED">REVOKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="tblPlan">
+            <option value="">All</option>
+            <option value="TRIAL">TRIAL</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+            <option value="LEGACY">LEGACY</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnTblRefresh" class="btn primary">Refresh</button>
+        <button id="btnTblPrev" class="btn">Prev</button>
+        <button id="btnTblNext" class="btn">Next</button>
+        <span id="tblMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+      <div id="tokenTable" class="results"></div>
+      <p class="hint">Tip: Click a row action to auto-fill <b>Target</b> for Extend/Revoke/Reset.</p>
     </section>
   </main>
 

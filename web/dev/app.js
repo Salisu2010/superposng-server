@@ -23,6 +23,10 @@ function setKey(v) {
   localStorage.setItem("spng_dev_key", v || "");
 }
 
+let _lastGenerated = null; // { licenseId, token }
+let _tblOffset = 0;
+const _tblLimit = 50;
+
 async function api(path, opts = {}) {
   const key = getKey() || $("devKey").value.trim();
   const headers = Object.assign(
@@ -166,54 +170,6 @@ async function doSearch() {
   toast("Search done");
 }
 
-function parsePipeTokenMeta(tok) {
-  // Expected: SPNG1|MONTHLY|YYYYMMDD|...
-  const t = (tok || "").trim();
-  if (!t.includes("|")) return null;
-  const parts = t.split("|").map((x) => x.trim());
-  if (parts.length < 3) return null;
-  const plan = (parts[1] || "MONTHLY").toUpperCase();
-  const ymd = parts[2] || "";
-  if (!/^[0-9]{8}$/.test(ymd)) return { plan };
-  const y = parseInt(ymd.slice(0, 4), 10);
-  const m = parseInt(ymd.slice(4, 6), 10) - 1;
-  const d = parseInt(ymd.slice(6, 8), 10);
-  const dt = new Date(Date.UTC(y, m, d, 0, 0, 0));
-  const expiresAt = dt.getTime();
-  return { plan, expiresAt };
-}
-
-async function doRegisterToken() {
-  const token = $("token").value.trim();
-  if (!token) {
-    toast("Enter a token first");
-    return;
-  }
-  const meta = parsePipeTokenMeta(token) || {};
-  const payload = { token, plan: meta.plan || "MONTHLY" };
-  if (meta.expiresAt) payload.expiresAt = meta.expiresAt;
-  await api("/api/dev/register-token", {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
-  toast("Token registered");
-}
-
-async function doGenerateToken() {
-  const out = await api("/api/dev/generate-token", {
-    method: "POST",
-    body: JSON.stringify({ plan: "MONTHLY" })
-  });
-  const tok = (out && out.license && out.license.token) ? out.license.token : "";
-  if (tok) {
-    $("token").value = tok;
-    navigator.clipboard.writeText(tok).catch(() => {});
-    toast("Generated token copied");
-  } else {
-    toast("Generated");
-  }
-}
-
 async function doAssign() {
   const deviceId = $("deviceId").value.trim();
   const token = $("token").value.trim();
@@ -222,26 +178,10 @@ async function doAssign() {
     toast("Device ID and Token are required");
     return;
   }
-  let data;
-  try {
-    data = await api("/api/dev/assign-token", {
-      method: "POST",
-      body: JSON.stringify({ deviceId, token, shopId })
-    });
-  } catch (e) {
-    // If token was created externally (e.g. Python) and isn't in server DB yet,
-    // auto-register it then retry once.
-    const msg = (e && e.message) ? String(e.message) : "";
-    if (/token not found/i.test(msg)) {
-      await doRegisterToken();
-      data = await api("/api/dev/assign-token", {
-        method: "POST",
-        body: JSON.stringify({ deviceId, token, shopId })
-      });
-    } else {
-      throw e;
-    }
-  }
+  const data = await api("/api/dev/assign-token", {
+    method: "POST",
+    body: JSON.stringify({ deviceId, token, shopId })
+  });
   toast("Assigned. Customer can claim now.");
   // Auto-search
   $("searchDevice").value = deviceId;
@@ -254,8 +194,8 @@ function parseTarget(v) {
   const t = (v || "").trim();
   if (!t) return {};
   if (/^LIC-/i.test(t)) return { licenseId: t };
-  // Accept both legacy tokens (SPNG-XXXX-XXXX) and pipe tokens (SPNG1|MONTHLY|YYYYMMDD|...)
-  if (/^SPNG/i.test(t) || t.includes("-") || t.includes("|")) return { token: t };
+  if (t.includes("|")) return { token: t };
+  if (/^SPNG/i.test(t)) return { token: t };
   return { deviceId: t };
 }
 
@@ -301,6 +241,183 @@ async function doExtend() {
   return out;
 }
 
+// ------------------------------
+// Token generator (plan-aware)
+// ------------------------------
+async function doGenerateToken() {
+  const plan = ($("genPlan")?.value || "MONTHLY").trim();
+  const daysRaw = ($("genDays")?.value || "").trim();
+  const days = daysRaw ? Number(daysRaw) : 0;
+
+  const payload = { plan };
+  if (Number.isFinite(days) && days > 0) payload.days = Math.floor(days);
+
+  const out = await api("/api/dev/generate-token", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  _lastGenerated = out?.license ? { licenseId: out.license.licenseId, token: out.license.token } : null;
+  if ($("genToken")) $("genToken").value = _lastGenerated?.token || "";
+  // also copy into activate box for convenience
+  if ($("token")) $("token").value = _lastGenerated?.token || $("token").value;
+  toast("Token generated");
+  await refreshTokenTable(true).catch(() => {});
+  return out;
+}
+
+async function doRegisterExistingToken() {
+  const token = ($("genToken")?.value || "").trim();
+  if (!token) {
+    toast("Paste token into Token field first");
+    return;
+  }
+  const plan = ($("genPlan")?.value || "").trim();
+  const daysRaw = ($("genDays")?.value || "").trim();
+  const days = daysRaw ? Number(daysRaw) : 0;
+  const payload = { token };
+  // Optional override
+  if (plan) payload.plan = plan;
+  if (Number.isFinite(days) && days > 0) payload.days = Math.floor(days);
+
+  const out = await api("/api/dev/register-token", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+  _lastGenerated = out?.license ? { licenseId: out.license.licenseId, token: out.license.token } : _lastGenerated;
+  toast(out?.already ? "Token already registered" : "Token registered");
+  await refreshTokenTable(true).catch(() => {});
+  return out;
+}
+
+function copyText(v) {
+  const s = String(v || "");
+  if (!s) return;
+  navigator.clipboard.writeText(s).catch(() => {});
+}
+
+// ------------------------------
+// Token table (listing)
+// ------------------------------
+function tableParams() {
+  const q = ($("tblQ")?.value || "").trim();
+  const status = ($("tblStatus")?.value || "").trim();
+  const plan = ($("tblPlan")?.value || "").trim();
+  return { q, status, plan };
+}
+
+async function refreshTokenTable(resetOffset) {
+  if (resetOffset) _tblOffset = 0;
+  const { q, status, plan } = tableParams();
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  if (plan) qs.set("plan", plan);
+  qs.set("limit", String(_tblLimit));
+  qs.set("offset", String(_tblOffset));
+
+  const out = await api(`/api/dev/licenses?${qs.toString()}`, { method: "GET" });
+  renderTokenTable(out);
+  return out;
+}
+
+function actionBtn(label, cls, data) {
+  const attrs = Object.entries(data || {}).map(([k, v]) => `data-${k}="${String(v)}"`).join(" ");
+  return `<button class="btn ${cls || ""}" ${attrs}>${label}</button>`;
+}
+
+function renderTokenTable(out) {
+  const box = $("tokenTable");
+  const meta = $("tblMeta");
+  if (!box) return;
+
+  const items = Array.isArray(out?.items) ? out.items : [];
+  const total = Number(out?.total || 0);
+  const start = total === 0 ? 0 : (_tblOffset + 1);
+  const end = Math.min(_tblOffset + _tblLimit, total);
+  if (meta) meta.textContent = `Showing ${start}-${end} of ${total}`;
+
+  const rows = items.map((m) => {
+    const id = m.licenseId || "";
+    const token = m.token || "";
+    const status = m.status || "";
+    const plan = m.plan || "";
+    const exp = fmtTs(m.expiresAt);
+    const dev = m.boundDeviceId || "-";
+    const shop = m.boundShopId || "-";
+    return `
+      <tr>
+        <td><code>${id}</code></td>
+        <td><code>${token}</code></td>
+        <td>${status}</td>
+        <td>${plan}</td>
+        <td>${exp}</td>
+        <td><code>${dev}</code></td>
+        <td><code>${shop}</code></td>
+        <td style="white-space:nowrap">
+          ${actionBtn("Copy", "", { act: "copy", token })}
+          ${actionBtn("Target", "", { act: "target", id })}
+          ${actionBtn("+30", "", { act: "add", id, days: 30 })}
+          ${actionBtn("+365", "", { act: "add", id, days: 365 })}
+          ${actionBtn("Revoke", "danger", { act: "revoke", id })}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>License ID</th>
+          <th>Token</th>
+          <th>Status</th>
+          <th>Plan</th>
+          <th>Expiry</th>
+          <th>Device</th>
+          <th>Shop</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td colspan="8" style="color:var(--muted)">No tokens found</td></tr>`}
+      </tbody>
+    </table>
+  `;
+
+  box.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id") || "";
+      const token = btn.getAttribute("data-token") || "";
+      const days = Number(btn.getAttribute("data-days") || 0);
+
+      if (act === "copy") {
+        copyText(token);
+        toast("Copied token");
+        return;
+      }
+      if (act === "target") {
+        $("target").value = id;
+        copyText(id);
+        toast("Target set to License ID");
+        return;
+      }
+      if (act === "add") {
+        $("target").value = id;
+        $("addDays").value = String(days);
+        await doExtend();
+        await refreshTokenTable(false).catch(() => {});
+        return;
+      }
+      if (act === "revoke") {
+        $("target").value = id;
+        await doRevoke(false);
+        await refreshTokenTable(false).catch(() => {});
+      }
+    });
+  });
+}
+
 // Init
 $("devKey").value = getKey();
 
@@ -310,9 +427,63 @@ $("btnSaveKey").addEventListener("click", () => {
   toast("DEV KEY saved");
 });
 
+// Generator
+if ($("btnGenerate")) {
+  $("btnGenerate").addEventListener("click", () => doGenerateToken().catch((e) => toast(e.message)));
+}
+if ($("btnRegister")) {
+  $("btnRegister").addEventListener("click", () => doRegisterExistingToken().catch((e) => toast(e.message)));
+}
+if ($("btnCopyToken")) {
+  $("btnCopyToken").addEventListener("click", () => {
+    copyText($("genToken")?.value || "");
+    toast("Copied token");
+  });
+}
+if ($("btnCopyId")) {
+  $("btnCopyId").addEventListener("click", () => {
+    copyText(_lastGenerated?.licenseId || "");
+    toast("Copied license ID");
+  });
+}
+
+// Token table controls
+if ($("btnTblRefresh")) {
+  $("btnTblRefresh").addEventListener("click", () => refreshTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("tblQ")) {
+  $("tblQ").addEventListener("input", () => {
+    // light debounce
+    clearTimeout(refreshTokenTable._t);
+    refreshTokenTable._t = setTimeout(() => refreshTokenTable(true).catch(() => {}), 300);
+  });
+}
+if ($("tblStatus")) {
+  $("tblStatus").addEventListener("change", () => refreshTokenTable(true).catch(() => {}));
+}
+if ($("tblPlan")) {
+  $("tblPlan").addEventListener("change", () => refreshTokenTable(true).catch(() => {}));
+}
+if ($("btnTblPrev")) {
+  $("btnTblPrev").addEventListener("click", () => {
+    _tblOffset = Math.max(0, _tblOffset - _tblLimit);
+    refreshTokenTable(false).catch((e) => toast(e.message));
+  });
+}
+if ($("btnTblNext")) {
+  $("btnTblNext").addEventListener("click", async () => {
+    const out = await refreshTokenTable(false).catch((e) => { toast(e.message); return null; });
+    const total = Number(out?.total || 0);
+    if (_tblOffset + _tblLimit < total) {
+      _tblOffset += _tblLimit;
+      refreshTokenTable(false).catch((e) => toast(e.message));
+    } else {
+      toast("No more pages");
+    }
+  });
+}
+
 $("btnAssign").addEventListener("click", () => doAssign().catch((e) => toast(e.message)));
-$("btnRegister").addEventListener("click", () => doRegisterToken().catch((e) => toast(e.message)));
-$("btnGenerate").addEventListener("click", () => doGenerateToken().catch((e) => toast(e.message)));
 $("btnSearchFromActivate").addEventListener("click", () => {
   $("searchDevice").value = $("deviceId").value.trim();
   $("searchToken").value = $("token").value.trim();
@@ -331,3 +502,6 @@ $("btnClear").addEventListener("click", () => {
 $("btnReset").addEventListener("click", () => doRevoke(true).catch((e) => toast(e.message)));
 $("btnRevoke").addEventListener("click", () => doRevoke(false).catch((e) => toast(e.message)));
 $("btnExtend").addEventListener("click", () => doExtend().catch((e) => toast(e.message)));
+
+// Load token table on open
+refreshTokenTable(true).catch(() => {});
