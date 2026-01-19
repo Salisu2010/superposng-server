@@ -249,8 +249,16 @@ async function doGenerateToken() {
   const daysRaw = ($("genDays")?.value || "").trim();
   const days = daysRaw ? Number(daysRaw) : 0;
 
+  // If admin already typed Device ID / Shop ID (for activation),
+  // include them as token hints to match your Python generator format:
+  // SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID
+  const hintDeviceId = ($("deviceId")?.value || "").trim();
+  const hintShopId = ($("shopId")?.value || "").trim();
+
   const payload = { plan };
   if (Number.isFinite(days) && days > 0) payload.days = Math.floor(days);
+  if (hintDeviceId) payload.deviceId = hintDeviceId;
+  if (hintShopId) payload.shopId = hintShopId;
 
   const out = await api("/api/dev/generate-token", {
     method: "POST",

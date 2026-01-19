@@ -37,11 +37,12 @@ function ymd(ts) {
   return `${y}${m}${day}`;
 }
 
-function genPipeToken(plan = "MONTHLY", expiresAtTs, ver = "SPNG1") {
+function genPipeToken(plan = "MONTHLY", expiresAtTs, ver = "SPNG1", extraParts = []) {
   const p = trim(plan).toUpperCase() || "MONTHLY";
   const exp = ymd(expiresAtTs);
   const rand = crypto.randomBytes(4).toString("hex").toUpperCase();
-  return `${ver}|${p}|${exp}|${rand}`;
+  const extras = Array.isArray(extraParts) ? extraParts.map((x) => trim(x)).filter((x) => x) : [];
+  return [ver, p, exp, rand, ...extras].join("|");
 }
 
 function parsePipeToken(token) {
@@ -56,7 +57,12 @@ function parsePipeToken(token) {
   const m = parseInt(ymdStr.slice(4, 6), 10);
   const d = parseInt(ymdStr.slice(6, 8), 10);
   const expiresAt = Date.UTC(y, m - 1, d, 23, 59, 59, 0);
-  return { plan, expiresAt };
+  // Optional extended tokens may embed hints after the RAND segment:
+  //   SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID
+  // We treat these as hints only (backward compatible).
+  const deviceIdHint = parts.length >= 5 ? parts[4] : "";
+  const shopIdHint = parts.length >= 6 ? parts[5] : "";
+  return { plan, expiresAt, deviceIdHint, shopIdHint };
 }
 
 function planToDays(plan) {
@@ -109,11 +115,20 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   const expiresAt = createdAt + days * 24 * 60 * 60 * 1000;
   const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 
-  // New standard: SPNG1|PLAN|YYYYMMDD|RANDOM
-  let token = genPipeToken(plan, expiresAt);
+  // Standard token format:
+  //   SPNG1|PLAN|YYYYMMDD|RAND
+  // Optional extended format (compatible with your Python generator):
+  //   SPNG1|PLAN|YYYYMMDD|RAND|DEVICE_ID|SHOP_ID
+  const hintDeviceId = trim(req.body?.deviceId);
+  const hintShopId = trim(req.body?.shopId);
+  const extra = [];
+  if (hintDeviceId) extra.push(hintDeviceId);
+  if (hintShopId) extra.push(hintShopId);
+
+  let token = genPipeToken(plan, expiresAt, "SPNG1", extra);
   for (let i = 0; i < 5; i++) {
     if (!db.licenses.some((x) => trim(x.token) === token)) break;
-    token = genPipeToken(plan, expiresAt);
+    token = genPipeToken(plan, expiresAt, "SPNG1", extra);
   }
 
   const lic = {
@@ -167,8 +182,10 @@ r.post("/register-token", requireDevKey, (req, res) => {
     status: "ISSUED",
     createdAt,
     expiresAt,
-    boundDeviceId: "",
-    boundShopId: "",
+    // If the externally generated token embeds device/shop after RAND
+    // we treat them as hints only (won't overwrite later explicit binding).
+    boundDeviceId: trim(req.body?.boundDeviceId || parsed?.deviceIdHint || ""),
+    boundShopId: trim(req.body?.boundShopId || parsed?.shopIdHint || ""),
     activatedAt: 0,
     notes: "IMPORTED"
   };
@@ -243,8 +260,8 @@ r.post("/assign-token", requireDevKey, (req, res) => {
         status: "ISSUED",
         createdAt,
         expiresAt: parsed.expiresAt,
-        boundDeviceId: "",
-        boundShopId: "",
+        boundDeviceId: trim(parsed.deviceIdHint || ""),
+        boundShopId: trim(parsed.shopIdHint || ""),
         activatedAt: 0,
         notes: "AUTO-IMPORTED"
       };
