@@ -519,3 +519,115 @@ $("btnExtend").addEventListener("click", () => doExtend().catch((e) => toast(e.m
 
 // Load token table on open
 refreshTokenTable(true).catch(() => {});
+
+
+// ------------------------------
+// Owner Accounts UI (Option 1)
+// ------------------------------
+function esc(s){return String(s||"").replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));}
+
+async function loadShopOptions() {
+  try {
+    const data = await api("/api/dev/shops/list");
+    const sel = $("ownShops");
+    if (!sel) return;
+    sel.innerHTML = "";
+    (data.shops || []).forEach(sh => {
+      const opt = document.createElement("option");
+      opt.value = sh.shopId;
+      opt.textContent = `${sh.shopName || "Shop"} (${sh.shopCode || sh.shopId})`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    // ignore until dev key saved
+  }
+}
+
+async function loadOwners() {
+  const wrap = $("ownersTable");
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="hint">Loading owners...</div>';
+  try {
+    const data = await api("/api/dev/owners/list");
+    const owners = data.owners || [];
+    if (!owners.length) {
+      wrap.innerHTML = '<div class="hint">No owners yet. Create one above.</div>';
+      return;
+    }
+    const rows = owners.map(o => {
+      const shops = (o.shops || []).join(", ");
+      return `<div class="result-row owner-row" data-owner="${esc(o.ownerId)}">
+        <div style="flex:1">
+          <div style="font-weight:700">${esc(o.email)}</div>
+          <div class="hint">Owner ID: <b>${esc(o.ownerId)}</b> • Shops: ${esc(shops || "(none)")}</div>
+        </div>
+        <button class="btn btn2" data-select="${esc(o.ownerId)}" style="margin-left:auto">Select</button>
+      </div>`;
+    }).join("");
+    wrap.innerHTML = `<div class="results">${rows}</div>`;
+
+    // hook buttons
+    wrap.querySelectorAll("[data-select]").forEach(btn => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        const id = btn.getAttribute("data-select");
+        $("ownOwnerId").value = id;
+        toast("Selected owner " + id);
+      });
+    });
+    wrap.querySelectorAll(".owner-row").forEach(row => {
+      row.addEventListener("click", (ev) => {
+        const id = row.getAttribute("data-owner");
+        if (id) $("ownOwnerId").value = id;
+      });
+    });
+  } catch (e) {
+    wrap.innerHTML = '<div class="hint">Enter DEV KEY and click Save, then reload owners.</div>';
+  }
+}
+
+function getSelectedShopIds() {
+  const sel = $("ownShops");
+  if (!sel) return [];
+  return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
+}
+
+async function createOwner() {
+  const email = ($("ownEmail").value || "").trim();
+  const password = ($("ownPass").value || "").trim();
+  const shops = getSelectedShopIds();
+  if (!email || !password) return toast("Email and password required");
+  const data = await api("/api/dev/owners/create", { method:"POST", body: JSON.stringify({ email, password, shops }) });
+  toast("Owner created: " + data.owner.ownerId);
+  $("ownOwnerId").value = data.owner.ownerId;
+  $("ownNewPass").value = "";
+  await loadOwners();
+}
+
+async function assignOwnerShops() {
+  const ownerId = ($("ownOwnerId").value || "").trim();
+  const shops = getSelectedShopIds();
+  if (!ownerId) return toast("Select an owner first");
+  const data = await api("/api/dev/owners/assign", { method:"POST", body: JSON.stringify({ ownerId, shops }) });
+  toast("Updated shops for " + data.owner.ownerId);
+  await loadOwners();
+}
+
+async function resetOwnerPassword() {
+  const ownerId = ($("ownOwnerId").value || "").trim();
+  const newPassword = ($("ownNewPass").value || "").trim();
+  if (!ownerId || !newPassword) return toast("Owner ID and new password required");
+  await api("/api/dev/owners/reset-password", { method:"POST", body: JSON.stringify({ ownerId, newPassword }) });
+  toast("Password reset for " + ownerId);
+  $("ownNewPass").value = "";
+}
+
+if ($("btnOwnCreate")) {
+  $("btnOwnCreate").addEventListener("click", () => createOwner().catch(e => toast(e.message)));
+  $("btnOwnAssign").addEventListener("click", () => assignOwnerShops().catch(e => toast(e.message)));
+  $("btnOwnReset").addEventListener("click", () => resetOwnerPassword().catch(e => toast(e.message)));
+  $("btnOwnReload").addEventListener("click", () => loadOwners().catch(() => {}));
+
+  // after dev key save, try load
+  setTimeout(() => { loadShopOptions(); loadOwners(); }, 300);
+}

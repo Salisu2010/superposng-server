@@ -45,7 +45,7 @@ app.get("/", (_req, res) => {
 app.use("/dashboard", express.static(path.join(WEB_DIR, "dashboard")));
 // Developer Portal UI
 app.use("/dev", express.static(path.join(WEB_DIR, "dev")));
-// Shop Owner Cloud Dashboard UI
+// Owner Cloud Dashboard UI
 app.use("/owner", express.static(path.join(WEB_DIR, "owner")));
 
 // Some hosts/proxies don't automatically redirect "/dev" -> "/dev/" for static mounts.
@@ -60,13 +60,12 @@ function sendIndex(res, dirName) {
 }
 
 app.get("/dev", (_req, res) => sendIndex(res, "dev"));
-app.get("/owner", (_req, res) => sendIndex(res, "owner"));
 app.get("/dashboard", (_req, res) => sendIndex(res, "dashboard"));
+app.get("/owner", (_req, res) => sendIndex(res, "owner"));
 app.use("/api/dashboard", dashboardRoutes);
 
 // Developer-only APIs
 app.use("/api/dev", devRoutes);
-
 // Owner (Shop User) APIs
 app.use("/api/owner", ownerRoutes);
 

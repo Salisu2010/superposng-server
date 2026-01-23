@@ -19,7 +19,7 @@ function initDB() {
       debtors: [],
       licenses: [],
       pendingActivations: [],
-      ownerUsers: []
+      owners: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -41,7 +41,7 @@ function readDB() {
     // Licensing / activation tables
     if (!Array.isArray(db.licenses)) db.licenses = []
     if (!Array.isArray(db.pendingActivations)) db.pendingActivations = []
-    if (!Array.isArray(db.ownerUsers)) db.ownerUsers = []
+    if (!Array.isArray(db.owners)) db.owners = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -56,7 +56,7 @@ function readDB() {
       debtors: [],
       licenses: [],
       pendingActivations: [],
-      ownerUsers: []
+      owners: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData

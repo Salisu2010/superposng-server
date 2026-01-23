@@ -30,24 +30,11 @@ function toNum(v, def = 0) {
 }
 
 function ensureDbArrays(db) {
-
   if (!Array.isArray(db.products)) db.products = [];
   if (!Array.isArray(db.staffs)) db.staffs = [];
   if (!Array.isArray(db.sales)) db.sales = [];
   if (!Array.isArray(db.debtors)) db.debtors = [];
   if (!Array.isArray(db.shops)) db.shops = [];
-}
-
-function touchShopLastSync(db, shopId, source) {
-  const now = Date.now();
-  let idx = db.shops.findIndex((s) => trim(s.shopId) === trim(shopId));
-  if (idx < 0) {
-    db.shops.push({ shopId, shopName: "", createdAt: now, updatedAt: now });
-    idx = db.shops.length - 1;
-  }
-  db.shops[idx].lastSyncedAt = now;
-  db.shops[idx].lastSyncSource = source || "sync";
-  db.shops[idx].updatedAt = now;
 }
 
 function normName(v) {
@@ -185,9 +172,6 @@ r.post("/products", (req, res) => {
     upserts++;
   }
 
-  touchShopLastSync(db, shopId, "products_push");
-  touchShopLastSync(db, shopId, "staffs_push");
-  touchShopLastSync(db, shopId, "sale");
   writeDB(db);
   return res.json({ ok: true, upserts, serverTime: now });
 });
@@ -251,8 +235,6 @@ r.post("/staffs", (req, res) => {
     upserts++;
   }
 
-  touchShopLastSync(db, shopId, "products_push");
-  touchShopLastSync(db, shopId, "sale");
   writeDB(db);
   return res.json({ ok: true, upserts, serverTime: now });
 });
@@ -330,8 +312,6 @@ r.post("/shop/profile", (req, res) => {
     updatedAt: now,
   };
 
-  touchShopLastSync(db, shopId, "shop_profile");
-  touchShopLastSync(db, shopId, "sale");
   writeDB(db);
   return res.json({ ok: true, saved: true, shop: db.shops[idx], serverTime: now });
 });
@@ -497,7 +477,6 @@ r.post("/sale", (req, res) => {
     }
   } catch (_e) {}
 
-  touchShopLastSync(db, shopId, "sale");
   writeDB(db);
   return res.json({
     ok: true,

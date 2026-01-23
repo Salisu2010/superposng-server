@@ -179,6 +179,53 @@
       <div id="tokenTable" class="results"></div>
       <p class="hint">Tip: Click a row action to auto-fill <b>Target</b> for Extend/Revoke/Reset.</p>
     </section>
+
+    <section class="card">
+      <h2>Owner Accounts (Shop Users)</h2>
+      <p class="hint">Option 1: Owners are created here (Dev Portal) and can then login at <code>/owner</code>.</p>
+
+      <div class="grid2">
+        <div>
+          <label>Owner Email</label>
+          <input id="ownEmail" placeholder="owner@shop.com" />
+        </div>
+        <div>
+          <label>Temp Password</label>
+          <input id="ownPass" placeholder="e.g. 12345678" />
+        </div>
+        <div>
+          <label>Assign Shop(s)</label>
+          <select id="ownShops" multiple size="4"></select>
+          <div class="hint">Hold Ctrl (Windows) to select multiple shops.</div>
+        </div>
+        <div class="row" style="align-items:flex-end;">
+          <button id="btnOwnCreate" class="btn">Create Owner</button>
+          <button id="btnOwnReload" class="btn">Reload Owners</button>
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:14px 0"/>
+
+      <div class="grid2">
+        <div>
+          <label>Selected Owner ID</label>
+          <input id="ownOwnerId" placeholder="Click an owner below to select" />
+        </div>
+        <div>
+          <label>Reset Password (new)</label>
+          <input id="ownNewPass" placeholder="New password" />
+        </div>
+        <div class="row">
+          <button id="btnOwnAssign" class="btn">Assign Shops</button>
+          <button id="btnOwnReset" class="btn warn">Reset Password</button>
+        </div>
+      </div>
+
+      <div style="height:10px"></div>
+      <div id="ownersTable" class="results"></div>
+      <p class="hint">Tip: click an owner row to auto-fill Owner ID. Use Assign to update shop access.</p>
+    </section>
+
   </main>
 
   <div id="toast" class="toast"></div>

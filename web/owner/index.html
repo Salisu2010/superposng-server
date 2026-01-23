@@ -4,136 +4,59 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>SuperPOSNG Owner Dashboard</title>
-  <link rel="stylesheet" href="/owner/style.css"/>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo">SP</div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">SP</div>
+      <div>
+        <div style="font-weight:800">SuperPOSNG</div>
+        <div class="muted">Owner Cloud Dashboard</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="card" id="loginCard">
+      <h2 style="margin:0 0 8px 0;">Sign in</h2>
+      <div class="muted">Use the owner account created from Developer Portal.</div>
+      <div style="height:14px"></div>
+      <div class="grid">
         <div>
-          <div class="title">SuperPOSNG</div>
-          <div class="subtitle">Owner Cloud Dashboard</div>
+          <label>Email</label>
+          <input id="email" placeholder="owner@shop.com" autocomplete="username"/>
+        </div>
+        <div>
+          <label>Password</label>
+          <input id="password" type="password" placeholder="********" autocomplete="current-password"/>
         </div>
       </div>
-      <div class="top-actions">
-        <select id="shopSelect" class="input" style="display:none"></select>
-        <button id="btnLogout" class="btn ghost" style="display:none">Logout</button>
+      <div style="height:14px"></div>
+      <div class="row">
+        <button id="btnLogin" class="btn">Login</button>
+        <div class="muted" id="loginHint"></div>
       </div>
-    </header>
+      <div id="loginErr" class="err hidden"></div>
+    </section>
 
-    <main class="main">
-      <section id="loginView" class="card">
-        <h2>Sign in</h2>
-        <p class="muted">Use the owner account created from Developer Portal.</p>
-        <div class="grid2">
-          <div>
-            <label>Email</label>
-            <input id="email" class="input" type="email" placeholder="owner@shop.com"/>
-          </div>
-          <div>
-            <label>Password</label>
-            <input id="password" class="input" type="password" placeholder="••••••••"/>
-          </div>
+    <section class="card hidden" id="meCard">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <h2 style="margin:0 0 6px 0;">Welcome</h2>
+          <div class="muted" id="meEmail"></div>
         </div>
-        <div class="row">
-          <button id="btnLogin" class="btn primary">Login</button>
-          <div id="loginMsg" class="msg"></div>
-        </div>
-      </section>
+        <button id="btnLogout" class="btn" style="background:#ef4444">Logout</button>
+      </div>
+      <div style="height:12px"></div>
+      <div class="muted">Your Shops</div>
+      <div id="shops"></div>
+    </section>
 
-      <section id="dashView" style="display:none">
-        <div class="tabs">
-          <button class="tab active" data-tab="overview">Overview</button>
-          <button class="tab" data-tab="products">Products</button>
-          <button class="tab" data-tab="sales">Sales</button>
-        </div>
+  </main>
 
-        <section id="tab_overview" class="tabpane">
-          <div class="kpis" id="kpiGrid"></div>
-          <div class="card">
-            <div class="row between">
-              <div>
-                <h3 style="margin:0">Sync status</h3>
-                <div class="muted" id="syncText">—</div>
-              </div>
-              <button id="btnRefresh" class="btn">Refresh</button>
-            </div>
-          </div>
-        </section>
+  <footer>SuperPOSNG © 2026</footer>
 
-        <section id="tab_products" class="tabpane" style="display:none">
-          <div class="card">
-            <div class="row between">
-              <div>
-                <h3 style="margin:0">Products</h3>
-                <div class="muted">Search by name, barcode, SKU/PLU</div>
-              </div>
-              <div class="row">
-                <input id="productSearch" class="input" placeholder="Search…"/>
-                <a id="btnExportProducts" class="btn" href="#" download>Export CSV</a>
-              </div>
-            </div>
-            <div class="tableWrap">
-              <table class="table" id="productsTable">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>SKU/PLU</th>
-                    <th>Barcode</th>
-                    <th>Stock</th>
-                    <th>Low</th>
-                    <th>Price</th>
-                    <th>Expiry</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <section id="tab_sales" class="tabpane" style="display:none">
-          <div class="card">
-            <div class="row between">
-              <div>
-                <h3 style="margin:0">Sales</h3>
-                <div class="muted">Filter by date range and export</div>
-              </div>
-              <div class="row">
-                <input id="fromDate" class="input" type="date"/>
-                <input id="toDate" class="input" type="date"/>
-                <button id="btnLoadSales" class="btn">Load</button>
-                <a id="btnExportSales" class="btn" href="#" download>Export CSV</a>
-              </div>
-            </div>
-            <div class="tableWrap">
-              <table class="table" id="salesTable">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Receipt</th>
-                    <th>Customer</th>
-                    <th>Total</th>
-                    <th>Paid</th>
-                    <th>Balance</th>
-                    <th>Cashier</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-      </section>
-    </main>
-
-    <footer class="footer">
-      <span class="muted">SuperPOSNG © 2026</span>
-    </footer>
-  </div>
-
-  <script src="/owner/app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
