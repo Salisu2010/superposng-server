@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { readDB, writeDB } from "../db.js";
+import { readDB, writeDB, resolveShopId } from "../db.js";
 import { signToken } from "../auth.js";
 import { authMiddleware } from "../middleware/auth.js";
 

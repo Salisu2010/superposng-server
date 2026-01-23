@@ -19,7 +19,8 @@ function initDB() {
       debtors: [],
       licenses: [],
       pendingActivations: [],
-      owners: []
+      owners: [],
+      shopAliases: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -56,7 +57,8 @@ function readDB() {
       debtors: [],
       licenses: [],
       pendingActivations: [],
-      owners: []
+      owners: [],
+      shopAliases: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData
@@ -68,3 +70,30 @@ function writeDB(data) {
 }
 
 export { readDB, writeDB }
+
+
+// Resolve canonical shopId using alias mappings (old -> canonical).
+export function resolveShopId(db, shopId) {
+  const seen = new Set();
+  let cur = (shopId || '').toString();
+  if (!cur) return cur;
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const m = (db.shopAliases || []).find(a => a && a.from === cur);
+    if (m && m.to && m.to !== cur) { cur = m.to; continue; }
+    break;
+  }
+  return cur;
+}
+
+export function addShopAlias(db, from, to) {
+  const f = (from||'').toString().trim();
+  const t = (to||'').toString().trim();
+  if (!f || !t || f === t) return false;
+  if (!Array.isArray(db.shopAliases)) db.shopAliases = [];
+  const now = Date.now();
+  const ex = db.shopAliases.find(a => a.from === f);
+  if (ex) { ex.to = t; ex.updatedAt = now; return true; }
+  db.shopAliases.push({ from: f, to: t, createdAt: now, updatedAt: now });
+  return true;
+}

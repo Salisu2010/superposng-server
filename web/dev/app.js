@@ -628,6 +628,24 @@ if ($("btnOwnCreate")) {
   $("btnOwnReset").addEventListener("click", () => resetOwnerPassword().catch(e => toast(e.message)));
   $("btnOwnReload").addEventListener("click", () => loadOwners().catch(() => {}));
 
-  // after dev key save, try load
+  
+  // Shop merge / alias (canonical shopId)
+  $("btnMergeShop").addEventListener("click", async () => {
+    const fromShopId = ($("mergeFrom").value || "").trim();
+    const toShopId = ($("mergeTo").value || "").trim();
+    if (!fromShopId || !toShopId) return toast("Provide From and To shop IDs");
+    const r = await api("/api/dev/shops/merge", { method:"POST", body: JSON.stringify({ fromShopId, toShopId }) });
+    toast("Merged: " + r.from + " -> " + r.to);
+  });
+  $("btnAliasShop").addEventListener("click", async () => {
+    const fromShopId = ($("mergeFrom").value || "").trim();
+    const toShopId = ($("mergeTo").value || "").trim();
+    if (!fromShopId || !toShopId) return toast("Provide From and To shop IDs");
+    const r = await api("/api/dev/shops/alias", { method:"POST", body: JSON.stringify({ fromShopId, toShopId }) });
+    toast("Alias saved: " + r.from + " -> " + r.to);
+  });
+
+
+// after dev key save, try load
   setTimeout(() => { loadShopOptions(); loadOwners(); }, 300);
 }

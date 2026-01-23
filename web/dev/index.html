@@ -226,6 +226,30 @@
       <p class="hint">Tip: click an owner row to auto-fill Owner ID. Use Assign to update shop access.</p>
     </section>
 
+    <section class="card">
+      <h2>Shop Merge / Canonical Shop ID</h2>
+      <p class="hint">Use this once to merge an old Shop ID into the canonical Shop ID (prevents data split). This creates an alias so future sync/query resolves automatically.</p>
+
+      <div class="grid2">
+        <div>
+          <label>From (Old Shop ID)</label>
+          <input id="mergeFrom" placeholder="e.g. EmSDlSPcMQQQ" />
+        </div>
+        <div>
+          <label>To (Canonical Shop ID)</label>
+          <input id="mergeTo" placeholder="e.g. oHOSjbvBzww" />
+        </div>
+        <div>
+          <button class="btn" id="btnMergeShop">Merge Shops</button>
+        </div>
+        <div>
+          <button class="btn secondary" id="btnAliasShop">Create Alias Only</button>
+        </div>
+      </div>
+      <p class="hint">Tip: If you're unsure which ID is canonical, use the Shop ID shown in <code>/owner</code> as <b>To</b>.</p>
+    </section>
+
+
   </main>
 
   <div id="toast" class="toast"></div>
