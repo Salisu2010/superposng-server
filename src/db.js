@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const DB_FILE = path.join(__dirname, '../db.json')
+const DB_FILE = process.env.DB_FILE || path.join(__dirname, '../db.json')
 
 function initDB() {
   if (!fs.existsSync(DB_FILE)) {
@@ -43,6 +43,7 @@ function readDB() {
     if (!Array.isArray(db.licenses)) db.licenses = []
     if (!Array.isArray(db.pendingActivations)) db.pendingActivations = []
     if (!Array.isArray(db.owners)) db.owners = []
+    if (!Array.isArray(db.shopAliases)) db.shopAliases = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -70,30 +71,3 @@ function writeDB(data) {
 }
 
 export { readDB, writeDB }
-
-
-// Resolve canonical shopId using alias mappings (old -> canonical).
-export function resolveShopId(db, shopId) {
-  const seen = new Set();
-  let cur = (shopId || '').toString();
-  if (!cur) return cur;
-  while (cur && !seen.has(cur)) {
-    seen.add(cur);
-    const m = (db.shopAliases || []).find(a => a && a.from === cur);
-    if (m && m.to && m.to !== cur) { cur = m.to; continue; }
-    break;
-  }
-  return cur;
-}
-
-export function addShopAlias(db, from, to) {
-  const f = (from||'').toString().trim();
-  const t = (to||'').toString().trim();
-  if (!f || !t || f === t) return false;
-  if (!Array.isArray(db.shopAliases)) db.shopAliases = [];
-  const now = Date.now();
-  const ex = db.shopAliases.find(a => a.from === f);
-  if (ex) { ex.to = t; ex.updatedAt = now; return true; }
-  db.shopAliases.push({ from: f, to: t, createdAt: now, updatedAt: now });
-  return true;
-}

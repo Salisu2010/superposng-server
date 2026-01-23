@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { readDB, writeDB, resolveShopId } from "../db.js";
+import { readDB, writeDB } from "../db.js";
 
 const r = Router();
 
@@ -8,8 +8,7 @@ function requireShop(req, res) {
     res.status(401).json({ ok: false, error: "Missing auth shopId" });
     return null;
   }
-  const db = readDB();
-  return resolveShopId(db, req.auth.shopId);
+  return req.auth.shopId;
 }
 
 function toStr(v) {
