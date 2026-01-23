@@ -456,4 +456,102 @@ r.post("/extend", requireDevKey, (req, res) => {
   res.json({ ok: true, old: lic, license: newLic, serverTime: now() });
 });
 
+
+// ------------------------------
+// Owner (Shop User) Management - Dev Portal (Option 1)
+// Protected by DEV_KEY
+// ------------------------------
+function normEmail(v){ return trim(v).toLowerCase(); }
+
+function hashOwnerPassword(password, salt){
+  const pw = trim(password);
+  const s = salt || crypto.randomBytes(16).toString("hex");
+  const dk = crypto.scryptSync(pw, s, 64);
+  return { salt: s, hash: dk.toString("hex") };
+}
+
+r.get("/owners", requireDevKey, (req, res) => {
+  const db = readDB();
+  if (!Array.isArray(db.ownerUsers)) db.ownerUsers = [];
+  const items = db.ownerUsers.map(u => ({
+    ownerId: u.ownerId,
+    email: u.email,
+    shops: u.shops || [],
+    createdAt: u.createdAt || 0,
+    updatedAt: u.updatedAt || 0
+  }));
+  return res.json({ ok: true, items });
+});
+
+r.post("/owners/create", requireDevKey, (req, res) => {
+  const email = normEmail(req.body?.email);
+  const password = trim(req.body?.password);
+  const shops = Array.isArray(req.body?.shops) ? req.body.shops.map(trim).filter(Boolean) : [];
+
+  if (!email || !password) return res.status(400).json({ ok:false, error:"email and password required" });
+
+  const db = readDB();
+  if (!Array.isArray(db.ownerUsers)) db.ownerUsers = [];
+  if (!Array.isArray(db.shops)) db.shops = [];
+
+  if (db.ownerUsers.some(u => normEmail(u.email) === email)) {
+    return res.status(400).json({ ok:false, error:"Owner email already exists" });
+  }
+
+  // validate shops
+  const validShops = shops.filter(id => db.shops.some(s => trim(s.shopId) === id));
+  const hp = hashOwnerPassword(password);
+
+  const owner = {
+    ownerId: "OWN_" + crypto.randomBytes(8).toString("hex"),
+    email,
+    salt: hp.salt,
+    passHash: hp.hash,
+    shops: validShops,
+    createdAt: now(),
+    updatedAt: now()
+  };
+
+  db.ownerUsers.unshift(owner);
+  writeDB(db);
+
+  return res.json({ ok:true, owner: { ownerId: owner.ownerId, email: owner.email, shops: owner.shops } });
+});
+
+r.post("/owners/assign", requireDevKey, (req, res) => {
+  const ownerId = trim(req.body?.ownerId);
+  const shops = Array.isArray(req.body?.shops) ? req.body.shops.map(trim).filter(Boolean) : [];
+  if (!ownerId) return res.status(400).json({ ok:false, error:"ownerId required" });
+
+  const db = readDB();
+  if (!Array.isArray(db.ownerUsers)) db.ownerUsers = [];
+  if (!Array.isArray(db.shops)) db.shops = [];
+
+  const idx = db.ownerUsers.findIndex(u => trim(u.ownerId) === ownerId);
+  if (idx < 0) return res.status(404).json({ ok:false, error:"Owner not found" });
+
+  const validShops = shops.filter(id => db.shops.some(s => trim(s.shopId) === id));
+  db.ownerUsers[idx] = { ...db.ownerUsers[idx], shops: validShops, updatedAt: now() };
+  writeDB(db);
+
+  return res.json({ ok:true, owner: { ownerId, email: db.ownerUsers[idx].email, shops: db.ownerUsers[idx].shops } });
+});
+
+r.post("/owners/reset-password", requireDevKey, (req, res) => {
+  const ownerId = trim(req.body?.ownerId);
+  const newPassword = trim(req.body?.newPassword);
+  if (!ownerId || !newPassword) return res.status(400).json({ ok:false, error:"ownerId and newPassword required" });
+
+  const db = readDB();
+  if (!Array.isArray(db.ownerUsers)) db.ownerUsers = [];
+  const idx = db.ownerUsers.findIndex(u => trim(u.ownerId) === ownerId);
+  if (idx < 0) return res.status(404).json({ ok:false, error:"Owner not found" });
+
+  const hp = hashOwnerPassword(newPassword);
+  db.ownerUsers[idx] = { ...db.ownerUsers[idx], salt: hp.salt, passHash: hp.hash, updatedAt: now() };
+  writeDB(db);
+
+  return res.json({ ok:true, reset: true, ownerId });
+});
+
 export default r;

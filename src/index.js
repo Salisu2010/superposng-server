@@ -13,6 +13,7 @@ import syncRoutes from "./routes/sync.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import devRoutes from "./routes/dev.js";
 import licenseRoutes from "./routes/license.js";
+import ownerRoutes from "./routes/owner.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -44,6 +45,8 @@ app.get("/", (_req, res) => {
 app.use("/dashboard", express.static(path.join(WEB_DIR, "dashboard")));
 // Developer Portal UI
 app.use("/dev", express.static(path.join(WEB_DIR, "dev")));
+// Shop Owner Cloud Dashboard UI
+app.use("/owner", express.static(path.join(WEB_DIR, "owner")));
 
 // Some hosts/proxies don't automatically redirect "/dev" -> "/dev/" for static mounts.
 // Guarantee that the root paths load index.html.
@@ -57,11 +60,15 @@ function sendIndex(res, dirName) {
 }
 
 app.get("/dev", (_req, res) => sendIndex(res, "dev"));
+app.get("/owner", (_req, res) => sendIndex(res, "owner"));
 app.get("/dashboard", (_req, res) => sendIndex(res, "dashboard"));
 app.use("/api/dashboard", dashboardRoutes);
 
 // Developer-only APIs
 app.use("/api/dev", devRoutes);
+
+// Owner (Shop User) APIs
+app.use("/api/owner", ownerRoutes);
 
 // Public license claim endpoint for device activation
 app.use("/api/license", licenseRoutes);
