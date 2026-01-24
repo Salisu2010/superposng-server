@@ -46,8 +46,23 @@
     (data.owner.shops || []).forEach(s => {
       const div = document.createElement("div");
       div.className = "shop";
-      div.innerHTML = `<div style="font-weight:800">${escapeHtml(s.shopName || "Shop")}</div>
-        <div class="muted">Shop ID: ${escapeHtml(s.shopId || "")} • Code: ${escapeHtml(s.shopCode || "")}</div>`;
+
+      const lines = [];
+      const addr = (s.address || "").trim();
+      const phone = (s.phone || "").trim();
+      const wa = (s.whatsapp || "").trim();
+      const tagline = (s.tagline || "").trim();
+
+      if (addr) lines.push(`Address: ${escapeHtml(addr)}`);
+      if (phone) lines.push(`Phone: ${escapeHtml(phone)}`);
+      if (wa) lines.push(`WhatsApp: ${escapeHtml(wa)}`);
+      if (tagline) lines.push(escapeHtml(tagline));
+
+      div.innerHTML = `
+        <div style="font-weight:800">${escapeHtml(s.shopName || "Shop")}</div>
+        <div class="muted">Shop ID: ${escapeHtml(s.shopId || "")} • Code: ${escapeHtml(s.shopCode || "")}</div>
+        ${lines.length ? `<div class="muted" style="margin-top:6px; line-height:1.4">${lines.join("<br>")}</div>` : ""}
+      `;
       wrap.appendChild(div);
     });
 

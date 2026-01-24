@@ -57,7 +57,19 @@ r.get("/me", authMiddleware, (req, res) => {
   // attach shop names
   const shops = (owner.shops || []).map(id => {
     const s = (db.shops || []).find(x => x.shopId === id);
-    return { shopId: id, shopName: s?.shopName || "", shopCode: s?.shopCode || "" };
+    return {
+      shopId: id,
+      shopName: s?.shopName || "",
+      shopCode: s?.shopCode || "",
+      // richer shop profile (filled by /api/sync/shop/profile)
+      address: s?.address || "",
+      phone: s?.phone || "",
+      whatsapp: s?.whatsapp || "",
+      tagline: s?.tagline || "",
+      currency: s?.currency || "",
+      footer: s?.footer || "",
+      updatedAt: s?.updatedAt || 0,
+    };
   });
 
   return res.json({ ok: true, owner: { ownerId: owner.ownerId, email: owner.email, shops } });
