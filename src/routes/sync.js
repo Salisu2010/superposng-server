@@ -324,11 +324,38 @@ r.post("/shop/profile", (req, res) => {
  * ✅ FIX: Deduct stock from db.products
  * ✅ FIX: Debtor upsert accumulates owed
  */
-r.post("/sale", (req, res) => {
+function extractSaleFromBody(body) {
+  const b = body || {};
+  // Common shapes across versions
+  if (b.sale && typeof b.sale === "object") return b.sale;
+  if (b.data?.sale && typeof b.data.sale === "object") return b.data.sale;
+  if (b.payload?.sale && typeof b.payload.sale === "object") return b.payload.sale;
+
+  // Sometimes the payload itself is the sale object
+  // (we only accept it if it contains at least one known sale-like key)
+  const saleLikeKeys = ["receiptNo", "receipt", "items", "cartItems", "total", "paid", "remaining", "customerName", "customerPhone"]; 
+  const keys = Object.keys(b);
+  const looksLikeSale = keys.some(k => saleLikeKeys.includes(k));
+  if (looksLikeSale) return b;
+
+  return null;
+}
+
+const SALE_PATHS = [
+  "/sale",
+  "/sale/create",
+  "/saleCreate",
+  "/sales",
+  "/sales/create",
+  "/sales/push"
+];
+
+// Accept sale pushes from multiple app/server versions.
+r.post(SALE_PATHS, (req, res) => {
   const shopId = requireShop(req, res);
   if (!shopId) return;
 
-  const sale = req.body?.sale;
+  const sale = extractSaleFromBody(req.body);
   if (!sale) {
     return res.status(400).json({ ok: false, error: "sale required" });
   }
@@ -339,13 +366,15 @@ r.post("/sale", (req, res) => {
   const now = Date.now();
 
   // de-duplicate by receiptNo if provided
-  const receiptNo = trim(sale.receiptNo || sale.receipt);
+  const receiptNo = trim(sale.receiptNo || sale.receipt || sale.invoiceNo || sale.billNo);
   const exists = receiptNo
     ? db.sales.some((s) => s.shopId === shopId && trim(s.receiptNo) === receiptNo)
     : false;
 
   if (!exists) {
-    db.sales.push({ ...sale, shopId, receiptNo, createdAt: now });
+    // Preserve client createdAt if present, otherwise server time.
+    const createdAt = toInt(sale.createdAt || sale.time || sale.timestamp || 0, 0) || now;
+    db.sales.push({ ...sale, shopId, receiptNo, createdAt });
   }
 
   // ✅ DEDUCT STOCK (robust matching)

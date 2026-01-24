@@ -13,6 +13,50 @@ function asNum(v, d = 0) {
   return Number.isFinite(n) ? n : d;
 }
 
+function pickShopId(row) {
+  const a = row || {};
+  return trim(a.shopId || a.shopID || a.shop_id || a.sid || a.shop || a.shop_id_fk);
+}
+
+function pickSaleTotal(s) {
+  // Support multiple field names across app versions
+  return asNum(
+    s?.total ??
+      s?.grandTotal ??
+      s?.amountTotal ??
+      s?.totalAmount ??
+      s?.total_price ??
+      s?.totalPrice ??
+      0,
+    0
+  );
+}
+
+function pickSalePaid(s) {
+  return asNum(
+    s?.paid ??
+      s?.amountPaid ??
+      s?.paidAmount ??
+      s?.cashPaid ??
+      s?.cash ??
+      0,
+    0
+  );
+}
+
+function pickSaleRemaining(s) {
+  // Remaining might be stored as balance/credit
+  return asNum(
+    s?.remaining ??
+      s?.balance ??
+      s?.due ??
+      s?.credit ??
+      s?.amountDue ??
+      0,
+    0
+  );
+}
+
 function asInt(v, d = 0) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : d;
@@ -115,13 +159,13 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
 
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId);
-  const products = (db.products || []).filter(p => p.shopId === shopId);
-  const sales = (db.sales || []).filter(s => s.shopId === shopId);
-  const debtors = (db.debtors || []).filter(d => d.shopId === shopId);
+  const products = (db.products || []).filter(p => pickShopId(p) === shopId);
+  const sales = (db.sales || []).filter(s => pickShopId(s) === shopId);
+  const debtors = (db.debtors || []).filter(d => pickShopId(d) === shopId);
 
-  const totalSales = sales.reduce((sum, s) => sum + asNum(s.total, 0), 0);
-  const totalPaid = sales.reduce((sum, s) => sum + asNum(s.paid, 0), 0);
-  const totalRemaining = sales.reduce((sum, s) => sum + asNum(s.remaining, 0), 0);
+  const totalSales = sales.reduce((sum, s) => sum + pickSaleTotal(s), 0);
+  const totalPaid = sales.reduce((sum, s) => sum + pickSalePaid(s), 0);
+  const totalRemaining = sales.reduce((sum, s) => sum + pickSaleRemaining(s), 0);
 
   return res.json({
     ok: true,
@@ -149,7 +193,7 @@ r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
 
   const db = readDB();
   const q = trim(req.query.q || "").toLowerCase();
-  let items = (db.products || []).filter(p => p.shopId === shopId);
+  let items = (db.products || []).filter(p => pickShopId(p) === shopId);
   if (q) {
     items = items.filter(p => {
       const name = trim(p.name).toLowerCase();
@@ -177,7 +221,7 @@ r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
   const limit = Math.min(2000, Math.max(50, asInt(req.query.limit, 500)));
 
   const db = readDB();
-  let items = (db.sales || []).filter(s => s.shopId === shopId);
+  let items = (db.sales || []).filter(s => pickShopId(s) === shopId);
   if (from > 0) items = items.filter(s => asInt(s.createdAt, 0) >= from);
   if (to > 0) items = items.filter(s => asInt(s.createdAt, 0) <= to);
   items.sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
@@ -196,7 +240,7 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
   if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
 
   const db = readDB();
-  const items = (db.debtors || []).filter(d => d.shopId === shopId)
+  const items = (db.debtors || []).filter(d => pickShopId(d) === shopId)
     .sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
   return res.json({ ok: true, items });
 });
