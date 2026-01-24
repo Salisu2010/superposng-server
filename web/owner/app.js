@@ -23,6 +23,8 @@
   const kpisWrap = $("kpis");
 
   const qProducts = $("qProducts");
+  const qSales = $("qSales");
+  const qDebtors = $("qDebtors");
   const productsBody = $("productsBody");
   const salesBody = $("salesBody");
   const debtorsBody = $("debtorsBody");
@@ -39,6 +41,8 @@
   };
 
   let selectedShopId = "";
+  let salesCache = [];
+  let debtorsCache = [];
 
   function showLoginErr(msg) {
     loginErr.textContent = msg || "";
@@ -60,6 +64,14 @@
     return String(str || "").replace(/[&<>"']/g, (s) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s])
     );
+  }
+
+  function debounce(fn, ms) {
+    let t = null;
+    return (...args) => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
   }
 
   async function api(path, opts = {}) {
@@ -252,19 +264,40 @@
     const shopId = selectedShopId;
     if (!shopId) return;
 
-    const sr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/sales?limit=200`);
-    const items = Array.isArray(sr.items) ? sr.items : [];
+    const sr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/sales?limit=2000`);
+    salesCache = Array.isArray(sr.items) ? sr.items : [];
+    renderSales();
+  }
+
+  function renderSales() {
+    const q = (qSales?.value || "").trim().toLowerCase();
+    let items = Array.isArray(salesCache) ? salesCache : [];
+    if (q) {
+      items = items.filter((s) => {
+        const receipt = String(s.receiptNo || "").toLowerCase();
+        const staff = String(s.staffUser || "").toLowerCase();
+        const method = String(s.paymentMethod || "").toLowerCase();
+        const status = String(s.status || "").toLowerCase();
+        return receipt.includes(q) || staff.includes(q) || method.includes(q) || status.includes(q);
+      });
+    }
+
     salesBody.innerHTML = "";
-    if (!items.length) return clearTable(salesBody, 4, "No sales");
+    if (!items.length) return clearTable(salesBody, 9, q ? "No matches" : "No sales");
 
     items.forEach((s) => {
       const ts = s.createdAt ? new Date(Number(s.createdAt)).toLocaleString() : "";
       salesBody.appendChild(
         rowCells([
-          s.receiptNo || s.receipt || "",
-          s.staffUser || s.staffName || "",
-          ts,
+          s.receiptNo || "",
+          s.staffUser || "",
+          s.paymentMethod || "",
+          s.status || "",
+          String(s.itemsCount ?? 0),
+          money(s.paid ?? 0),
+          money(s.remaining ?? 0),
           money(s.total ?? 0),
+          ts,
         ])
       );
     });
@@ -275,17 +308,38 @@
     if (!shopId) return;
 
     const dr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/debtors`);
-    const items = Array.isArray(dr.items) ? dr.items : [];
+    debtorsCache = Array.isArray(dr.items) ? dr.items : [];
+    renderDebtors();
+  }
+
+  function renderDebtors() {
+    const q = (qDebtors?.value || "").trim().toLowerCase();
+    let items = Array.isArray(debtorsCache) ? debtorsCache : [];
+    if (q) {
+      items = items.filter((d) => {
+        const name = String(d.customerName || "").toLowerCase();
+        const phone = String(d.customerPhone || "").toLowerCase();
+        const receipt = String(d.receiptNo || "").toLowerCase();
+        const status = String(d.status || "").toLowerCase();
+        return name.includes(q) || phone.includes(q) || receipt.includes(q) || status.includes(q);
+      });
+    }
+
     debtorsBody.innerHTML = "";
-    if (!items.length) return clearTable(debtorsBody, 4, "No debtors");
+    if (!items.length) return clearTable(debtorsBody, 8, q ? "No matches" : "No debtors");
 
     items.forEach((d) => {
+      const ts = d.createdAt ? new Date(Number(d.createdAt)).toLocaleString() : "";
       debtorsBody.appendChild(
         rowCells([
-          d.customerName || d.name || "",
-          d.receiptNo || d.receipt || "",
-          d.customerPhone || d.phone || "",
-          money(d.remaining ?? d.balance ?? d.amount ?? 0),
+          d.customerName || "",
+          d.customerPhone || "",
+          d.receiptNo || "",
+          d.status || "",
+          money(d.paid ?? 0),
+          money(d.remaining ?? 0),
+          money(d.total ?? 0),
+          ts,
         ])
       );
     });
@@ -304,8 +358,8 @@
       // preload placeholders
       setKpis({ products: 0, sales: 0, debtors: 0, totalSales: 0, totalPaid: 0, totalRemaining: 0 });
       clearTable(productsBody, 4, "Loading...");
-      clearTable(salesBody, 4, "Loading...");
-      clearTable(debtorsBody, 4, "Loading...");
+      clearTable(salesBody, 9, "Loading...");
+      clearTable(debtorsBody, 8, "Loading...");
 
       await loadOverview();
       await loadProducts();
@@ -339,13 +393,20 @@
   });
 
   // Product search debounce
-  let qTimer = null;
-  qProducts?.addEventListener("input", () => {
-    clearTimeout(qTimer);
-    qTimer = setTimeout(() => {
-      loadProducts().catch((e) => showShopErr(e.message || String(e)));
-    }, 200);
-  });
+  const onProductsSearch = debounce(() => {
+    loadProducts().catch((e) => showShopErr(e.message || String(e)));
+  }, 200);
+  qProducts?.addEventListener("input", onProductsSearch);
+
+  const onSalesSearch = debounce(() => {
+    try { renderSales(); } catch (e) {}
+  }, 120);
+  qSales?.addEventListener("input", onSalesSearch);
+
+  const onDebtorsSearch = debounce(() => {
+    try { renderDebtors(); } catch (e) {}
+  }, 120);
+  qDebtors?.addEventListener("input", onDebtorsSearch);
 
   btnReloadSales?.addEventListener("click", () => loadSales().catch((e) => showShopErr(e.message || String(e))));
   btnReloadDebtors?.addEventListener("click", () => loadDebtors().catch((e) => showShopErr(e.message || String(e))));

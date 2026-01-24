@@ -93,13 +93,16 @@
       <div id="tab_sales" class="tabpanel hidden">
         <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
           <div class="muted">Sales (latest)</div>
-          <button id="btnReloadSales" class="btn" style="background:#334155">Reload</button>
+          <div class="row" style="gap:10px; flex-wrap:wrap">
+            <input id="qSales" class="input" placeholder="Search receipt / staff / method" style="max-width:320px"/>
+            <button id="btnReloadSales" class="btn" style="background:#334155">Reload</button>
+          </div>
         </div>
         <div style="height:10px"></div>
         <div class="tableWrap">
           <table class="table">
             <thead><tr>
-              <th>Receipt</th><th>Staff</th><th>Date/Time</th><th>Total</th>
+              <th>Receipt</th><th>Staff</th><th>Method</th><th>Status</th><th>Items</th><th>Paid</th><th>Balance</th><th>Total</th><th>Date/Time</th>
             </tr></thead>
             <tbody id="salesBody"></tbody>
           </table>
@@ -109,13 +112,16 @@
       <div id="tab_debtors" class="tabpanel hidden">
         <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
           <div class="muted">Debtors</div>
-          <button id="btnReloadDebtors" class="btn" style="background:#334155">Reload</button>
+          <div class="row" style="gap:10px; flex-wrap:wrap">
+            <input id="qDebtors" class="input" placeholder="Search name / phone / receipt" style="max-width:320px"/>
+            <button id="btnReloadDebtors" class="btn" style="background:#334155">Reload</button>
+          </div>
         </div>
         <div style="height:10px"></div>
         <div class="tableWrap">
           <table class="table">
             <thead><tr>
-              <th>Name</th><th>Receipt</th><th>Phone</th><th>Balance</th>
+              <th>Name</th><th>Phone</th><th>Receipt</th><th>Status</th><th>Paid</th><th>Balance</th><th>Total</th><th>Date/Time</th>
             </tr></thead>
             <tbody id="debtorsBody"></tbody>
           </table>

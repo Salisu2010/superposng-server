@@ -226,7 +226,34 @@ r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
   if (to > 0) items = items.filter(s => asInt(s.createdAt, 0) <= to);
   items.sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
   items = items.slice(0, limit);
-  return res.json({ ok: true, items });
+
+  // Normalize for Owner dashboard (online should look like Local Hub dashboard)
+  const norm = items.map((s) => {
+    const receiptNo = (s.receiptNo || s.saleNo || s.receipt || s.id || "").toString();
+    const paymentMethod = (s.paymentMethod || s.method || s.payMethod || "").toString();
+    const status = (s.status || s.payStatus || "").toString();
+    const staffUser = (s.staffUser || s.staff || s.user || "").toString();
+    const createdAt = asInt(s.createdAt, 0) || asInt(s.ts, 0) || 0;
+    const total = pickSaleTotal(s);
+    const paid = pickSalePaid(s);
+    const remaining = Math.max(0, total - paid);
+    const itemsCount = Array.isArray(s.items) ? s.items.length : asInt(s.itemsCount, 0);
+
+    return {
+      receiptNo,
+      staffUser,
+      paymentMethod,
+      status,
+      itemsCount,
+      total,
+      paid,
+      remaining,
+      createdAt,
+      raw: s,
+    };
+  });
+
+  return res.json({ ok: true, items: norm });
 });
 
 /**
@@ -240,9 +267,32 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
   if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
 
   const db = readDB();
-  const items = (db.debtors || []).filter(d => pickShopId(d) === shopId)
+  let items = (db.debtors || []).filter(d => pickShopId(d) === shopId)
     .sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
-  return res.json({ ok: true, items });
+
+  const norm = items.map((d) => {
+    const customerName = (d.customerName || d.name || "").toString();
+    const customerPhone = (d.customerPhone || d.phone || "").toString();
+    const receiptNo = (d.receiptNo || d.saleNo || d.receipt || "").toString();
+    const total = pickDebtorTotal(d);
+    const paid = pickDebtorPaid(d);
+    const remaining = pickDebtorRemaining(d);
+    const createdAt = asInt(d.createdAt, 0) || 0;
+    const status = (d.status || "").toString();
+    return {
+      customerName,
+      customerPhone,
+      receiptNo,
+      total,
+      paid,
+      remaining,
+      status,
+      createdAt,
+      raw: d,
+    };
+  });
+
+  return res.json({ ok: true, items: norm });
 });
 
 export default r;
