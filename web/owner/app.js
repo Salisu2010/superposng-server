@@ -17,9 +17,19 @@
   const tProducts = $("tProducts");
   const tSales = $("tSales");
   const tDebtors = $("tDebtors");
-  const tabBtns = Array.from(document.querySelectorAll("[data-tab]"));
+  $1
+  // Tab buttons + panels
+  const tabProducts = document.querySelector('[data-tab="products"]');
+  const tabSales = document.querySelector('[data-tab="sales"]');
+  const tabDebtors = document.querySelector('[data-tab="debtors"]');
 
-  function showErr(msg){
+  const panelProducts = $("tab_products");
+  const panelSales = $("tab_sales");
+  const panelDebtors = $("tab_debtors");
+
+  // Back button (in shop view)
+  const btnBackToShops = $("btnBack");
+function showErr(msg){
     loginErr.textContent = msg || "";
     loginErr.classList.toggle("hidden", !msg);
   }
@@ -36,7 +46,13 @@
   }
 
   async function api(path, opts={}){
-    const res = await fetch(path, { headers: { "Content-Type":"application/json", ...(opts.headers||{}) }, ...opts });
+    const token = localStorage.getItem(LS_TOKEN);
+    const headers = { "Content-Type": "application/json", ...(opts.headers||{}) };
+    // Auto-attach owner token for protected owner APIs when header not provided
+    if(!headers["Authorization"] && token && (String(path).includes("/api/owner/"))) {
+      headers["Authorization"] = "Bearer " + token;
+    }
+    const res = await fetch(path, { ...opts, headers });
     const data = await res.json().catch(()=> ({}));
     if(!res.ok || data.ok === false) throw new Error(data.error || data.message || ("HTTP "+res.status));
     return data;
