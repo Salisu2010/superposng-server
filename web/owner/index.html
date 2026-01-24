@@ -53,6 +53,33 @@
       <div id="shops"></div>
     </section>
 
+    <!-- Shop Dashboard -->
+    <section class="card hidden" id="shopCard">
+      <div class="row" style="justify-content:space-between; align-items:flex-start">
+        <div>
+          <h2 style="margin:0 0 6px 0;" id="shopTitle">Shop</h2>
+          <div class="muted" id="shopMeta"></div>
+        </div>
+        <button id="btnBack" class="btn" style="background:#334155">Back to shops</button>
+      </div>
+      <div style="height:14px"></div>
+
+      <div class="kpis" id="kpis"></div>
+
+      <div style="height:16px"></div>
+      <div class="tabs">
+        <button class="tab active" data-tab="products">Products</button>
+        <button class="tab" data-tab="sales">Sales</button>
+        <button class="tab" data-tab="debtors">Debtors</button>
+      </div>
+
+      <div id="tab_products" class="tabpanel"></div>
+      <div id="tab_sales" class="tabpanel hidden"></div>
+      <div id="tab_debtors" class="tabpanel hidden"></div>
+
+      <div id="shopErr" class="err hidden" style="margin-top:12px"></div>
+    </section>
+
   </main>
 
   <footer>SuperPOSNG © 2026</footer>

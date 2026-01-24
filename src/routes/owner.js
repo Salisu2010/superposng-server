@@ -8,6 +8,33 @@ const r = Router();
 
 function trim(v) { return (v === null || v === undefined) ? "" : String(v).trim(); }
 
+function asNum(v, d = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+
+function asInt(v, d = 0) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) ? n : d;
+}
+
+function requireOwner(req, res) {
+  if (!req?.auth || req.auth.role !== "owner") {
+    res.status(403).json({ ok: false, error: "Owner access required" });
+    return false;
+  }
+  return true;
+}
+
+function canAccessShop(req, shopId) {
+  try {
+    const shops = Array.isArray(req?.auth?.shops) ? req.auth.shops : [];
+    return shops.includes(shopId);
+  } catch (e) {
+    return false;
+  }
+}
+
 function hashPassword(password, salt) {
   // scrypt is strong and built-in
   const key = crypto.scryptSync(password, salt, 32);
@@ -73,6 +100,105 @@ r.get("/me", authMiddleware, (req, res) => {
   });
 
   return res.json({ ok: true, owner: { ownerId: owner.ownerId, email: owner.email, shops } });
+});
+
+/**
+ * Owner shop overview (counts + totals)
+ */
+r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const db = readDB();
+  const shop = (db.shops || []).find(s => s.shopId === shopId);
+  const products = (db.products || []).filter(p => p.shopId === shopId);
+  const sales = (db.sales || []).filter(s => s.shopId === shopId);
+  const debtors = (db.debtors || []).filter(d => d.shopId === shopId);
+
+  const totalSales = sales.reduce((sum, s) => sum + asNum(s.total, 0), 0);
+  const totalPaid = sales.reduce((sum, s) => sum + asNum(s.paid, 0), 0);
+  const totalRemaining = sales.reduce((sum, s) => sum + asNum(s.remaining, 0), 0);
+
+  return res.json({
+    ok: true,
+    shop: shop || { shopId },
+    kpi: {
+      products: products.length,
+      sales: sales.length,
+      debtors: debtors.length,
+      totalSales,
+      totalPaid,
+      totalRemaining,
+    }
+  });
+});
+
+/**
+ * Owner: products table
+ */
+r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const db = readDB();
+  const q = trim(req.query.q || "").toLowerCase();
+  let items = (db.products || []).filter(p => p.shopId === shopId);
+  if (q) {
+    items = items.filter(p => {
+      const name = trim(p.name).toLowerCase();
+      const sku = trim(p.sku).toLowerCase();
+      const bc = trim(p.barcode).toLowerCase();
+      return name.includes(q) || sku.includes(q) || bc.includes(q);
+    });
+  }
+  items.sort((a, b) => trim(a.name).localeCompare(trim(b.name)));
+  return res.json({ ok: true, items });
+});
+
+/**
+ * Owner: sales table
+ */
+r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const from = asInt(req.query.from, 0);
+  const to = asInt(req.query.to, 0);
+  const limit = Math.min(2000, Math.max(50, asInt(req.query.limit, 500)));
+
+  const db = readDB();
+  let items = (db.sales || []).filter(s => s.shopId === shopId);
+  if (from > 0) items = items.filter(s => asInt(s.createdAt, 0) >= from);
+  if (to > 0) items = items.filter(s => asInt(s.createdAt, 0) <= to);
+  items.sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
+  items = items.slice(0, limit);
+  return res.json({ ok: true, items });
+});
+
+/**
+ * Owner: debtors table
+ */
+r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const db = readDB();
+  const items = (db.debtors || []).filter(d => d.shopId === shopId)
+    .sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
+  return res.json({ ok: true, items });
 });
 
 export default r;

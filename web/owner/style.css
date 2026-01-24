@@ -15,5 +15,27 @@ input,select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rg
 .err{color:#ffb4b4;margin-top:8px}
 .hidden{display:none}
 .shop{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:#0f1732;margin-top:8px}
+
+.shopsList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.shopBtn{cursor:pointer;transition:transform .06s ease}
+.shopBtn:hover{transform:translateY(-1px)}
+
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.kpi{padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:#0f1732}
+.kpi .v{font-size:18px;font-weight:800;margin-top:6px}
+
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.tab{background:#0f1732;border:1px solid rgba(255,255,255,.10);color:rgba(238,241,255,.90);padding:8px 12px;border-radius:999px;cursor:pointer;font-weight:700}
+.tab.active{background:var(--btn);border-color:rgba(255,255,255,.0);color:white}
+
+.tableWrap{overflow:auto;margin-top:12px;border-radius:14px;border:1px solid rgba(255,255,255,.08)}
+table{width:100%;border-collapse:collapse;background:#0f1732}
+th,td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}
+th{text-align:left;color:rgba(238,241,255,.75);font-weight:800;position:sticky;top:0;background:#0f1732}
+
+@media(max-width:760px){
+  .shopsList{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 footer{opacity:.7;text-align:center;padding:20px 0}
 @media(max-width:760px){.grid{grid-template-columns:1fr}}
