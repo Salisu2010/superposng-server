@@ -73,9 +73,55 @@
         <button class="tab" data-tab="debtors">Debtors</button>
       </div>
 
-      <div id="tab_products" class="tabpanel"></div>
-      <div id="tab_sales" class="tabpanel hidden"></div>
-      <div id="tab_debtors" class="tabpanel hidden"></div>
+      
+      <div id="tab_products" class="tabpanel">
+        <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+          <div class="muted">Products</div>
+          <input id="qProducts" class="input" placeholder="Search name / barcode / SKU" style="max-width:320px"/>
+        </div>
+        <div style="height:10px"></div>
+        <div class="tableWrap">
+          <table class="table">
+            <thead><tr>
+              <th>Name</th><th>Barcode/SKU</th><th>Stock</th><th>Price</th>
+            </tr></thead>
+            <tbody id="productsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab_sales" class="tabpanel hidden">
+        <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+          <div class="muted">Sales (latest)</div>
+          <button id="btnReloadSales" class="btn" style="background:#334155">Reload</button>
+        </div>
+        <div style="height:10px"></div>
+        <div class="tableWrap">
+          <table class="table">
+            <thead><tr>
+              <th>Receipt</th><th>Staff</th><th>Date/Time</th><th>Total</th>
+            </tr></thead>
+            <tbody id="salesBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab_debtors" class="tabpanel hidden">
+        <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+          <div class="muted">Debtors</div>
+          <button id="btnReloadDebtors" class="btn" style="background:#334155">Reload</button>
+        </div>
+        <div style="height:10px"></div>
+        <div class="tableWrap">
+          <table class="table">
+            <thead><tr>
+              <th>Name</th><th>Receipt</th><th>Phone</th><th>Balance</th>
+            </tr></thead>
+            <tbody id="debtorsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
 
       <div id="shopErr" class="err hidden" style="margin-top:12px"></div>
     </section>

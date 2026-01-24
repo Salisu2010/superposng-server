@@ -1,248 +1,355 @@
 (() => {
+  "use strict";
+
   const $ = (id) => document.getElementById(id);
-  const loginCard = $("loginCard");
-  const meCard = $("meCard");
-  const loginErr = $("loginErr");
 
   const LS_TOKEN = "spng_owner_token";
 
+  const loginCard = $("loginCard");
+  const meCard = $("meCard");
   const shopCard = $("shopCard");
+
+  const loginErr = $("loginErr");
+  const shopErr = $("shopErr");
+
+  const btnLogin = $("btnLogin");
+  const btnLogout = $("btnLogout");
+
+  const meEmail = $("meEmail");
+  const shopsWrap = $("shops");
+
   const shopTitle = $("shopTitle");
   const shopMeta = $("shopMeta");
-  const kpiProducts = $("kpiProducts");
-  const kpiSales = $("kpiSales");
-  const kpiDebtors = $("kpiDebtors");
-  const kpiRevenue = $("kpiRevenue");
-  const shopMsg = $("shopMsg");
-  const tProducts = $("tProducts");
-  const tSales = $("tSales");
-  const tDebtors = $("tDebtors");
-  $1
-  // Tab buttons + panels
-  const tabProducts = document.querySelector('[data-tab="products"]');
-  const tabSales = document.querySelector('[data-tab="sales"]');
-  const tabDebtors = document.querySelector('[data-tab="debtors"]');
+  const kpisWrap = $("kpis");
 
-  const panelProducts = $("tab_products");
-  const panelSales = $("tab_sales");
-  const panelDebtors = $("tab_debtors");
+  const qProducts = $("qProducts");
+  const productsBody = $("productsBody");
+  const salesBody = $("salesBody");
+  const debtorsBody = $("debtorsBody");
 
-  // Back button (in shop view)
-  const btnBackToShops = $("btnBack");
-function showErr(msg){
+  const btnReloadSales = $("btnReloadSales");
+  const btnReloadDebtors = $("btnReloadDebtors");
+  const btnBack = $("btnBack");
+
+  const tabBtns = Array.from(document.querySelectorAll(".tab[data-tab]"));
+  const panels = {
+    products: $("tab_products"),
+    sales: $("tab_sales"),
+    debtors: $("tab_debtors"),
+  };
+
+  let selectedShopId = "";
+
+  function showLoginErr(msg) {
     loginErr.textContent = msg || "";
     loginErr.classList.toggle("hidden", !msg);
   }
 
-  function showShopMsg(msg) {
-    shopMsg.textContent = msg || "";
-    shopMsg.classList.toggle("hidden", !msg);
+  function showShopErr(msg) {
+    shopErr.textContent = msg || "";
+    shopErr.classList.toggle("hidden", !msg);
   }
 
-  function fmtMoney(n) {
+  function money(n) {
     const v = Number(n);
     if (!Number.isFinite(v)) return "0.00";
     return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  async function api(path, opts={}){
-    const token = localStorage.getItem(LS_TOKEN);
-    const headers = { "Content-Type": "application/json", ...(opts.headers||{}) };
-    // Auto-attach owner token for protected owner APIs when header not provided
-    if(!headers["Authorization"] && token && (String(path).includes("/api/owner/"))) {
+  function escapeHtml(str) {
+    return String(str || "").replace(/[&<>"']/g, (s) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s])
+    );
+  }
+
+  async function api(path, opts = {}) {
+    const token = localStorage.getItem(LS_TOKEN) || "";
+    const headers = { ...(opts.headers || {}) };
+
+    // Add JSON content-type only when body is present and caller didn't set it.
+    const hasBody = Object.prototype.hasOwnProperty.call(opts, "body") && opts.body != null;
+    if (hasBody && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+
+    // Attach owner token automatically for owner APIs (except login)
+    if (!headers["Authorization"] && token && String(path).startsWith("/api/owner/") && !String(path).startsWith("/api/owner/auth/")) {
       headers["Authorization"] = "Bearer " + token;
     }
+
     const res = await fetch(path, { ...opts, headers });
-    const data = await res.json().catch(()=> ({}));
-    if(!res.ok || data.ok === false) throw new Error(data.error || data.message || ("HTTP "+res.status));
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      const msg = data.error || data.message || ("HTTP " + res.status);
+      throw new Error(msg);
+    }
     return data;
   }
 
-  async function login(){
-    showErr("");
-    $("btnLogin").disabled = true;
-    try{
+  function setTab(tab) {
+    tabBtns.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    Object.entries(panels).forEach(([k, el]) => {
+      if (!el) return;
+      el.classList.toggle("hidden", k !== tab);
+    });
+  }
+
+  function clearTable(tbody, cols, emptyText = "No data") {
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = cols;
+    td.className = "muted";
+    td.textContent = emptyText;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  function setKpis(kpi) {
+    if (!kpisWrap) return;
+    kpisWrap.innerHTML = "";
+
+    const items = [
+      { k: "Products", v: kpi?.products ?? 0 },
+      { k: "Sales", v: kpi?.sales ?? 0 },
+      { k: "Debtors", v: kpi?.debtors ?? 0 },
+      { k: "Revenue", v: money(kpi?.totalSales ?? 0) },
+      { k: "Paid", v: money(kpi?.totalPaid ?? 0) },
+      { k: "Balance", v: money(kpi?.totalRemaining ?? 0) },
+    ];
+
+    // Keep it neat: 6 KPI cards (2 rows on desktop)
+    items.forEach((it) => {
+      const d = document.createElement("div");
+      d.className = "kpi";
+      d.innerHTML = `<div class="muted">${escapeHtml(it.k)}</div><div class="v">${escapeHtml(it.v)}</div>`;
+      kpisWrap.appendChild(d);
+    });
+  }
+
+  function rowCells(values) {
+    const tr = document.createElement("tr");
+    values.forEach((v) => {
+      const td = document.createElement("td");
+      td.textContent = v == null ? "" : String(v);
+      tr.appendChild(td);
+    });
+    return tr;
+  }
+
+  async function doLogin() {
+    showLoginErr("");
+    btnLogin.disabled = true;
+    try {
       const email = $("email").value.trim();
       const password = $("password").value.trim();
-      const data = await api("/api/owner/auth/login", { method:"POST", body: JSON.stringify({ email, password })});
-      localStorage.setItem(LS_TOKEN, data.token);
+      const data = await api("/api/owner/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      localStorage.setItem(LS_TOKEN, data.token || "");
       await loadMe();
-    }catch(e){
-      showErr(e.message || String(e));
-    }finally{
-      $("btnLogin").disabled = false;
-    }
-  }
-
-  async function loadMe(){
-    const token = localStorage.getItem(LS_TOKEN);
-    if(!token) return;
-
-    const data = await api("/api/owner/me", { headers: { "Authorization": "Bearer "+token }});
-    $("meEmail").textContent = data.owner.email;
-
-    const wrap = $("shops");
-    wrap.innerHTML = "";
-    wrap.className = "shopsList";
-    (data.owner.shops || []).forEach(s => {
-      const div = document.createElement("div");
-      div.className = "shop shopBtn";
-      div.addEventListener('click', () => {
-        const id = (s.shopId || "").toString();
-        if (id) selectShop(s);
-      });
-
-      const lines = [];
-      const addr = (s.address || "").trim();
-      const phone = (s.phone || "").trim();
-      const wa = (s.whatsapp || "").trim();
-      const tagline = (s.tagline || "").trim();
-
-      if (addr) lines.push(`Address: ${escapeHtml(addr)}`);
-      if (phone) lines.push(`Phone: ${escapeHtml(phone)}`);
-      if (wa) lines.push(`WhatsApp: ${escapeHtml(wa)}`);
-      if (tagline) lines.push(escapeHtml(tagline));
-
-      div.innerHTML = `
-        <div style="font-weight:800">${escapeHtml(s.shopName || "Shop")}</div>
-        <div class="muted">Shop ID: ${escapeHtml(s.shopId || "")} • Code: ${escapeHtml(s.shopCode || "")}</div>
-        ${lines.length ? `<div class="muted" style="margin-top:6px; line-height:1.4">${lines.join("<br>")}</div>` : ""}
-      `;
-      wrap.appendChild(div);
-    });
-
-    loginCard.classList.add("hidden");
-    meCard.classList.remove("hidden");
-  }
-
-  function money(n){
-    const v = Number(n);
-    if (!Number.isFinite(v)) return "0.00";
-    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  function setTab(tab){
-    const btns = [tabProducts, tabSales, tabDebtors];
-    btns.forEach(b => {
-      if (!b) return;
-      if (b.dataset.tab === tab) b.classList.add('active');
-      else b.classList.remove('active');
-    });
-
-    if (panelProducts) panelProducts.classList.toggle('hidden', tab !== 'products');
-    if (panelSales) panelSales.classList.toggle('hidden', tab !== 'sales');
-    if (panelDebtors) panelDebtors.classList.toggle('hidden', tab !== 'debtors');
-  }
-
-  function renderTable(tbody, rows, cols){
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    if (!rows || !rows.length) {
-      const tr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.colSpan = cols;
-      td.className = 'muted';
-      td.textContent = 'No data';
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
-    }
-    rows.forEach(r => tbody.appendChild(r));
-  }
-
-  function makeTd(txt){
-    const td = document.createElement('td');
-    td.textContent = txt == null ? '' : String(txt);
-    return td;
-  }
-
-  async function selectShop(shop){
-    try {
-      if (!shop) return;
-      const token = localStorage.getItem(LS_TOKEN) || '';
-      if (!token) return;
-
-      // show selected card
-      shopTitle.textContent = shop.shopName || 'Shop';
-      shopMeta.textContent = `Shop ID: ${shop.shopId || ''}`;
-      meCard.classList.add('hidden');
-      shopCard.classList.remove('hidden');
-
-      // overview
-      const ov = await api(`/api/owner/shop/${encodeURIComponent(shop.shopId)}/overview`);
-      if (ov && ov.ok && ov.overview) {
-        kpiProducts.textContent = String(ov.overview.productsCount ?? 0);
-        kpiSales.textContent = String(ov.overview.salesCount ?? 0);
-        kpiDebtors.textContent = String(ov.overview.debtorsCount ?? 0);
-        kpiRevenue.textContent = money(ov.overview.revenue ?? 0);
-      }
-
-      // products
-      const pr = await api(`/api/owner/shop/${encodeURIComponent(shop.shopId)}/products`);
-      const prows = (pr && pr.ok && pr.items ? pr.items : []).map(p => {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeTd(p.name || ''));
-        tr.appendChild(makeTd(p.barcode || p.sku || ''));
-        tr.appendChild(makeTd(p.stock ?? 0));
-        tr.appendChild(makeTd(money(p.price ?? 0)));
-        return tr;
-      });
-      renderTable(productsTbody, prows, 4);
-
-      // sales
-      const sr = await api(`/api/owner/shop/${encodeURIComponent(shop.shopId)}/sales?limit=200`);
-      const srows = (sr && sr.ok && sr.items ? sr.items : []).map(s => {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeTd(s.receiptNo || ''));
-        tr.appendChild(makeTd(s.staffUser || ''));
-        tr.appendChild(makeTd(s.createdAt ? new Date(s.createdAt).toLocaleString() : ''));
-        tr.appendChild(makeTd(money(s.total ?? 0)));
-        return tr;
-      });
-      renderTable(salesTbody, srows, 4);
-
-      // debtors
-      const dr = await api(`/api/owner/shop/${encodeURIComponent(shop.shopId)}/debtors?limit=200`);
-      const drows = (dr && dr.ok && dr.items ? dr.items : []).map(d => {
-        const tr = document.createElement('tr');
-        tr.appendChild(makeTd(d.customerName || ''));
-        tr.appendChild(makeTd(d.receiptNo || ''));
-        tr.appendChild(makeTd(d.customerPhone || ''));
-        tr.appendChild(makeTd(money(d.remaining ?? d.amount ?? 0)));
-        return tr;
-      });
-      renderTable(debtorsTbody, drows, 4);
-
-      setTab('products');
-
     } catch (e) {
-      console.error(e);
+      showLoginErr(e.message || String(e));
+    } finally {
+      btnLogin.disabled = false;
     }
   }
 
-  function logout(){
-    localStorage.removeItem(LS_TOKEN);
+  function showLogin() {
+    shopCard.classList.add("hidden");
     meCard.classList.add("hidden");
     loginCard.classList.remove("hidden");
   }
 
-  function escapeHtml(str){
-    return String(str||"").replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  function showMe() {
+    shopCard.classList.add("hidden");
+    loginCard.classList.add("hidden");
+    meCard.classList.remove("hidden");
   }
 
-  $("btnLogin").addEventListener("click", login);
-  $("btnLogout").addEventListener("click", logout);
-  $("password").addEventListener("keydown", (e) => { if(e.key === "Enter") login(); });
+  function showShop() {
+    loginCard.classList.add("hidden");
+    meCard.classList.add("hidden");
+    shopCard.classList.remove("hidden");
+  }
 
-  tabProducts?.addEventListener('click', () => setTab('products'));
-  tabSales?.addEventListener('click', () => setTab('sales'));
-  tabDebtors?.addEventListener('click', () => setTab('debtors'));
-  btnBackToShops?.addEventListener('click', () => {
-    shopCard.classList.add('hidden');
-    meCard.classList.remove('hidden');
-    selectedShop = null;
+  async function loadMe() {
+    showLoginErr("");
+    showShopErr("");
+
+    const token = localStorage.getItem(LS_TOKEN) || "";
+    if (!token) return showLogin();
+
+    try {
+      const data = await api("/api/owner/me");
+      meEmail.textContent = data.owner?.email || "";
+
+      const shops = Array.isArray(data.owner?.shops) ? data.owner.shops : [];
+      shopsWrap.innerHTML = "";
+      shopsWrap.className = "shopsList";
+
+      if (!shops.length) {
+        const p = document.createElement("div");
+        p.className = "muted";
+        p.textContent = "No shops assigned to this owner account.";
+        shopsWrap.appendChild(p);
+      } else {
+        shops.forEach((s) => {
+          const div = document.createElement("div");
+          div.className = "shop shopBtn";
+          div.innerHTML = `
+            <div style="font-weight:800">${escapeHtml(s.shopName || "Shop")}</div>
+            <div class="muted">Shop ID: ${escapeHtml(s.shopId || "")} • Code: ${escapeHtml(s.shopCode || "")}</div>
+          `;
+          div.addEventListener("click", () => selectShop(s.shopId, s.shopName));
+          shopsWrap.appendChild(div);
+        });
+      }
+
+      showMe();
+    } catch (e) {
+      // token invalid/expired
+      localStorage.removeItem(LS_TOKEN);
+      showLoginErr(e.message || "Please login again");
+      showLogin();
+    }
+  }
+
+  async function loadOverview() {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+
+    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview`);
+    const shop = ov.shop || { shopId };
+    shopTitle.textContent = shop.shopName || "Shop";
+    shopMeta.textContent = `Shop ID: ${shop.shopId || shopId}${shop.shopCode ? " • Code: " + shop.shopCode : ""}`;
+    setKpis(ov.kpi || {});
+  }
+
+  async function loadProducts() {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+
+    const q = (qProducts?.value || "").trim();
+    const pr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/products${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+    const items = Array.isArray(pr.items) ? pr.items : [];
+    productsBody.innerHTML = "";
+    if (!items.length) return clearTable(productsBody, 4, "No products");
+
+    items.forEach((p) => {
+      productsBody.appendChild(
+        rowCells([
+          p.name || "",
+          p.barcode || p.sku || "",
+          p.stock ?? p.qty ?? 0,
+          money(p.price ?? 0),
+        ])
+      );
+    });
+  }
+
+  async function loadSales() {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+
+    const sr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/sales?limit=200`);
+    const items = Array.isArray(sr.items) ? sr.items : [];
+    salesBody.innerHTML = "";
+    if (!items.length) return clearTable(salesBody, 4, "No sales");
+
+    items.forEach((s) => {
+      const ts = s.createdAt ? new Date(Number(s.createdAt)).toLocaleString() : "";
+      salesBody.appendChild(
+        rowCells([
+          s.receiptNo || s.receipt || "",
+          s.staffUser || s.staffName || "",
+          ts,
+          money(s.total ?? 0),
+        ])
+      );
+    });
+  }
+
+  async function loadDebtors() {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+
+    const dr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/debtors`);
+    const items = Array.isArray(dr.items) ? dr.items : [];
+    debtorsBody.innerHTML = "";
+    if (!items.length) return clearTable(debtorsBody, 4, "No debtors");
+
+    items.forEach((d) => {
+      debtorsBody.appendChild(
+        rowCells([
+          d.customerName || d.name || "",
+          d.receiptNo || d.receipt || "",
+          d.customerPhone || d.phone || "",
+          money(d.remaining ?? d.balance ?? d.amount ?? 0),
+        ])
+      );
+    });
+  }
+
+  async function selectShop(shopId, shopName) {
+    try {
+      showShopErr("");
+      selectedShopId = String(shopId || "");
+      if (!selectedShopId) return;
+
+      showShop();
+      shopTitle.textContent = shopName || "Shop";
+      shopMeta.textContent = `Shop ID: ${selectedShopId}`;
+
+      // preload placeholders
+      setKpis({ products: 0, sales: 0, debtors: 0, totalSales: 0, totalPaid: 0, totalRemaining: 0 });
+      clearTable(productsBody, 4, "Loading...");
+      clearTable(salesBody, 4, "Loading...");
+      clearTable(debtorsBody, 4, "Loading...");
+
+      await loadOverview();
+      await loadProducts();
+      await loadSales();
+      await loadDebtors();
+
+      setTab("products");
+    } catch (e) {
+      console.error(e);
+      showShopErr(e.message || String(e));
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem(LS_TOKEN);
+    selectedShopId = "";
+    showLogin();
+  }
+
+  // Events
+  btnLogin?.addEventListener("click", doLogin);
+  $("password")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doLogin();
+  });
+  btnLogout?.addEventListener("click", logout);
+
+  tabBtns.forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  btnBack?.addEventListener("click", () => {
+    selectedShopId = "";
+    showMe();
   });
 
-  // auto
-  loadMe().catch(()=>{});
+  // Product search debounce
+  let qTimer = null;
+  qProducts?.addEventListener("input", () => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => {
+      loadProducts().catch((e) => showShopErr(e.message || String(e)));
+    }, 200);
+  });
+
+  btnReloadSales?.addEventListener("click", () => loadSales().catch((e) => showShopErr(e.message || String(e))));
+  btnReloadDebtors?.addEventListener("click", () => loadDebtors().catch((e) => showShopErr(e.message || String(e))));
+
+  // Boot
+  loadMe().catch(() => showLogin());
 })();
