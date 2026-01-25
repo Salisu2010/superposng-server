@@ -346,18 +346,50 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
     items = derived.sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
   }
 
+  // Lookup from sales by receiptNo to backfill customer details.
+  // Fixes cases where debtor rows have empty name/phone.
+  const salesByReceipt = new Map();
+  try {
+    for (const s of db.sales || []) {
+      if (!s) continue;
+      if ((s.shopId || "") !== shopId) continue;
+      const rno = (s.receiptNo || s.saleNo || s.receipt || "").toString().trim();
+      if (!rno) continue;
+      if (!salesByReceipt.has(rno)) salesByReceipt.set(rno, s);
+    }
+  } catch (e) {
+    // ignore
+  }
+
   const norm = items.map((d) => {
-    const customerName = (d.customerName || d.name || "").toString();
-    const customerPhone = (d.customerPhone || d.phone || "").toString();
     const receiptNo = (d.receiptNo || d.saleNo || d.receipt || "").toString();
+    let customerName = (d.customerName || d.name || "").toString();
+    let customerPhone = (d.customerPhone || d.phone || "").toString();
+
+    // Backfill from sales if debtor row is missing customer fields.
+    if ((!customerName || !customerName.trim()) || (!customerPhone || !customerPhone.trim())) {
+      const s = receiptNo ? salesByReceipt.get(receiptNo) : null;
+      if (s) {
+        if (!customerName || !customerName.trim()) {
+          customerName = (s.customerName || s.name || (s.customer && s.customer.name) || "").toString();
+        }
+        if (!customerPhone || !customerPhone.trim()) {
+          customerPhone = (s.customerPhone || s.phone || (s.customer && s.customer.phone) || "").toString();
+        }
+      }
+    }
+
+    // Final fallback: never show blank strings in UI.
+    if (!customerName || !customerName.trim()) customerName = "Walk-in";
+    if (!customerPhone || !customerPhone.trim()) customerPhone = "-";
     const total = pickDebtorTotal(d);
     const paid = pickDebtorPaid(d);
     const remaining = pickDebtorRemaining(d);
     const createdAt = asInt(d.createdAt, 0) || 0;
     const status = (d.status || "").toString();
     return {
-      customerName,
-      customerPhone,
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
       receiptNo,
       total,
       paid,
