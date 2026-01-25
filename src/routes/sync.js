@@ -469,70 +469,47 @@ r.post(SALE_PATHS, (req, res) => {
     }
   } catch (_e) {}
 
-  // ✅ AUTO-UPSERT DEBTOR (receipt-first, tolerant name/phone mapping)
-  // NOTE: Some Android builds send customer fields under different keys.
-  // We normalize here so the Owner Dashboard can always show Name/Phone.
+  // ✅ AUTO-UPSERT DEBTOR (per-receipt, supports partial payments)
   try {
     const total = toNum(sale.total, 0);
     const paid = toNum(sale.paid, 0);
     const remaining = toNum(sale.remaining, Math.max(0, total - paid));
-
-    const pick = (...vals) => {
-      for (const v of vals) {
-        const t = trim(v);
-        if (t) return t;
-      }
-      return "";
-    };
-
-    const name = pick(
-      sale.customerName,
-      sale.customer,
-      sale.custName,
-      sale.fullName,
-      sale.name,
-      sale?.debtor?.name,
-      sale?.customer?.name
-    );
-    const phone = pick(
-      sale.customerPhone,
-      sale.phone,
-      sale.custPhone,
-      sale.tel,
-      sale?.debtor?.phone,
-      sale?.customer?.phone
-    );
+    const phone = trim(sale.customerPhone);
+    const name = trim(sale.customerName);
 
     if (remaining > 0.0001) {
-      // Prefer unique debtor per receipt; fallback to phone if receipt missing.
-      const keyReceipt = trim(receiptNo);
-      const dIdx = db.debtors.findIndex((d) => {
-        if (d.shopId !== shopId) return false;
-        const dr = trim(d.lastReceiptNo);
-        const dp = trim(d.customerPhone);
-        if (keyReceipt) return dr === keyReceipt;
-        return phone && dp === phone;
-      });
+      const key = receiptNo || `SYNC-${Date.now()}`;
+      const dIdx = db.debtors.findIndex((d) => d.shopId === shopId && trim(d.receiptNo) === key);
 
       if (dIdx >= 0) {
-        const prevOwed = toNum(db.debtors[dIdx].totalOwed, 0);
-        // Keep the maximum owed for this receipt, but also accumulate if older builds used phone-keying.
-        const newOwed = Math.max(prevOwed, remaining);
+        const d = db.debtors[dIdx];
+        const newTotal = toNum(d.total, toNum(d.totalOwed, 0)) + remaining;
+        const newPaid = toNum(d.paid, 0);
+        const newBalance = Math.max(0, newTotal - newPaid);
         db.debtors[dIdx] = {
-          ...db.debtors[dIdx],
-          customerName: name || db.debtors[dIdx].customerName || "Walk-in",
-          customerPhone: phone || db.debtors[dIdx].customerPhone || "",
-          totalOwed: newOwed,
-          lastReceiptNo: keyReceipt || db.debtors[dIdx].lastReceiptNo,
+          ...d,
+          receiptNo: key,
+          customerName: name || d.customerName,
+          customerPhone: phone || d.customerPhone,
+          total: round2(newTotal),
+          paid: round2(newPaid),
+          balance: round2(newBalance),
+          status: newBalance <= 0.0001 ? "PAID" : "PARTIAL",
           updatedAt: now,
         };
       } else {
+        const newTotal = remaining;
+        const newPaid = 0;
+        const newBalance = remaining;
         db.debtors.push({
           shopId,
-          customerName: name || "Walk-in",
-          customerPhone: phone || "",
-          totalOwed: remaining,
-          lastReceiptNo: keyReceipt,
+          receiptNo: key,
+          customerName: name,
+          customerPhone: phone,
+          total: round2(newTotal),
+          paid: round2(newPaid),
+          balance: round2(newBalance),
+          status: "PARTIAL",
           createdAt: now,
           updatedAt: now,
         });
@@ -588,7 +565,23 @@ r.get("/debtors", (req, res) => {
     return (d.updatedAt || d.createdAt || 0) > since;
   });
 
-  return res.json({ ok: true, items: list, serverTime: Date.now() });
+  const items = list
+    .map((d) => {
+      const total = toNum(d.total ?? d.totalOwed, 0);
+      const paid = toNum(d.paid ?? d.totalPaid, 0);
+      const balance = toNum(d.balance ?? d.remainingOwed, Math.max(0, total - paid));
+      const status = balance <= 0.0001 ? "PAID" : "PARTIAL";
+      return {
+        ...d,
+        total,
+        paid,
+        balance,
+        status,
+      };
+    })
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  return res.json({ ok: true, items, serverTime: Date.now() });
 });
 
 export default r;

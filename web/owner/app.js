@@ -116,6 +116,31 @@
     tbody.appendChild(tr);
   }
 
+  // ------------------------------
+  // Modal helper (Debtor Payments)
+  // ------------------------------
+  function openModal(contentHtml) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal">
+        <button class="modal-close" type="button" aria-label="Close">×</button>
+        <div class="modal-title">Record Debtor Payment</div>
+        <div class="modal-content">${contentHtml}</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    function close() {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    overlay.querySelector(".modal-close").addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return { overlay, close };
+  }
+
   function setKpis(kpi) {
     if (!kpisWrap) return;
     kpisWrap.innerHTML = "";
@@ -315,6 +340,10 @@
   function renderDebtors() {
     const q = (qDebtors?.value || "").trim().toLowerCase();
     let items = Array.isArray(debtorsCache) ? debtorsCache : [];
+
+    // Ensure newest first
+    items = items.slice().sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
     if (q) {
       items = items.filter((d) => {
         const name = String(d.customerName || "").toLowerCase();
@@ -326,22 +355,117 @@
     }
 
     debtorsBody.innerHTML = "";
-    if (!items.length) return clearTable(debtorsBody, 8, q ? "No matches" : "No debtors");
+    if (!items.length) return clearTable(debtorsBody, 9, q ? "No matches" : "No debtors");
 
     items.forEach((d) => {
       const ts = d.createdAt ? new Date(Number(d.createdAt)).toLocaleString() : "";
-      debtorsBody.appendChild(
-        rowCells([
-          d.customerName || "",
-          d.customerPhone || "",
-          d.receiptNo || "",
-          d.status || "",
-          money(d.paid ?? 0),
-          money(d.remaining ?? 0),
-          money(d.total ?? 0),
-          ts,
-        ])
-      );
+      const paid = Number(d.paid || 0);
+      const balance = Number((d.balance ?? d.remaining) || 0);
+      const total = Number(d.total || (paid + balance) || 0);
+      const canPay = balance > 0.0001;
+
+      const tr = document.createElement("tr");
+      const cells = [
+        d.customerName || "",
+        d.customerPhone || "",
+        d.receiptNo || "",
+        d.status || "",
+        money(paid),
+        money(balance),
+        money(total),
+        ts,
+      ];
+      cells.forEach((txt) => {
+        const td = document.createElement("td");
+        td.textContent = txt;
+        tr.appendChild(td);
+      });
+
+      const actionTd = document.createElement("td");
+      if (canPay) {
+        const btn = document.createElement("button");
+        btn.className = "btn small";
+        btn.textContent = "Record payment";
+        btn.addEventListener("click", () => openPayDebtorModal(d));
+        actionTd.appendChild(btn);
+      } else {
+        const span = document.createElement("span");
+        span.className = "badge";
+        span.textContent = "Paid";
+        actionTd.appendChild(span);
+      }
+      tr.appendChild(actionTd);
+      debtorsBody.appendChild(tr);
+    });
+  }
+
+  function openPayDebtorModal(row) {
+    const paid = Number(row.paid || 0);
+    const balance = Number((row.balance ?? row.remaining) || 0);
+    const total = Number(row.total || (paid + balance) || 0);
+
+    const html = `
+      <div class="modal-header">
+        <div class="modal-title">Record Debtor Payment</div>
+        <button class="icon-btn" data-close>&times;</button>
+      </div>
+      <div class="modal-sub">
+        <div><b>${escapeHtml(row.customerName || "")}</b> • ${escapeHtml(row.customerPhone || "")}</div>
+        <div class="muted">Receipt: ${escapeHtml(row.receiptNo || "")}</div>
+        <div class="muted">Total: ${money(total)} • Paid: ${money(paid)} • Balance: ${money(balance)}</div>
+      </div>
+      <form id="payDebtorForm" class="modal-form">
+        <label>Amount</label>
+        <input id="payAmount" type="number" min="0" step="0.01" placeholder="e.g. 5000" required />
+
+        <label>Method</label>
+        <select id="payMethod">
+          <option value="CASH">CASH</option>
+          <option value="TRANSFER">TRANSFER</option>
+          <option value="POS">POS</option>
+        </select>
+
+        <label>Note (optional)</label>
+        <input id="payNote" type="text" placeholder="..." />
+
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" data-close>Cancel</button>
+          <button type="submit" class="btn">Save payment</button>
+        </div>
+        <div id="payErr" class="err" style="margin-top:10px;"></div>
+      </form>
+    `;
+
+    const modal = openModal(html);
+    const form = modal.querySelector("#payDebtorForm");
+    const err = modal.querySelector("#payErr");
+    const amountEl = modal.querySelector("#payAmount");
+    amountEl.value = String(Math.min(balance, balance) || "");
+    amountEl.focus();
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+      const amount = Number(amountEl.value || 0);
+      const method = String(modal.querySelector("#payMethod").value || "CASH");
+      const note = String(modal.querySelector("#payNote").value || "");
+      if (!amount || amount <= 0) {
+        err.textContent = "Enter a valid amount.";
+        return;
+      }
+
+      try {
+        await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ receiptNo: row.receiptNo, phone: row.customerPhone, amount, method, note }),
+        });
+        modal.close();
+        await loadDebtors();
+        await loadKPIs();
+      } catch (ex) {
+        err.textContent = (ex && ex.message) ? ex.message : "Failed";
+      }
     });
   }
 
@@ -359,7 +483,7 @@
       setKpis({ products: 0, sales: 0, debtors: 0, totalSales: 0, totalPaid: 0, totalRemaining: 0 });
       clearTable(productsBody, 4, "Loading...");
       clearTable(salesBody, 9, "Loading...");
-      clearTable(debtorsBody, 8, "Loading...");
+      clearTable(debtorsBody, 9, "Loading...");
 
       await loadOverview();
       await loadProducts();
