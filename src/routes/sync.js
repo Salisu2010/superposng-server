@@ -585,3 +585,59 @@ r.get("/debtors", (req, res) => {
 });
 
 export default r;
+
+// Backfill / replace debtor customer info from device (helps cloud dashboard show names/phones)
+r.post("/debtorsFull", (req, res) => {
+  try {
+    const shopId = requireShop(req);
+    const body = req.body || {};
+    const list = Array.isArray(body.debtors) ? body.debtors : (Array.isArray(body) ? body : []);
+    const db = readDB();
+
+    db.debtors = Array.isArray(db.debtors) ? db.debtors : [];
+
+    const now = Date.now();
+    let changed = 0;
+
+    for (const d of list) {
+      if (!d || typeof d !== "object") continue;
+      const receiptNo = (d.receiptNo || d.receipt || "").toString().trim();
+      if (!receiptNo) continue;
+
+      const customerName = (d.customerName || d.name || "").toString().trim();
+      const customerPhone = (d.customerPhone || d.phone || "").toString().trim();
+
+      const totalOwed = Number(d.totalOwed ?? d.total ?? 0) || 0;
+
+      // keep previous if not provided
+      const updatedAt = (d.updatedAt ? String(d.updatedAt) : new Date(now).toISOString());
+      const dueDate = (d.dueDate ? String(d.dueDate) : "");
+      const status = (d.status ? String(d.status) : "");
+
+      let existing = db.debtors.find(x => x && x.shopId === shopId && String(x.receiptNo || "") === receiptNo);
+      if (!existing) {
+        existing = { shopId, receiptNo };
+        db.debtors.push(existing);
+      }
+
+      if (customerName) existing.customerName = customerName;
+      if (customerPhone) existing.customerPhone = customerPhone;
+      if (Number.isFinite(totalOwed) && totalOwed > 0) existing.totalOwed = totalOwed;
+
+      if (updatedAt) existing.updatedAt = updatedAt;
+      if (dueDate) existing.dueDate = dueDate;
+      if (status) existing.status = status;
+
+      existing.serverUpdatedAt = now;
+      changed++;
+    }
+
+    writeDB(db);
+    res.json({ ok: true, shopId, updated: changed });
+  } catch (e) {
+    console.error("debtorsFull error", e);
+    res.status(500).json({ ok: false, error: "debtorsFull_failed" });
+  }
+});
+
+

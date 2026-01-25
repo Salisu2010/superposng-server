@@ -18,47 +18,6 @@ function pickShopId(row) {
   return trim(a.shopId || a.shopID || a.shop_id || a.sid || a.shop || a.shop_id_fk);
 }
 
-function toArray(maybeArrOrObj) {
-  if (!maybeArrOrObj) return [];
-  if (Array.isArray(maybeArrOrObj)) return maybeArrOrObj;
-  if (typeof maybeArrOrObj === "object") return Object.values(maybeArrOrObj);
-  return [];
-}
-
-function pickCustomerName(row) {
-  const a = row || {};
-  return trim(
-    a.customerName ||
-    a.customer_name ||
-    a.debtorName ||
-    a.debtor_name ||
-    a.buyerName ||
-    a.buyer_name ||
-    a.clientName ||
-    a.client_name ||
-    a.name ||
-    a.fullName ||
-    a.full_name
-  );
-}
-
-function pickCustomerPhone(row) {
-  const a = row || {};
-  return trim(
-    a.customerPhone ||
-    a.customer_phone ||
-    a.debtorPhone ||
-    a.debtor_phone ||
-    a.buyerPhone ||
-    a.buyer_phone ||
-    a.clientPhone ||
-    a.client_phone ||
-    a.phone ||
-    a.phoneNumber ||
-    a.phone_number
-  );
-}
-
 function pickSaleTotal(s) {
   // Support multiple field names across app versions
   return asNum(
@@ -258,7 +217,7 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId);
   const products = (db.products || []).filter(p => pickShopId(p) === shopId);
-  const sales = toArray(db.sales).filter(s => pickShopId(s) === shopId);
+  const sales = (db.sales || []).filter(s => pickShopId(s) === shopId);
   const debtors = (db.debtors || []).filter(d => pickShopId(d) === shopId);
 
   // If explicit debtors table is empty, derive debtors count from unpaid sales.
@@ -378,7 +337,7 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
 
   // Fallback: derive debtors from unpaid sales if debtors table is empty.
   if (!items || items.length === 0) {
-    const sales = toArray(db.sales).filter(s => pickShopId(s) === shopId);
+    const sales = (db.sales || []).filter(s => pickShopId(s) === shopId);
     const derived = [];
     for (const s of sales) {
       const remaining = pickSaleRemaining(s);
@@ -424,10 +383,10 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
       const s = receiptNo ? salesByReceipt.get(receiptNo) : null;
       if (s) {
         if (!customerName || !customerName.trim()) {
-          customerName = pickCustomerName(s) || "";
+          customerName = (s.customerName || s.name || (s.customer && s.customer.name) || "").toString();
         }
         if (!customerPhone || !customerPhone.trim()) {
-          customerPhone = pickCustomerPhone(s) || "";
+          customerPhone = (s.customerPhone || s.phone || (s.customer && s.customer.phone) || "").toString();
         }
       }
     }
