@@ -39,39 +39,3 @@ th{text-align:left;color:rgba(238,241,255,.75);font-weight:800;position:sticky;t
 }
 footer{opacity:.7;text-align:center;padding:20px 0}
 @media(max-width:760px){.grid{grid-template-columns:1fr}}
-
-/* ------------------------------
-   Modal (Debtor Payments)
------------------------------- */
-.modal-overlay{
-  position:fixed;inset:0;
-  background:rgba(0,0,0,.55);
-  display:flex;align-items:center;justify-content:center;
-  padding:16px;
-  z-index:9999;
-}
-.modal{
-  width:min(520px,100%);
-  background:rgba(20,24,36,.96);
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:16px;
-  box-shadow:0 12px 40px rgba(0,0,0,.35);
-  overflow:hidden;
-}
-.modal-body{padding:16px}
-.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
-.modal h3{margin:0 0 8px 0;font-size:18px}
-.modal p{margin:0 0 10px 0;opacity:.85}
-.modal label{display:block;font-size:12px;opacity:.8;margin:8px 0 6px}
-.modal input,.modal select{
-  width:100%;padding:10px 12px;border-radius:12px;
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(255,255,255,.06);
-  color:inherit;
-  outline:none;
-}
-.btn-sm{padding:6px 10px;border-radius:10px;font-size:12px}
-.btn-ghost{
-  background:transparent;
-  border:1px solid rgba(255,255,255,.18);
-}

@@ -469,47 +469,70 @@ r.post(SALE_PATHS, (req, res) => {
     }
   } catch (_e) {}
 
-  // ✅ AUTO-UPSERT DEBTOR (per-receipt, supports partial payments)
+  // ✅ AUTO-UPSERT DEBTOR (receipt-first, tolerant name/phone mapping)
+  // NOTE: Some Android builds send customer fields under different keys.
+  // We normalize here so the Owner Dashboard can always show Name/Phone.
   try {
     const total = toNum(sale.total, 0);
     const paid = toNum(sale.paid, 0);
     const remaining = toNum(sale.remaining, Math.max(0, total - paid));
-    const phone = trim(sale.customerPhone);
-    const name = trim(sale.customerName);
+
+    const pick = (...vals) => {
+      for (const v of vals) {
+        const t = trim(v);
+        if (t) return t;
+      }
+      return "";
+    };
+
+    const name = pick(
+      sale.customerName,
+      sale.customer,
+      sale.custName,
+      sale.fullName,
+      sale.name,
+      sale?.debtor?.name,
+      sale?.customer?.name
+    );
+    const phone = pick(
+      sale.customerPhone,
+      sale.phone,
+      sale.custPhone,
+      sale.tel,
+      sale?.debtor?.phone,
+      sale?.customer?.phone
+    );
 
     if (remaining > 0.0001) {
-      const key = receiptNo || `SYNC-${Date.now()}`;
-      const dIdx = db.debtors.findIndex((d) => d.shopId === shopId && trim(d.receiptNo) === key);
+      // Prefer unique debtor per receipt; fallback to phone if receipt missing.
+      const keyReceipt = trim(receiptNo);
+      const dIdx = db.debtors.findIndex((d) => {
+        if (d.shopId !== shopId) return false;
+        const dr = trim(d.lastReceiptNo);
+        const dp = trim(d.customerPhone);
+        if (keyReceipt) return dr === keyReceipt;
+        return phone && dp === phone;
+      });
 
       if (dIdx >= 0) {
-        const d = db.debtors[dIdx];
-        const newTotal = toNum(d.total, toNum(d.totalOwed, 0)) + remaining;
-        const newPaid = toNum(d.paid, 0);
-        const newBalance = Math.max(0, newTotal - newPaid);
+        const prevOwed = toNum(db.debtors[dIdx].totalOwed, 0);
+        // Keep the maximum owed for this receipt, but also accumulate if older builds used phone-keying.
+        const newOwed = Math.max(prevOwed, remaining);
         db.debtors[dIdx] = {
-          ...d,
-          receiptNo: key,
-          customerName: name || d.customerName,
-          customerPhone: phone || d.customerPhone,
-          total: round2(newTotal),
-          paid: round2(newPaid),
-          balance: round2(newBalance),
-          status: newBalance <= 0.0001 ? "PAID" : "PARTIAL",
+          ...db.debtors[dIdx],
+          customerName: name || db.debtors[dIdx].customerName || "Walk-in",
+          customerPhone: phone || db.debtors[dIdx].customerPhone || "",
+          totalOwed: newOwed,
+          lastReceiptNo: keyReceipt || db.debtors[dIdx].lastReceiptNo,
           updatedAt: now,
         };
       } else {
-        const newTotal = remaining;
-        const newPaid = 0;
-        const newBalance = remaining;
         db.debtors.push({
           shopId,
-          receiptNo: key,
-          customerName: name,
-          customerPhone: phone,
-          total: round2(newTotal),
-          paid: round2(newPaid),
-          balance: round2(newBalance),
-          status: "PARTIAL",
+          customerName: name || "Walk-in",
+          customerPhone: phone || "",
+          totalOwed: remaining,
+          lastReceiptNo: keyReceipt,
           createdAt: now,
           updatedAt: now,
         });
@@ -565,246 +588,7 @@ r.get("/debtors", (req, res) => {
     return (d.updatedAt || d.createdAt || 0) > since;
   });
 
-  const items = list
-    .map((d) => {
-      const total = toNum(d.total ?? d.totalOwed, 0);
-      const paid = toNum(d.paid ?? d.totalPaid, 0);
-      const balance = toNum(d.balance ?? d.remainingOwed, Math.max(0, total - paid));
-      const status = balance <= 0.0001 ? "PAID" : "PARTIAL";
-      return {
-        ...d,
-        total,
-        paid,
-        balance,
-        status,
-      };
-    })
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  return res.json({ ok: true, items, serverTime: Date.now() });
-});
-
-
-// ============================
-// DEBTOR UPSERT (from Android best-effort)
-// Accepts:
-//  - POST /api/sync/debtor   with {debtor:{...}} OR raw debtor fields
-//  - POST /api/sync/debtors  with {debtor:{...}} OR {items:[...]} OR raw debtor fields
-// This is used to preserve customerName/customerPhone even when sales payload lacks them.
-// ============================
-r.post("/debtor", (req, res) => {
-  try {
-    const db = readDB();
-    const shop = req.shop;
-    if (!shop) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-    const body = req.body || {};
-    const debtor = body.debtor && typeof body.debtor === "object" ? body.debtor : body;
-
-    const receiptNo = String(debtor.receiptNo || debtor.receipt || debtor.saleNo || debtor.invoiceNo || "").trim();
-    if (!receiptNo) return res.status(400).json({ ok: false, error: "receiptNo required" });
-
-    const name =
-      String(
-        debtor.customerName ||
-          debtor.name ||
-          debtor.customer ||
-          debtor.customer_name ||
-          debtor.fullName ||
-          ""
-      ).trim();
-
-    const phone =
-      String(
-        debtor.customerPhone ||
-          debtor.phone ||
-          debtor.customerPhoneNumber ||
-          debtor.customer_phone ||
-          debtor.tel ||
-          ""
-      ).trim();
-
-    // amount = original debt total
-    const total = toNum(debtor.total ?? debtor.amount ?? debtor.debt ?? 0);
-    const paid = toNum(debtor.paid ?? debtor.paidAmount ?? debtor.payment ?? 0);
-    let remaining = toNum(debtor.remaining ?? debtor.balance ?? 0);
-    if (!debtor.remaining && remaining === 0) {
-      // infer when not supplied
-      remaining = Math.max(0, total - paid);
-    }
-
-    const status = remaining <= 0.000001 ? "PAID" : "PARTIAL";
-    const createdAt = toNum(debtor.createdAt) || Date.now();
-
-    if (!db.debtors) db.debtors = [];
-    if (!db.sales) db.sales = [];
-
-    // upsert by shopId + receiptNo
-    let d = db.debtors.find((x) => x && x.shopId === shop.id && String(x.receiptNo || "") === receiptNo);
-    if (!d) {
-      d = { id: "D-" + Date.now() + "-" + Math.random().toString(16).slice(2) };
-      db.debtors.push(d);
-    }
-
-    d.shopId = shop.id;
-    d.receiptNo = receiptNo;
-
-    // only overwrite name/phone if provided (avoid wiping)
-    if (name) d.customerName = name;
-    if (phone) d.customerPhone = phone;
-
-    // totals
-    d.total = total > 0 ? total : (toNum(d.total) || 0);
-    d.paid = paid > 0 ? paid : (toNum(d.paid) || 0);
-    d.remaining = remaining;
-    d.status = status;
-    d.createdAt = createdAt;
-
-    // also patch related sale if exists
-    const s = db.sales.find((x) => x && x.shopId === shop.id && String(x.receiptNo || "") === receiptNo);
-    if (s) {
-      if (name && !s.customerName) s.customerName = name;
-      if (phone && !s.customerPhone) s.customerPhone = phone;
-      s.remaining = remaining;
-      if (paid > 0) s.paid = paid;
-      s.status = status;
-    }
-
-    writeDB(db);
-    return res.json({ ok: true, debtor: d });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message || "Server error" });
-  }
-});
-
-r.post("/debtors", (req, res) => {
-  try {
-    const body = req.body || {};
-    const items = Array.isArray(body.items) ? body.items : (Array.isArray(body.debtors) ? body.debtors : null);
-
-    if (items && items.length) {
-      let upserts = 0;
-      let okAll = true;
-
-      // process each as if /debtor
-      for (const it of items) {
-        const fakeReq = { shop: req.shop, body: { debtor: it } };
-        const fakeRes = { json: () => {}, status: () => ({ json: () => {} }) };
-        try {
-          // reuse logic by direct call
-          // eslint-disable-next-line no-inner-declarations
-          const db = readDB();
-          const shop = fakeReq.shop;
-          if (!shop) { okAll = false; continue; }
-          const debtor = fakeReq.body.debtor || {};
-          const receiptNo = String(debtor.receiptNo || debtor.receipt || debtor.saleNo || debtor.invoiceNo || "").trim();
-          if (!receiptNo) { okAll = false; continue; }
-
-          const name = String(debtor.customerName || debtor.name || debtor.customer || debtor.customer_name || debtor.fullName || "").trim();
-          const phone = String(debtor.customerPhone || debtor.phone || debtor.customerPhoneNumber || debtor.customer_phone || debtor.tel || "").trim();
-
-          const total = toNum(debtor.total ?? debtor.amount ?? debtor.debt ?? 0);
-          const paid = toNum(debtor.paid ?? debtor.paidAmount ?? debtor.payment ?? 0);
-          let remaining = toNum(debtor.remaining ?? debtor.balance ?? 0);
-          if (!debtor.remaining && remaining === 0) remaining = Math.max(0, total - paid);
-
-          const status = remaining <= 0.000001 ? "PAID" : "PARTIAL";
-          const createdAt = toNum(debtor.createdAt) || Date.now();
-
-          if (!db.debtors) db.debtors = [];
-          if (!db.sales) db.sales = [];
-
-          let d = db.debtors.find((x) => x && x.shopId === shop.id && String(x.receiptNo || "") === receiptNo);
-          if (!d) {
-            d = { id: "D-" + Date.now() + "-" + Math.random().toString(16).slice(2) };
-            db.debtors.push(d);
-          }
-
-          d.shopId = shop.id;
-          d.receiptNo = receiptNo;
-          if (name) d.customerName = name;
-          if (phone) d.customerPhone = phone;
-          d.total = total > 0 ? total : (toNum(d.total) || 0);
-          d.paid = paid > 0 ? paid : (toNum(d.paid) || 0);
-          d.remaining = remaining;
-          d.status = status;
-          d.createdAt = createdAt;
-
-          const s = db.sales.find((x) => x && x.shopId === shop.id && String(x.receiptNo || "") === receiptNo);
-          if (s) {
-            if (name && !s.customerName) s.customerName = name;
-            if (phone && !s.customerPhone) s.customerPhone = phone;
-            s.remaining = remaining;
-            if (paid > 0) s.paid = paid;
-            s.status = status;
-          }
-
-          writeDB(db);
-          upserts++;
-        } catch (e) {
-          okAll = false;
-        }
-      }
-
-      return res.json({ ok: okAll, upserts });
-    }
-
-    // fallback single debtor
-    const debtor = (body.debtor && typeof body.debtor === "object") ? body.debtor : body;
-    req.body = { debtor };
-    // reuse /debtor logic by calling the same code path
-    // (simple inline upsert)
-    const db = readDB();
-    const shop = req.shop;
-    if (!shop) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-    const receiptNo = String(debtor.receiptNo || debtor.receipt || debtor.saleNo || debtor.invoiceNo || "").trim();
-    if (!receiptNo) return res.status(400).json({ ok: false, error: "receiptNo required" });
-
-    const name = String(debtor.customerName || debtor.name || debtor.customer || debtor.customer_name || debtor.fullName || "").trim();
-    const phone = String(debtor.customerPhone || debtor.phone || debtor.customerPhoneNumber || debtor.customer_phone || debtor.tel || "").trim();
-
-    const total = toNum(debtor.total ?? debtor.amount ?? debtor.debt ?? 0);
-    const paid = toNum(debtor.paid ?? debtor.paidAmount ?? debtor.payment ?? 0);
-    let remaining = toNum(debtor.remaining ?? debtor.balance ?? 0);
-    if (!debtor.remaining && remaining === 0) remaining = Math.max(0, total - paid);
-
-    const status = remaining <= 0.000001 ? "PAID" : "PARTIAL";
-    const createdAt = toNum(debtor.createdAt) || Date.now();
-
-    if (!db.debtors) db.debtors = [];
-    if (!db.sales) db.sales = [];
-
-    let d = db.debtors.find((x) => x && x.shopId === shop.id && String(x.receiptNo || "") === receiptNo);
-    if (!d) {
-      d = { id: "D-" + Date.now() + "-" + Math.random().toString(16).slice(2) };
-      db.debtors.push(d);
-    }
-
-    d.shopId = shop.id;
-    d.receiptNo = receiptNo;
-    if (name) d.customerName = name;
-    if (phone) d.customerPhone = phone;
-    d.total = total > 0 ? total : (toNum(d.total) || 0);
-    d.paid = paid > 0 ? paid : (toNum(d.paid) || 0);
-    d.remaining = remaining;
-    d.status = status;
-    d.createdAt = createdAt;
-
-    const s = db.sales.find((x) => x && x.shopId === shop.id && String(x.receiptNo || "") === receiptNo);
-    if (s) {
-      if (name && !s.customerName) s.customerName = name;
-      if (phone && !s.customerPhone) s.customerPhone = phone;
-      s.remaining = remaining;
-      if (paid > 0) s.paid = paid;
-      s.status = status;
-    }
-
-    writeDB(db);
-    return res.json({ ok: true, debtor: d });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: e.message || "Server error" });
-  }
+  return res.json({ ok: true, items: list, serverTime: Date.now() });
 });
 
 export default r;
