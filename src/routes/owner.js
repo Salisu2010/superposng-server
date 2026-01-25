@@ -57,6 +57,51 @@ function pickSaleRemaining(s) {
   );
 }
 
+// Debtors may be stored separately OR derived from unpaid sales.
+function pickDebtorTotal(d) {
+  return asNum(
+    d?.total ??
+      d?.amountTotal ??
+      d?.totalAmount ??
+      d?.grandTotal ??
+      d?.amount ??
+      0,
+    0
+  );
+}
+
+function pickDebtorPaid(d) {
+  // Some versions store only remaining; infer paid if possible
+  const paid = asNum(
+    d?.paid ??
+      d?.amountPaid ??
+      d?.paidAmount ??
+      d?.cashPaid ??
+      d?.cash ??
+      0,
+    0
+  );
+  if (paid > 0) return paid;
+  const total = pickDebtorTotal(d);
+  const rem = pickDebtorRemaining(d);
+  if (total > 0 && rem >= 0 && rem <= total) return Math.max(0, total - rem);
+  return 0;
+}
+
+function pickDebtorRemaining(d) {
+  // In some payloads "amount" means remaining
+  return asNum(
+    d?.remaining ??
+      d?.balance ??
+      d?.due ??
+      d?.credit ??
+      d?.amountDue ??
+      d?.amount ??
+      0,
+    0
+  );
+}
+
 function asInt(v, d = 0) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : d;
@@ -163,6 +208,12 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
   const sales = (db.sales || []).filter(s => pickShopId(s) === shopId);
   const debtors = (db.debtors || []).filter(d => pickShopId(d) === shopId);
 
+  // If explicit debtors table is empty, derive debtors count from unpaid sales.
+  let debtorsCount = Array.isArray(debtors) ? debtors.length : 0;
+  if (debtorsCount === 0) {
+    debtorsCount = sales.filter(s => pickSaleRemaining(s) > 0).length;
+  }
+
   const totalSales = sales.reduce((sum, s) => sum + pickSaleTotal(s), 0);
   const totalPaid = sales.reduce((sum, s) => sum + pickSalePaid(s), 0);
   const totalRemaining = sales.reduce((sum, s) => sum + pickSaleRemaining(s), 0);
@@ -173,7 +224,7 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
     kpi: {
       products: products.length,
       sales: sales.length,
-      debtors: debtors.length,
+      debtors: debtorsCount,
       totalSales,
       totalPaid,
       totalRemaining,
@@ -267,8 +318,33 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
   if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
 
   const db = readDB();
+
+  // Prefer explicit debtors collection if present.
   let items = (db.debtors || []).filter(d => pickShopId(d) === shopId)
     .sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
+
+  // Fallback: derive debtors from unpaid sales if debtors table is empty.
+  if (!items || items.length === 0) {
+    const sales = (db.sales || []).filter(s => pickShopId(s) === shopId);
+    const derived = [];
+    for (const s of sales) {
+      const remaining = pickSaleRemaining(s);
+      if (remaining <= 0) continue;
+      derived.push({
+        shopId,
+        customerName: (s.customerName || s.name || "").toString(),
+        customerPhone: (s.customerPhone || s.phone || "").toString(),
+        receiptNo: (s.receiptNo || s.saleNo || s.receipt || "").toString(),
+        total: pickSaleTotal(s),
+        paid: pickSalePaid(s),
+        remaining,
+        status: (s.status || "").toString(),
+        createdAt: asInt(s.createdAt, 0) || 0,
+        _derived: true,
+      });
+    }
+    items = derived.sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
+  }
 
   const norm = items.map((d) => {
     const customerName = (d.customerName || d.name || "").toString();
