@@ -65,6 +65,12 @@ function pickDebtorTotal(d) {
       d?.totalAmount ??
       d?.grandTotal ??
       d?.amount ??
+      // v6 aggregate format
+      d?.totalOwed ??
+      d?.total_owed ??
+      d?.owed ??
+      d?.balanceOwed ??
+      d?.remainingOwed ??
       0,
     0
   );
@@ -97,6 +103,12 @@ function pickDebtorRemaining(d) {
       d?.credit ??
       d?.amountDue ??
       d?.amount ??
+      // v6 aggregate format
+      d?.remainingOwed ??
+      d?.balanceOwed ??
+      d?.totalOwed ??
+      d?.total_owed ??
+      d?.owed ??
       0,
     0
   );
