@@ -469,7 +469,7 @@ r.post(SALE_PATHS, (req, res) => {
     }
   } catch (_e) {}
 
-  // ✅ AUTO-UPSERT DEBTOR (accumulate)
+  // ✅ AUTO-UPSERT DEBTOR (per-receipt, supports partial payments)
   try {
     const total = toNum(sale.total, 0);
     const paid = toNum(sale.paid, 0);
@@ -477,28 +477,39 @@ r.post(SALE_PATHS, (req, res) => {
     const phone = trim(sale.customerPhone);
     const name = trim(sale.customerName);
 
-    if (remaining > 0.0001 && phone) {
-      const dIdx = db.debtors.findIndex(
-        (d) => d.shopId === shopId && trim(d.customerPhone) === phone
-      );
+    if (remaining > 0.0001) {
+      const key = receiptNo || `SYNC-${Date.now()}`;
+      const dIdx = db.debtors.findIndex((d) => d.shopId === shopId && trim(d.receiptNo) === key);
 
       if (dIdx >= 0) {
-        const prev = toNum(db.debtors[dIdx].totalOwed, 0);
+        const d = db.debtors[dIdx];
+        const newTotal = toNum(d.total, toNum(d.totalOwed, 0)) + remaining;
+        const newPaid = toNum(d.paid, 0);
+        const newBalance = Math.max(0, newTotal - newPaid);
         db.debtors[dIdx] = {
-          ...db.debtors[dIdx],
-          customerName: name || db.debtors[dIdx].customerName,
-          customerPhone: phone,
-          totalOwed: prev + remaining, // ✅ accumulate
-          lastReceiptNo: receiptNo,
+          ...d,
+          receiptNo: key,
+          customerName: name || d.customerName,
+          customerPhone: phone || d.customerPhone,
+          total: round2(newTotal),
+          paid: round2(newPaid),
+          balance: round2(newBalance),
+          status: newBalance <= 0.0001 ? "PAID" : "PARTIAL",
           updatedAt: now,
         };
       } else {
+        const newTotal = remaining;
+        const newPaid = 0;
+        const newBalance = remaining;
         db.debtors.push({
           shopId,
+          receiptNo: key,
           customerName: name,
           customerPhone: phone,
-          totalOwed: remaining,
-          lastReceiptNo: receiptNo,
+          total: round2(newTotal),
+          paid: round2(newPaid),
+          balance: round2(newBalance),
+          status: "PARTIAL",
           createdAt: now,
           updatedAt: now,
         });
@@ -554,7 +565,23 @@ r.get("/debtors", (req, res) => {
     return (d.updatedAt || d.createdAt || 0) > since;
   });
 
-  return res.json({ ok: true, items: list, serverTime: Date.now() });
+  const items = list
+    .map((d) => {
+      const total = toNum(d.total ?? d.totalOwed, 0);
+      const paid = toNum(d.paid ?? d.totalPaid, 0);
+      const balance = toNum(d.balance ?? d.remainingOwed, Math.max(0, total - paid));
+      const status = balance <= 0.0001 ? "PAID" : "PARTIAL";
+      return {
+        ...d,
+        total,
+        paid,
+        balance,
+        status,
+      };
+    })
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  return res.json({ ok: true, items, serverTime: Date.now() });
 });
 
 export default r;

@@ -415,4 +415,101 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
   return res.json({ ok: true, items: norm });
 });
 
+// -------------------------------------------------
+// ✅ Professional Debtor Payments (Owner dashboard)
+// -------------------------------------------------
+// Records a payment against a debtor row (prefer receiptNo). If receiptNo is missing,
+// it will pay oldest open debtor(s) for the provided phone.
+// Body: { receiptNo?, phone?, amount, method?, note? }
+r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const body = req.body || {};
+    const receiptNo = (body.receiptNo || body.receipt || body.saleNo || "").toString().trim();
+    const phone = (body.phone || body.customerPhone || "").toString().trim();
+    const method = (body.method || body.paymentMethod || "CASH").toString().trim().toUpperCase();
+    const note = (body.note || "").toString().trim();
+    const amount = Number(body.amount || body.paid || 0);
+
+    if (!shopId || !shopId.trim()) return res.status(400).json({ ok: false, error: "Missing shopId" });
+    if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "Invalid amount" });
+    if (!receiptNo && !phone) return res.status(400).json({ ok: false, error: "Provide receiptNo or phone" });
+
+    const db = readDB();
+    if (!Array.isArray(db.debtors)) db.debtors = [];
+    if (!Array.isArray(db.debtorPayments)) db.debtorPayments = [];
+
+    // Candidates: either match by receiptNo OR by phone and open balance
+    const now = Date.now();
+    const candidates = db.debtors
+      .filter(d => (d && d.shopId === shopId))
+      .filter(d => {
+        const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || "").toString();
+        const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
+        if (receiptNo) return rn === receiptNo;
+        return ph && phone && ph === phone;
+      })
+      .map(d => {
+        const total = pickDebtorTotal(d);
+        const paid = pickDebtorPaid(d);
+        const remaining = pickDebtorRemaining(d);
+        const createdAt = asInt(d.createdAt, 0) || 0;
+        return { d, total, paid, remaining, createdAt };
+      })
+      .filter(x => x.remaining > 0.0001)
+      .sort((a,b) => a.createdAt - b.createdAt);
+
+    if (candidates.length === 0) {
+      return res.status(404).json({ ok: false, error: "No open debtor found" });
+    }
+
+    let left = amount;
+    let touched = 0;
+    const paymentsWritten = [];
+
+    for (const it of candidates) {
+      if (left <= 0) break;
+      const take = Math.min(left, it.remaining);
+      if (take <= 0) continue;
+
+      // Update debtor row (keep backward compatible fields too)
+      const row = it.d;
+      const newPaid = (Number(row.paid || 0) || 0) + take;
+      const newTotal = Math.max(it.total, Number(row.total || 0) || 0, Number(row.totalOwed || 0) || 0);
+      const newBalance = Math.max(0, newTotal - newPaid);
+
+      row.total = newTotal;
+      row.paid = newPaid;
+      row.balance = newBalance;
+      row.remaining = newBalance;
+      row.remainingOwed = newBalance;
+      row.updatedAt = now;
+      row.status = newBalance <= 0.0001 ? "PAID" : (row.status || "PARTIAL");
+
+      const payRec = {
+        id: `PAY-${now}-${Math.floor(Math.random()*1e6)}`,
+        shopId,
+        receiptNo: (row.receiptNo || row.receipt || row.saleNo || row.id || "").toString(),
+        customerName: (row.customerName || row.name || "").toString(),
+        customerPhone: (row.customerPhone || row.phone || "").toString(),
+        amount: take,
+        method,
+        note,
+        createdAt: now,
+        by: (req.user && (req.user.username || req.user.user)) || "owner",
+      };
+      db.debtorPayments.push(payRec);
+      paymentsWritten.push(payRec);
+
+      touched++;
+      left -= take;
+    }
+
+    writeDB(db);
+    return res.json({ ok: true, applied: amount - left, touched, payments: paymentsWritten });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
 export default r;

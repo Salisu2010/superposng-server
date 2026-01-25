@@ -17,6 +17,7 @@ function initDB() {
       staffs: [],
       sales: [],
       debtors: [],
+      debtorPayments: [],
       licenses: [],
       pendingActivations: [],
       owners: [],
@@ -39,6 +40,43 @@ function readDB() {
     if (!Array.isArray(db.staffs)) db.staffs = []
     if (!Array.isArray(db.sales)) db.sales = []
     if (!Array.isArray(db.debtors)) db.debtors = []
+    if (!Array.isArray(db.debtorPayments)) db.debtorPayments = []
+
+    // Backward compatibility: normalize debtor shape
+    // Old shapes used fields like: { totalOwed, remainingOwed, ... }
+    // New shape: { total, paid, balance, status, receiptNo, ... }
+    db.debtors = db.debtors.map((d, idx) => {
+      const o = d || {}
+      const receiptNo = String(o.receiptNo || o.receipt || o.saleNo || o.saleId || o.id || `DEBT-${idx + 1}`)
+      const customerName = String(o.customerName || o.name || "").trim()
+      const customerPhone = String(o.customerPhone || o.phone || "").trim()
+
+      const total = Number(
+        o.total ?? o.amount ?? o.totalOwed ?? o.remainingOwed ?? 0
+      )
+      const paid = Number(
+        o.paid ?? o.totalPaid ?? (Number(o.totalOwed ?? total) - Number(o.remainingOwed ?? 0)) ?? 0
+      )
+      const balance = Number(
+        o.balance ?? o.remaining ?? o.remainingOwed ?? (total - paid)
+      )
+      const status = String(o.status || (balance <= 0.0001 ? "PAID" : "PARTIAL"))
+      const createdAt = Number(o.createdAt || o.time || o.ts || Date.now())
+      const updatedAt = Number(o.updatedAt || createdAt)
+
+      return {
+        ...o,
+        receiptNo,
+        customerName,
+        customerPhone,
+        total,
+        paid,
+        balance,
+        status,
+        createdAt,
+        updatedAt
+      }
+    })
     // Licensing / activation tables
     if (!Array.isArray(db.licenses)) db.licenses = []
     if (!Array.isArray(db.pendingActivations)) db.pendingActivations = []
@@ -56,6 +94,7 @@ function readDB() {
       staffs: [],
       sales: [],
       debtors: [],
+      debtorPayments: [],
       licenses: [],
       pendingActivations: [],
       owners: [],
