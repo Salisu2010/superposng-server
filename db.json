@@ -1,0 +1,1717 @@
+{
+  "shops": [
+    {
+      "shopId": "o7ekYfp52cYt",
+      "shopCode": "SPNG-GY-D6D",
+      "shopName": "Daurawa Enterprisess NG LTD",
+      "createdAt": 1769527676011,
+      "updatedAt": 1769533021095,
+      "ownerDeviceId": "6CED9588B7",
+      "ownerPin": "1234",
+      "ownerPhone": "08038481961",
+      "address": "Federal Low-cost Kontagora",
+      "phone": "08038481961",
+      "whatsapp": "08096442937",
+      "tagline": "",
+      "currency": "NGN",
+      "footer": "Thanks for your patronage"
+    }
+  ],
+  "devices": [
+    {
+      "deviceId": "6CED9588B7",
+      "shopId": "o7ekYfp52cYt",
+      "role": "ADMIN",
+      "pairedAt": 1769529892418,
+      "isActive": true
+    },
+    {
+      "deviceId": "35edf560bd3bfc93",
+      "shopId": "o7ekYfp52cYt",
+      "role": "CASHIER",
+      "pairedAt": 1769527697966,
+      "isActive": true
+    }
+  ],
+  "pairCodes": [
+    {
+      "pairingCode": "PAIR-YFCAH-",
+      "shopId": "o7ekYfp52cYt",
+      "createdAt": 1769527682248,
+      "expiresAt": 1769528282248,
+      "used": true,
+      "usedAt": 1769527697966,
+      "usedByDeviceId": "35edf560bd3bfc93"
+    }
+  ],
+  "products": [
+    {
+      "cost": 4000,
+      "productId": "14",
+      "price": 45000,
+      "name": "ACRIPTEGA",
+      "id": "14",
+      "sku": "PLU1768932805508",
+      "stock": 73,
+      "barcode": "010890409383100317270930103195144\u001d2126M92TH8FP\u001d11231028",
+      "lowStockLevel": 10,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531126013
+    },
+    {
+      "cost": 4350,
+      "productId": "11",
+      "price": 4500,
+      "name": "Alpha-Apeti",
+      "id": "11",
+      "sku": "PLU1768831792520",
+      "stock": 95,
+      "barcode": "8906159957368",
+      "lowStockLevel": 20,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531131540
+    },
+    {
+      "cost": 4000,
+      "productId": "23",
+      "price": 4500,
+      "name": "BLACK AND WHITE INVISIBLE CLEAR",
+      "id": "23",
+      "sku": "PLU1769110945951",
+      "stock": 4,
+      "barcode": "4005900034847",
+      "lowStockLevel": 1,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 8400,
+      "productId": "9",
+      "price": 8800,
+      "name": "Boska",
+      "id": "9",
+      "sku": "PLU1768822705515",
+      "stock": 50,
+      "barcode": "2003409087212",
+      "lowStockLevel": 20,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531133393
+    },
+    {
+      "cost": 350,
+      "productId": "8",
+      "price": 500,
+      "name": "Confo",
+      "id": "8",
+      "sku": "PLU1768646675733",
+      "stock": 40,
+      "barcode": "6935068200137",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531134200
+    },
+    {
+      "cost": 3000,
+      "productId": "21",
+      "price": 3500,
+      "name": "Disaar Vitamin C Natural Oil",
+      "id": "21",
+      "sku": "PLU1769110345479",
+      "stock": 3,
+      "barcode": "6932511217971",
+      "lowStockLevel": 2,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531114682
+    },
+    {
+      "cost": 1700,
+      "productId": "10",
+      "price": 2000,
+      "name": "Extract Soap",
+      "id": "10",
+      "sku": "PLU1768830750403",
+      "stock": 38,
+      "barcode": "4800119216202",
+      "lowStockLevel": 20,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531132526
+    },
+    {
+      "cost": 800,
+      "productId": "17",
+      "price": 1000,
+      "name": "Funback A",
+      "id": "17",
+      "sku": "PLU1769024125802",
+      "stock": 9,
+      "barcode": "2005165990478",
+      "lowStockLevel": 2,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531121449
+    },
+    {
+      "cost": 7500,
+      "productId": "13",
+      "price": 8000,
+      "name": "Funback A Cream",
+      "id": "13",
+      "sku": "PLU1768932392909",
+      "stock": 41,
+      "barcode": "2008286077677",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531130093
+    },
+    {
+      "cost": 0,
+      "productId": "27",
+      "price": 23000,
+      "name": "GOLDEN BREEZE FAN",
+      "id": "27",
+      "sku": "PLU1769505952300",
+      "stock": 0,
+      "barcode": "2003767967225",
+      "lowStockLevel": 2,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531116667
+    },
+    {
+      "cost": 3000,
+      "productId": "3",
+      "price": 3500,
+      "name": "Gluta white Curved Big Size",
+      "id": "3",
+      "sku": "PLU1768395104298",
+      "stock": 195,
+      "barcode": "6182000129456",
+      "lowStockLevel": 20,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531504119
+    },
+    {
+      "cost": 155000,
+      "productId": "1",
+      "price": 160000,
+      "name": "Infinix Hot 60i",
+      "id": "1",
+      "sku": "PLU1768394112220",
+      "stock": 0,
+      "barcode": "356136682553856",
+      "lowStockLevel": 2,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531505084
+    },
+    {
+      "cost": 700,
+      "productId": "15",
+      "price": 800,
+      "name": "Jimtrizol 200",
+      "id": "15",
+      "sku": "PLU1768936763733",
+      "stock": 0,
+      "barcode": "2008657635321",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 1600,
+      "productId": "16",
+      "price": 2000,
+      "name": "Mentholated Dustin Power",
+      "id": "16",
+      "sku": "PLU1769012444152",
+      "stock": 32,
+      "barcode": "6154000015329",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531122459
+    },
+    {
+      "cost": 190,
+      "productId": "2",
+      "price": 250,
+      "name": "Mr. V Bottle Water",
+      "id": "2",
+      "sku": "PLU1768394162271",
+      "stock": 458,
+      "barcode": "6156000264042",
+      "lowStockLevel": 50,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531144561
+    },
+    {
+      "cost": 2000,
+      "productId": "22",
+      "price": 2500,
+      "name": "NEO SKIN LOTION",
+      "id": "22",
+      "sku": "PLU1769110724094",
+      "stock": 5,
+      "barcode": "714084850924",
+      "lowStockLevel": 2,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 4500,
+      "productId": "25",
+      "price": 4500,
+      "name": "NIVEA DEEP DRY & CLEAN FEEL",
+      "id": "25",
+      "sku": "PLU1769111227953",
+      "stock": 4,
+      "barcode": "4005900745637",
+      "lowStockLevel": 1,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 4000,
+      "productId": "26",
+      "price": 4500,
+      "name": "NIVEA DRY IMPACT",
+      "id": "26",
+      "sku": "PLU1769111407578",
+      "stock": 4,
+      "barcode": "4005900745712",
+      "lowStockLevel": 1,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 4000,
+      "productId": "24",
+      "price": 4500,
+      "name": "NIVEA SILVER PROTECT",
+      "id": "24",
+      "sku": "PLU1769111052862",
+      "stock": 4,
+      "barcode": "4005900745804",
+      "lowStockLevel": 1,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 2000,
+      "productId": "12",
+      "price": 2500,
+      "name": "NeoSkin",
+      "id": "12",
+      "sku": "PLU1768930896360",
+      "stock": 40,
+      "barcode": "2000074566127",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 4000,
+      "productId": "20",
+      "price": 4500,
+      "name": "Nivea Nourishing Coco",
+      "id": "20",
+      "sku": "PLU1769109710799",
+      "stock": 6,
+      "barcode": "2001319323437",
+      "lowStockLevel": 2,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    },
+    {
+      "cost": 4000,
+      "productId": "19",
+      "price": 4500,
+      "name": "Nivea Perfect & Radiant",
+      "id": "19",
+      "sku": "PLU1769109464659",
+      "stock": 7,
+      "barcode": "2007680367452",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531120553
+    },
+    {
+      "cost": 0,
+      "productId": "18",
+      "price": 2000,
+      "name": "Nivea Roller Pearl & Beauty",
+      "id": "18",
+      "sku": "PLU1769109426951",
+      "stock": 12,
+      "barcode": "2008239117313",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531120553
+    },
+    {
+      "cost": 28000,
+      "productId": "5",
+      "price": 30000,
+      "name": "PCBA",
+      "id": "5",
+      "sku": "PLU1768405009281",
+      "stock": 0,
+      "barcode": "2004830413755",
+      "lowStockLevel": 3,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531502283
+    },
+    {
+      "cost": 70000,
+      "productId": "6",
+      "price": 75000,
+      "name": "Rice 50kg",
+      "id": "6",
+      "sku": "PLU1768551921174",
+      "stock": 36,
+      "barcode": "2005657608973",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531140397
+    },
+    {
+      "cost": 2500,
+      "productId": "4",
+      "price": 2800,
+      "name": "Venus Gold Perfume",
+      "id": "4",
+      "sku": "PLU1768396590405",
+      "stock": 28,
+      "barcode": "2005077765737",
+      "lowStockLevel": 10,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531503165
+    },
+    {
+      "cost": 1300,
+      "productId": "7",
+      "price": 1500,
+      "name": "Water Gum",
+      "id": "7",
+      "sku": "PLU1768646310498",
+      "stock": 50,
+      "barcode": "6975340320627",
+      "lowStockLevel": 5,
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769531113790
+    }
+  ],
+  "staffs": [
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "3",
+      "staffId": "3",
+      "username": "Daurawa",
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769527689705
+    },
+    {
+      "role": "ADMIN",
+      "pin": "1234",
+      "active": true,
+      "id": "1",
+      "staffId": "1",
+      "username": "admin",
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769527689705
+    },
+    {
+      "role": "CASHIER",
+      "pin": "1234",
+      "active": true,
+      "id": "2",
+      "staffId": "2",
+      "username": "cashier",
+      "shopId": "o7ekYfp52cYt",
+      "updatedAt": 1769527689705
+    }
+  ],
+  "sales": [
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 29000,
+      "remaining": 9000,
+      "createdAt": 1769511963393,
+      "total": 29000,
+      "receiptNo": "R-1769511900103",
+      "paid": 20000,
+      "paymentMethod": "SPLIT PAYMENT",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 3500,
+          "price": 3500,
+          "qty": 1,
+          "productName": "Disaar Vitamin C Natural Oil"
+        },
+        {
+          "total": 23000,
+          "price": 23000,
+          "qty": 1,
+          "productName": "GOLDEN BREEZE FAN"
+        },
+        {
+          "total": 3500,
+          "price": 3500,
+          "qty": 1,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 46000,
+      "remaining": 0,
+      "createdAt": 1769506167643,
+      "total": 46000,
+      "receiptNo": "R-1769506125842",
+      "paid": 46000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 46000,
+          "price": 23000,
+          "qty": 2,
+          "productName": "GOLDEN BREEZE FAN"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 23000,
+      "remaining": 0,
+      "createdAt": 1769506001068,
+      "total": 23000,
+      "receiptNo": "R-1769505974849",
+      "paid": 23000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 23000,
+          "price": 23000,
+          "qty": 1,
+          "productName": "GOLDEN BREEZE FAN"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 45000,
+      "remaining": 0,
+      "createdAt": 1769505678698,
+      "total": 45000,
+      "receiptNo": "R-1769505645203",
+      "paid": 45000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 45000,
+          "price": 45000,
+          "qty": 1,
+          "productName": "ACRIPTEGA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 45000,
+      "remaining": 0,
+      "createdAt": 1769419323931,
+      "total": 45000,
+      "receiptNo": "R-1769419286816",
+      "paid": 45000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 45000,
+          "price": 45000,
+          "qty": 1,
+          "productName": "ACRIPTEGA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 45000,
+      "remaining": 10000,
+      "createdAt": 1769378948327,
+      "total": 45000,
+      "receiptNo": "R-1769378909231",
+      "paid": 35000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 45000,
+          "price": 45000,
+          "qty": 1,
+          "productName": "ACRIPTEGA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 6500,
+      "remaining": 6500,
+      "createdAt": 1769109546531,
+      "total": 6500,
+      "receiptNo": "R-1769109528945",
+      "paid": 0,
+      "paymentMethod": "POS / CARD",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 4500,
+          "price": 4500,
+          "qty": 1,
+          "productName": "Nivea Perfect & Radiant"
+        },
+        {
+          "total": 2000,
+          "price": 2000,
+          "qty": 1,
+          "productName": "Nivea Roller Pearl & Beauty"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 1000,
+      "remaining": 0,
+      "createdAt": 1769024149138,
+      "total": 1000,
+      "receiptNo": "R-1769024139669",
+      "paid": 1000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 1000,
+          "price": 1000,
+          "qty": 1,
+          "productName": "Funback A"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 12000,
+      "remaining": 0,
+      "createdAt": 1769012619090,
+      "total": 12000,
+      "receiptNo": "SYNC-1769012619089",
+      "paid": 12000,
+      "paymentMethod": "Transfer",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 12000,
+          "price": 2000,
+          "qty": 6,
+          "productName": "Mentholated Dustin Power"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 180000,
+      "remaining": 0,
+      "createdAt": 1769011794092,
+      "total": 180000,
+      "receiptNo": "R-1769011763151",
+      "paid": 180000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 180000,
+          "price": 45000,
+          "qty": 4,
+          "productName": "ACRIPTEGA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 90000,
+      "remaining": 0,
+      "createdAt": 1769011253172,
+      "total": 90000,
+      "receiptNo": "R-1769011231321",
+      "paid": 90000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 90000,
+          "price": 45000,
+          "qty": 2,
+          "productName": "ACRIPTEGA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 30000,
+      "remaining": 20000,
+      "createdAt": 1768991936264,
+      "total": 30000,
+      "receiptNo": "R-1768991892713",
+      "paid": 10000,
+      "paymentMethod": "SPLIT PAYMENT",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 30000,
+          "price": 30000,
+          "qty": 1,
+          "productName": "PCBA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 71400,
+      "remaining": 0,
+      "createdAt": 1768941805546,
+      "total": 71400,
+      "receiptNo": "R-1768941798280",
+      "paid": 71400,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 45000,
+          "price": 45000,
+          "qty": 1,
+          "productName": "ACRIPTEGA"
+        },
+        {
+          "total": 26400,
+          "price": 8800,
+          "qty": 3,
+          "productName": "Boska"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 17600,
+      "remaining": 0,
+      "createdAt": 1768938874704,
+      "total": 17600,
+      "receiptNo": "R-1768938863674",
+      "paid": 17600,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 17600,
+          "price": 8800,
+          "qty": 2,
+          "productName": "Boska"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 16000,
+      "remaining": 0,
+      "createdAt": 1768936391739,
+      "total": 16000,
+      "receiptNo": "R-1768936282457",
+      "paid": 16000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 16000,
+          "price": 4000,
+          "qty": 4,
+          "productName": "ACRIPTEGA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 64000,
+      "remaining": 0,
+      "createdAt": 1768933138421,
+      "total": 64000,
+      "receiptNo": "R-1768933086936",
+      "paid": 64000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 20000,
+          "price": 4000,
+          "qty": 5,
+          "productName": "ACRIPTEGA"
+        },
+        {
+          "total": 44000,
+          "price": 8800,
+          "qty": 5,
+          "productName": "Boska"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 24000,
+      "remaining": 0,
+      "createdAt": 1768932429982,
+      "total": 24000,
+      "receiptNo": "R-1768932406733",
+      "paid": 24000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 24000,
+          "price": 8000,
+          "qty": 3,
+          "productName": "Funback A Cream"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 22500,
+      "remaining": 0,
+      "createdAt": 1768832051502,
+      "total": 22500,
+      "receiptNo": "R-1768832005081",
+      "paid": 22500,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 22500,
+          "price": 4500,
+          "qty": 5,
+          "productName": "Alpha-Apeti"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 12000,
+      "remaining": 0,
+      "createdAt": 1768830862786,
+      "total": 12000,
+      "receiptNo": "R-1768830840714",
+      "paid": 12000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 12000,
+          "price": 2000,
+          "qty": 6,
+          "productName": "Extract Soap"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 88000,
+      "remaining": 8000,
+      "createdAt": 1768822905745,
+      "total": 88000,
+      "receiptNo": "R-1768822859038",
+      "paid": 80000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 88000,
+          "price": 8800,
+          "qty": 10,
+          "productName": "Boska"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 2500,
+      "remaining": 0,
+      "createdAt": 1768745899193,
+      "total": 2500,
+      "receiptNo": "R-1768745879539",
+      "paid": 2500,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 2500,
+          "price": 500,
+          "qty": 5,
+          "productName": "Confo"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 250,
+      "remaining": 0,
+      "createdAt": 1768645655330,
+      "total": 250,
+      "receiptNo": "SYNC-1768645655329",
+      "paid": 250,
+      "paymentMethod": "Cash",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 250,
+          "price": 250,
+          "qty": 1,
+          "productName": "Mr. V Bottle Water"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 105000,
+      "remaining": 0,
+      "createdAt": 1768642985016,
+      "total": 105000,
+      "receiptNo": "SYNC-1768642985016",
+      "paid": 105000,
+      "paymentMethod": "Transfer",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 30000,
+          "price": 30000,
+          "qty": 1,
+          "productName": "PCBA"
+        },
+        {
+          "total": 75000,
+          "price": 75000,
+          "qty": 1,
+          "productName": "Rice 50kg"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 2500,
+      "remaining": 0,
+      "createdAt": 1768642433291,
+      "total": 2500,
+      "receiptNo": "SYNC-1768642433291",
+      "paid": 2500,
+      "paymentMethod": "Transfer",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 2500,
+          "price": 250,
+          "qty": 10,
+          "productName": "Mr. V Bottle Water"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 75000,
+      "remaining": 0,
+      "createdAt": 1768636654840,
+      "total": 75000,
+      "receiptNo": "SYNC-1768636654839",
+      "paid": 75000,
+      "paymentMethod": "Cash",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 75000,
+          "price": 75000,
+          "qty": 1,
+          "productName": "Rice 50kg"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 75000,
+      "remaining": 0,
+      "createdAt": 1768635758437,
+      "total": 75000,
+      "receiptNo": "SYNC-1768635758436",
+      "paid": 75000,
+      "paymentMethod": "Cash",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 75000,
+          "price": 75000,
+          "qty": 1,
+          "productName": "Rice 50kg"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 150000,
+      "remaining": 0,
+      "createdAt": 1768633862179,
+      "total": 150000,
+      "receiptNo": "R-1768633831847",
+      "paid": 150000,
+      "paymentMethod": "CASH",
+      "staffUser": "Cashier 2",
+      "items": [
+        {
+          "total": 150000,
+          "price": 75000,
+          "qty": 2,
+          "productName": "Rice 50kg"
+        }
+      ],
+      "staffId": 2,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 150000,
+      "remaining": 30000,
+      "createdAt": 1768627493910,
+      "total": 150000,
+      "receiptNo": "SYNC-1768627493909",
+      "paid": 120000,
+      "paymentMethod": "Transfer",
+      "staffUser": "cashier",
+      "items": [
+        {
+          "total": 150000,
+          "price": 75000,
+          "qty": 2,
+          "productName": "Rice 50kg"
+        }
+      ],
+      "staffId": 2,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 160000,
+      "remaining": 0,
+      "createdAt": 1768627209593,
+      "total": 160000,
+      "receiptNo": "SYNC-1768627209593",
+      "paid": 160000,
+      "paymentMethod": "POS",
+      "staffUser": "cashier",
+      "items": [
+        {
+          "total": 160000,
+          "price": 160000,
+          "qty": 1,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 2,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 170500,
+      "remaining": 50500,
+      "createdAt": 1768602137718,
+      "total": 170500,
+      "receiptNo": "SYNC-1768602137717",
+      "paid": 120000,
+      "paymentMethod": "Cash",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 10500,
+          "price": 3500,
+          "qty": 3,
+          "productName": "Gluta white Curved Big Size"
+        },
+        {
+          "total": 160000,
+          "price": 160000,
+          "qty": 1,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 160000,
+      "remaining": 40000,
+      "createdAt": 1768600149193,
+      "total": 160000,
+      "receiptNo": "SYNC-1768600149192",
+      "paid": 120000,
+      "paymentMethod": "Cash",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 160000,
+          "price": 160000,
+          "qty": 1,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 2500,
+      "remaining": 0,
+      "createdAt": 1768590991422,
+      "total": 2500,
+      "receiptNo": "R-1768590955457",
+      "paid": 2500,
+      "paymentMethod": "MOBILE MONEY",
+      "staffUser": "Cashier 1",
+      "items": [
+        {
+          "total": 2500,
+          "price": 250,
+          "qty": 10,
+          "productName": "Mr. V Bottle Water"
+        }
+      ],
+      "staffId": 2,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 17500,
+      "remaining": 7500,
+      "createdAt": 1768590824356,
+      "total": 17500,
+      "receiptNo": "R-1768590771069",
+      "paid": 10000,
+      "paymentMethod": "MOBILE MONEY",
+      "staffUser": "Cashier 1",
+      "items": [
+        {
+          "total": 17500,
+          "price": 3500,
+          "qty": 5,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 2,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 17500,
+      "remaining": 2500,
+      "createdAt": 1768589290503,
+      "total": 17500,
+      "receiptNo": "R-1768589259502",
+      "paid": 15000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 17500,
+          "price": 3500,
+          "qty": 5,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 17500,
+      "remaining": 2500,
+      "createdAt": 1768588265855,
+      "total": 17500,
+      "receiptNo": "R-1768588230781",
+      "paid": 15000,
+      "paymentMethod": "SPLIT PAYMENT",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 17500,
+          "price": 3500,
+          "qty": 5,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 7000,
+      "remaining": 0,
+      "createdAt": 1768588016550,
+      "total": 7000,
+      "receiptNo": "R-1768587981413",
+      "paid": 7000,
+      "paymentMethod": "CASH",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 7000,
+          "price": 3500,
+          "qty": 2,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 5600,
+      "remaining": 0,
+      "createdAt": 1768587962818,
+      "total": 5600,
+      "receiptNo": "R-1768581970888",
+      "paid": 5600,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 5600,
+          "price": 2800,
+          "qty": 2,
+          "productName": "Venus Gold Perfume"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 5600,
+      "remaining": 0,
+      "createdAt": 1768581871241,
+      "total": 5600,
+      "receiptNo": "R-1768581538107",
+      "paid": 5600,
+      "paymentMethod": "CASH",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 5600,
+          "price": 2800,
+          "qty": 2,
+          "productName": "Venus Gold Perfume"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 8400,
+      "remaining": 0,
+      "createdAt": 1768581414699,
+      "total": 8400,
+      "receiptNo": "R-1768581390827",
+      "paid": 8400,
+      "paymentMethod": "POS / CARD",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 8400,
+          "price": 2800,
+          "qty": 3,
+          "productName": "Venus Gold Perfume"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 60000,
+      "remaining": 0,
+      "createdAt": 1768581280049,
+      "total": 60000,
+      "receiptNo": "R-1768581252866",
+      "paid": 60000,
+      "paymentMethod": "CASH",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 60000,
+          "price": 30000,
+          "qty": 2,
+          "productName": "PCBA"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 5600,
+      "remaining": 0,
+      "createdAt": 1768581171350,
+      "total": 5600,
+      "receiptNo": "R-1768580896652",
+      "paid": 5600,
+      "paymentMethod": "CASH",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 5600,
+          "price": 2800,
+          "qty": 2,
+          "productName": "Venus Gold Perfume"
+        }
+      ],
+      "staffId": 3,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 320000,
+      "remaining": 70000,
+      "createdAt": 1768580716114,
+      "total": 320000,
+      "receiptNo": "R-1768580677345",
+      "paid": 250000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "Daurawa",
+      "items": [
+        {
+          "total": 320000,
+          "price": 160000,
+          "qty": 2,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 3,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 60000,
+      "remaining": 30000,
+      "createdAt": 1768568484382,
+      "total": 60000,
+      "receiptNo": "R-1768568447966",
+      "paid": 30000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 60000,
+          "price": 30000,
+          "qty": 2,
+          "productName": "PCBA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 160000,
+      "remaining": 20000,
+      "createdAt": 1768562725945,
+      "total": 160000,
+      "receiptNo": "R-1768562690768",
+      "paid": 140000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 160000,
+          "price": 160000,
+          "qty": 1,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 17500,
+      "remaining": 7500,
+      "createdAt": 1768561996091,
+      "total": 17500,
+      "receiptNo": "R-1768561969733",
+      "paid": 10000,
+      "paymentMethod": "POS / CARD",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 17500,
+          "price": 3500,
+          "qty": 5,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 7000,
+      "remaining": 2000,
+      "createdAt": 1768551817638,
+      "total": 7000,
+      "receiptNo": "R-1768551785162",
+      "paid": 5000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 7000,
+          "price": 3500,
+          "qty": 2,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 30000,
+      "remaining": 20000,
+      "createdAt": 1768405065672,
+      "total": 30000,
+      "receiptNo": "R-1768405023301",
+      "paid": 10000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 30000,
+          "price": 30000,
+          "qty": 1,
+          "productName": "PCBA"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 18900,
+      "remaining": 0,
+      "createdAt": 1768396683932,
+      "total": 18900,
+      "receiptNo": "R-1768396623278",
+      "paid": 18900,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 10500,
+          "price": 3500,
+          "qty": 3,
+          "productName": "Gluta white Curved Big Size"
+        },
+        {
+          "total": 8400,
+          "price": 2800,
+          "qty": 3,
+          "productName": "Venus Gold Perfume"
+        }
+      ],
+      "staffId": 1,
+      "status": "PAID",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 70000,
+      "remaining": 10000,
+      "createdAt": 1768395357468,
+      "total": 70000,
+      "receiptNo": "R-1768395322698",
+      "paid": 60000,
+      "paymentMethod": "CASH",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 70000,
+          "price": 3500,
+          "qty": 20,
+          "productName": "Gluta white Curved Big Size"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    },
+    {
+      "discount": 0,
+      "tax": 0,
+      "subTotal": 320000,
+      "remaining": 20000,
+      "createdAt": 1768394261519,
+      "total": 320000,
+      "receiptNo": "R-1768394193702",
+      "paid": 300000,
+      "paymentMethod": "TRANSFER",
+      "staffUser": "admin",
+      "items": [
+        {
+          "total": 320000,
+          "price": 160000,
+          "qty": 2,
+          "productName": "Infinix Hot 60i"
+        }
+      ],
+      "staffId": 1,
+      "status": "PARTIAL",
+      "shopId": "o7ekYfp52cYt"
+    }
+  ],
+  "debtors": [],
+  "debtorPayments": [],
+  "licenses": [
+    {
+      "licenseId": "LIC-DF49ED0E1795",
+      "token": "SPNG1|YEARLY|20270127|C191414ACF4C9027|0BF518846CF2",
+      "plan": "YEARLY",
+      "status": "ACTIVE",
+      "createdAt": 1769534341478,
+      "expiresAt": 1801094399999,
+      "expiryYmd": "20270127",
+      "devHash": "C191414ACF4C9027",
+      "boundDeviceId": "CB84DA3902",
+      "boundShopId": "",
+      "activatedAt": 1769534620385,
+      "notes": ""
+    },
+    {
+      "licenseId": "LIC-9C70446F5FEB",
+      "token": "SPNG1|MONTHLY|20270327|CD8DDC7F3BF5C214|7505AA90BD16",
+      "plan": "MONTHLY",
+      "status": "ACTIVE",
+      "createdAt": 1769533141309,
+      "expiresAt": 1806191999999,
+      "expiryYmd": "20270327",
+      "devHash": "CD8DDC7F3BF5C214",
+      "boundDeviceId": "6CED9588B7",
+      "boundShopId": "",
+      "activatedAt": 1769533141309,
+      "notes": "EXTENDED_FROM LIC-16620133A124"
+    },
+    {
+      "licenseId": "LIC-16620133A124",
+      "token": "SPNG1|MONTHLY|20260327|CD8DDC7F3BF5C214|439E0EA3C85B",
+      "plan": "MONTHLY",
+      "status": "REVOKED",
+      "createdAt": 1769532859190,
+      "expiresAt": 1774655999999,
+      "expiryYmd": "20260327",
+      "devHash": "CD8DDC7F3BF5C214",
+      "boundDeviceId": "6CED9588B7",
+      "boundShopId": "",
+      "activatedAt": 1769532859190,
+      "notes": "REVOKED (EXTEND)"
+    },
+    {
+      "licenseId": "LIC-E0E3F456FA4D",
+      "token": "SPNG1|MONTHLY|20260227|CD8DDC7F3BF5C214|6F8B926BFFFA",
+      "plan": "MONTHLY",
+      "status": "REVOKED",
+      "createdAt": 1769529343686,
+      "expiresAt": 1772236799999,
+      "expiryYmd": "20260227",
+      "devHash": "CD8DDC7F3BF5C214",
+      "boundDeviceId": "6CED9588B7",
+      "boundShopId": "",
+      "activatedAt": 1769529390434,
+      "notes": "REVOKED (EXTEND)"
+    }
+  ],
+  "pendingActivations": [],
+  "owners": [
+    {
+      "ownerId": "OWN_85851fcc28ef",
+      "email": "salisubnu@gmail.com",
+      "salt": "03b54a565089b462d4fba692d7359fee",
+      "passHash": "89aa875a04d64ba8c68233424bbb1e5f0bd561ef17838d2ce869eab02dd77e4e",
+      "shops": [],
+      "createdAt": 1769532587894,
+      "isDisabled": false
+    },
+    {
+      "ownerId": "OWN_8c51fe6f3edc",
+      "email": "aliyudaurasalisu@gmail.com",
+      "salt": "c12ef0c9d648487a8601691696c2b074",
+      "passHash": "cc6fa8e729677c7c158c617c5a57ffaf388fee017482bdbed8d8552b00390a78",
+      "shops": [
+        "o7ekYfp52cYt"
+      ],
+      "createdAt": 1769529850764,
+      "isDisabled": false,
+      "updatedAt": 1769531072531
+    }
+  ],
+  "shopAliases": []
+}
