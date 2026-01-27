@@ -21,6 +21,13 @@
   const shopTitle = $("shopTitle");
   const shopMeta = $("shopMeta");
   const kpisWrap = $("kpis");
+  const trendMeta = $("trendMeta");
+  const chartSalesTrendEl = $("chartSalesTrend");
+  const chartTopProductsEl = $("chartTopProducts");
+  const bestSellersWrap = $("bestSellers");
+  const slowMovingWrap = $("slowMoving");
+  const rangeChips = Array.from(document.querySelectorAll(".chip[data-range]"));
+
 
   const qProducts = $("qProducts");
   const qSales = $("qSales");
@@ -42,6 +49,10 @@
 
   let selectedShopId = "";
   let salesCache = [];
+  let salesTrendChart = null;
+  let topProductsChart = null;
+  let currentRangeDays = 30;
+
   let debtorsCache = [];
 
   function showLoginErr(msg) {
@@ -152,13 +163,16 @@
       { k: "Revenue", v: money(kpi?.totalSales ?? 0) },
       { k: "Paid", v: money(kpi?.totalPaid ?? 0) },
       { k: "Balance", v: money(kpi?.totalRemaining ?? 0) },
+      { k: "Low Stock", v: kpi?.lowStock ?? 0, tone: "warn" },
+      { k: "Expiring Soon", v: kpi?.expiringSoon ?? 0, tone: "warn" },
+      { k: "Expired", v: kpi?.expired ?? 0, tone: "danger" },
     ];
 
     // Keep it neat: 6 KPI cards (2 rows on desktop)
     items.forEach((it) => {
       const d = document.createElement("div");
       d.className = "kpi";
-      d.innerHTML = `<div class="muted">${escapeHtml(it.k)}</div><div class="v">${escapeHtml(it.v)}</div>`;
+      d.innerHTML = `<div class="muted">${escapeHtml(it.k)}</div><div class="v">${escapeHtml(it.v)}</div>${it.tone ? `<div class="badge ${it.tone}">${it.tone === "danger" ? "Critical" : "Alert"}</div>` : ""}`;
       kpisWrap.appendChild(d);
     });
   }
@@ -252,15 +266,102 @@
     }
   }
 
-  async function loadOverview() {
+  
+  function destroyChart(ch) {
+    if (ch && typeof ch.destroy === "function") {
+      try { ch.destroy(); } catch (_e) {}
+    }
+    return null;
+  }
+
+  function renderSalesTrend(trend, days) {
+    if (!chartSalesTrendEl || typeof Chart === "undefined") return;
+    const rows = Array.isArray(trend?.salesByDay) ? trend.salesByDay : [];
+    const labels = rows.map(r => (r.day || "").slice(5)); // MM-DD
+    const values = rows.map(r => Number(r.revenue || 0));
+
+    salesTrendChart = destroyChart(salesTrendChart);
+    salesTrendChart = new Chart(chartSalesTrendEl, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{ label: "Revenue", data: values, tension: 0.35, fill: true }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8 } },
+          y: { ticks: { callback: (v) => money(v) } }
+        }
+      }
+    });
+
+    if (trendMeta) trendMeta.textContent = `Last ${days} days`;
+  }
+
+  function renderTopProductsChart(perf) {
+    if (!chartTopProductsEl || typeof Chart === "undefined") return;
+    const top = Array.isArray(perf?.topProducts) ? perf.topProducts.slice(0, 6) : [];
+    const labels = top.map(x => (x.name || x.key || "").slice(0, 14));
+    const values = top.map(x => Number(x.qty || 0));
+
+    topProductsChart = destroyChart(topProductsChart);
+    topProductsChart = new Chart(chartTopProductsEl, {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Qty", data: values }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: true } }
+      }
+    });
+  }
+
+  function renderMiniLists(perf) {
+    if (!bestSellersWrap || !slowMovingWrap) return;
+    const best = Array.isArray(perf?.topProducts) ? perf.topProducts.slice(0, 5) : [];
+    const slow = Array.isArray(perf?.slowProducts) ? perf.slowProducts.slice(0, 5) : [];
+
+    bestSellersWrap.innerHTML = best.length ? "" : `<div class="muted">No data</div>`;
+    slowMovingWrap.innerHTML = slow.length ? "" : `<div class="muted">No data</div>`;
+
+    best.forEach((x) => {
+      const div = document.createElement("div");
+      div.className = "miniItem";
+      div.innerHTML = `<div><b>${escapeHtml(x.name || x.key)}</b><div class="muted tiny">Qty: ${escapeHtml(x.qty ?? 0)} • Value: ${escapeHtml(money(x.value ?? 0))}</div></div><div class="badge">Hot</div>`;
+      bestSellersWrap.appendChild(div);
+    });
+
+    slow.forEach((x) => {
+      const div = document.createElement("div");
+      div.className = "miniItem";
+      div.innerHTML = `<div><b>${escapeHtml(x.name || x.key)}</b><div class="muted tiny">Sold: ${escapeHtml(x.qty ?? 0)} • Stock: ${escapeHtml(x.stock ?? 0)}</div></div><div class="badge warn">Slow</div>`;
+      slowMovingWrap.appendChild(div);
+    });
+  }
+
+  async function refreshOverview(daysOverride) {
     const shopId = selectedShopId;
     if (!shopId) return;
+    const days = Number(daysOverride || currentRangeDays || 30) || 30;
+    currentRangeDays = days;
 
-    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview`);
+    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3&soonDays=30`);
     const shop = ov.shop || { shopId };
     shopTitle.textContent = shop.shopName || "Shop";
     shopMeta.textContent = `Shop ID: ${shop.shopId || shopId}${shop.shopCode ? " • Code: " + shop.shopCode : ""}`;
+
     setKpis(ov.kpi || {});
+    renderSalesTrend(ov.trend || {}, days);
+    renderTopProductsChart(ov.productPerformance || {});
+    renderMiniLists(ov.productPerformance || {});
+  }
+
+async function loadOverview() {
+    return refreshOverview(currentRangeDays);
   }
 
   async function loadProducts() {
