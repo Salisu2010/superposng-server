@@ -66,6 +66,31 @@
 
       <div class="kpis" id="kpis"></div>
 
+      <div class="dashGrid" id="dashGrid">
+        <div class="cardInner">
+          <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+            <div>
+              <div class="muted">Sales Trend</div>
+              <div class="muted tiny" id="trendMeta">Last 30 days</div>
+            </div>
+            <div class="row" style="gap:8px; flex-wrap:wrap">
+              <button class="chip" data-range="7">7d</button>
+              <button class="chip active" data-range="30">30d</button>
+              <button class="chip" data-range="90">90d</button>
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <canvas id="chartSalesTrend" height="120"></canvas>
+        </div>
+
+        <div class="cardInner">
+          <div class="muted">Top Products (By Qty)</div>
+          <div style="height:10px"></div>
+          <canvas id="chartTopProducts" height="140"></canvas>
+        </div>
+      </div>
+
+
       <div style="height:16px"></div>
       <div class="tabs">
         <button class="tab active" data-tab="products">Products</button>
@@ -79,7 +104,25 @@
           <div class="muted">Products</div>
           <input id="qProducts" class="input" placeholder="Search name / barcode / SKU" style="max-width:320px"/>
         </div>
-        <div style="height:10px"></div>
+        <div style="height:12px"></div>
+        <div class="insightsGrid">
+          <div class="cardInner">
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div class="muted">Best Sellers</div>
+              <div class="muted tiny">Top 5</div>
+            </div>
+            <div id="bestSellers" class="miniList"></div>
+          </div>
+          <div class="cardInner">
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div class="muted">Slow Moving</div>
+              <div class="muted tiny">Bottom 5</div>
+            </div>
+            <div id="slowMoving" class="miniList"></div>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+<div style="height:10px"></div>
         <div class="tableWrap">
           <table class="table">
             <thead><tr>
@@ -98,7 +141,25 @@
             <button id="btnReloadSales" class="btn" style="background:#334155">Reload</button>
           </div>
         </div>
-        <div style="height:10px"></div>
+        <div style="height:12px"></div>
+        <div class="insightsGrid">
+          <div class="cardInner">
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div class="muted">Best Sellers</div>
+              <div class="muted tiny">Top 5</div>
+            </div>
+            <div id="bestSellers" class="miniList"></div>
+          </div>
+          <div class="cardInner">
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div class="muted">Slow Moving</div>
+              <div class="muted tiny">Bottom 5</div>
+            </div>
+            <div id="slowMoving" class="miniList"></div>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+<div style="height:10px"></div>
         <div class="tableWrap">
           <table class="table">
             <thead><tr>
@@ -117,7 +178,25 @@
             <button id="btnReloadDebtors" class="btn" style="background:#334155">Reload</button>
           </div>
         </div>
-        <div style="height:10px"></div>
+        <div style="height:12px"></div>
+        <div class="insightsGrid">
+          <div class="cardInner">
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div class="muted">Best Sellers</div>
+              <div class="muted tiny">Top 5</div>
+            </div>
+            <div id="bestSellers" class="miniList"></div>
+          </div>
+          <div class="cardInner">
+            <div class="row" style="justify-content:space-between; align-items:center">
+              <div class="muted">Slow Moving</div>
+              <div class="muted tiny">Bottom 5</div>
+            </div>
+            <div id="slowMoving" class="miniList"></div>
+          </div>
+        </div>
+        <div style="height:12px"></div>
+<div style="height:10px"></div>
         <div class="tableWrap">
           <table class="table">
             <thead><tr>
@@ -136,6 +215,7 @@
 
   <footer>SuperPOSNG © 2026</footer>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

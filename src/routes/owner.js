@@ -204,7 +204,12 @@ r.get("/me", authMiddleware, (req, res) => {
 });
 
 /**
- * Owner shop overview (counts + totals)
+ * Owner shop overview (counts + totals + trend + product intelligence)
+ *
+ * Query params:
+ *  - days: range for trend calculations (default 30, max 365)
+ *  - lowStock: stock threshold (default 3)
+ *  - soonDays: expiring-soon window in days (default 30)
  */
 r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
   const auth = req.auth || {};
@@ -217,32 +222,229 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId);
   const products = (db.products || []).filter(p => pickShopId(p) === shopId);
-  const sales = (db.sales || []).filter(s => pickShopId(s) === shopId);
+  const salesAll = (db.sales || []).filter(s => pickShopId(s) === shopId);
   const debtors = (db.debtors || []).filter(d => pickShopId(d) === shopId);
 
   // If explicit debtors table is empty, derive debtors count from unpaid sales.
   let debtorsCount = Array.isArray(debtors) ? debtors.length : 0;
   if (debtorsCount === 0) {
-    debtorsCount = sales.filter(s => pickSaleRemaining(s) > 0).length;
+    debtorsCount = salesAll.filter(s => pickSaleRemaining(s) > 0).length;
   }
 
-  const totalSales = sales.reduce((sum, s) => sum + pickSaleTotal(s), 0);
-  const totalPaid = sales.reduce((sum, s) => sum + pickSalePaid(s), 0);
-  const totalRemaining = sales.reduce((sum, s) => sum + pickSaleRemaining(s), 0);
+  // Totals (all-time)
+  const totalSales = salesAll.reduce((sum, s) => sum + pickSaleTotal(s), 0);
+  const totalPaid = salesAll.reduce((sum, s) => sum + pickSalePaid(s), 0);
+  const totalRemaining = salesAll.reduce((sum, s) => sum + pickSaleRemaining(s), 0);
+
+  // Trend & product performance (range)
+  const daysRaw = asInt(req.query.days || 30, 30);
+  const days = Math.max(1, Math.min(daysRaw, 365));
+  const now = Date.now();
+  const since = now - (days * 24 * 60 * 60 * 1000);
+
+  function dayKey(ts) {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return "";
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${da}`;
+  }
+
+  function pickSaleCreatedAt(s) {
+    return asInt(
+      s?.createdAt ??
+      s?.time ??
+      s?.timestamp ??
+      s?.date ??
+      0,
+      0
+    );
+  }
+
+  function pickItemQty(it) {
+    return Math.max(1, asInt(it?.qty ?? it?.quantity ?? 1, 1));
+  }
+
+  function pickItemPrice(it) {
+    return asNum(
+      it?.price ??
+      it?.unitPrice ??
+      it?.unit_price ??
+      it?.sellingPrice ??
+      it?.amount ??
+      0,
+      0
+    );
+  }
+
+  function pickItemKey(it) {
+    return trim(it?.code || it?.barcode || it?.sku || it?.plu || it?.productId || it?.name || it?.productName);
+  }
+
+  // sales within range
+  const sales = salesAll
+    .filter(s => pickSaleCreatedAt(s) >= since && pickSaleCreatedAt(s) <= now);
+
+  // per-day buckets (fill missing days)
+  const byDay = new Map();
+  for (const s of sales) {
+    const dk = dayKey(pickSaleCreatedAt(s));
+    if (!dk) continue;
+    const prev = byDay.get(dk) || { day: dk, revenue: 0, count: 0 };
+    prev.revenue += pickSaleTotal(s);
+    prev.count += 1;
+    byDay.set(dk, prev);
+  }
+
+  const salesByDay = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const t = now - i * 24 * 60 * 60 * 1000;
+    const k = dayKey(t);
+    const row = byDay.get(k) || { day: k, revenue: 0, count: 0 };
+    salesByDay.push(row);
+  }
+
+  // product performance
+  const qtyByKey = new Map();
+  const valByKey = new Map();
+  for (const s of sales) {
+    const items = Array.isArray(s.items) ? s.items : [];
+    for (const it of items) {
+      const key = pickItemKey(it) || "UNKNOWN";
+      const q = pickItemQty(it);
+      const price = pickItemPrice(it);
+      qtyByKey.set(key, (qtyByKey.get(key) || 0) + q);
+      valByKey.set(key, (valByKey.get(key) || 0) + (price * q));
+    }
+  }
+
+  function productLabelForKey(key) {
+    const lk = trim(key).toLowerCase();
+    if (!lk) return key;
+    const p = products.find(pp => {
+      const name = trim(pp.name).toLowerCase();
+      const sku = trim(pp.sku).toLowerCase();
+      const bc = trim(pp.barcode).toLowerCase();
+      const plu = trim(pp.plu).toLowerCase();
+      const pid = trim(pp.productId || pp.id).toLowerCase();
+      return lk && (lk === bc || lk === sku || lk === plu || lk === pid || lk === name);
+    });
+    if (!p) return key;
+    return trim(p.name) || key;
+  }
+
+  const topProducts = Array.from(qtyByKey.entries())
+    .map(([key, qty]) => ({ key, name: productLabelForKey(key), qty, value: asNum(valByKey.get(key) || 0, 0) }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 10);
+
+  const topProductsByValue = Array.from(valByKey.entries())
+    .map(([key, value]) => ({ key, name: productLabelForKey(key), qty: asInt(qtyByKey.get(key) || 0, 0), value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10);
+
+  // Slow-moving products: lowest sold qty in range (include zeros)
+  function keyForProduct(p) {
+    return trim(p.barcode || p.sku || p.plu || p.productId || p.id || p.name);
+  }
+
+  const slowProducts = products
+    .map((p) => {
+      const key = keyForProduct(p);
+      const qty = asInt(qtyByKey.get(key) || 0, 0);
+      return {
+        key,
+        name: trim(p.name) || key || "UNKNOWN",
+        qty,
+        stock: asInt(p.stock ?? p.quantity ?? 0, 0),
+        price: asNum(p.price ?? p.sellingPrice ?? p.unitPrice ?? 0, 0),
+      };
+    })
+    .sort((a, b) => a.qty - b.qty)
+    .slice(0, 10);
+
+  // Low-stock & expiry alerts
+  const lowStockThreshold = Math.max(0, asInt(req.query.lowStock || 3, 3));
+  const lowStockCount = products.filter(p => asInt(p.stock ?? p.quantity ?? 0, 0) <= lowStockThreshold).length;
+
+  const soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 30, 30), 365));
+
+  function parseExpiry(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number" && Number.isFinite(v)) {
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+    // YYYY-MM-DD
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (m) {
+      const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const n = Number(s);
+    if (Number.isFinite(n) && s.length >= 10) {
+      const d = new Date(n);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function expiryDateFromProduct(p) {
+    return (
+      parseExpiry(p.expiryDate) ||
+      parseExpiry(p.expiringDate) ||
+      parseExpiry(p.expDate) ||
+      parseExpiry(p.expiry) ||
+      parseExpiry(p.exp) ||
+      null
+    );
+  }
+
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const soonMs = soonDays * 24 * 60 * 60 * 1000;
+
+  let expiredCount = 0;
+  let expiringSoonCount = 0;
+
+  for (const p of products) {
+    const d = expiryDateFromProduct(p);
+    if (!d) continue;
+    const t = d.getTime();
+    if (t < today0.getTime()) expiredCount++;
+    else if (t <= (today0.getTime() + soonMs)) expiringSoonCount++;
+  }
 
   return res.json({
     ok: true,
     shop: shop || { shopId },
+    range: { days, since, now, soonDays, lowStockThreshold },
     kpi: {
       products: products.length,
-      sales: sales.length,
+      sales: salesAll.length,
       debtors: debtorsCount,
       totalSales,
       totalPaid,
       totalRemaining,
+      lowStock: lowStockCount,
+      expired: expiredCount,
+      expiringSoon: expiringSoonCount,
+    },
+    trend: {
+      salesByDay,
+    },
+    productPerformance: {
+      topProducts,
+      topProductsByValue,
+      slowProducts,
     }
   });
 });
+
 
 /**
  * Owner: products table
