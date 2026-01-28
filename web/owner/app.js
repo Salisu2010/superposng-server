@@ -232,8 +232,19 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   let __expiryType = "expired";
 
   function showExpiryButtons(expiredCount, soonCount) {
-    if (btnViewExpired) btnViewExpired.classList.toggle("hidden", !(Number(expiredCount) > 0));
-    if (btnViewSoon) btnViewSoon.classList.toggle("hidden", !(Number(soonCount) > 0));
+    const ex = Number(expiredCount) || 0;
+    const so = Number(soonCount) || 0;
+
+    if (btnViewExpired) {
+      btnViewExpired.classList.remove("hidden");
+      btnViewExpired.disabled = ex <= 0;
+      btnViewExpired.title = ex > 0 ? "View Expired List" : "No expired items / Babu expired";
+    }
+    if (btnViewSoon) {
+      btnViewSoon.classList.remove("hidden");
+      btnViewSoon.disabled = so <= 0;
+      btnViewSoon.title = so > 0 ? "View Expiring Soon List" : "No expiring-soon items / Babu expiring soon";
+    }
   }
 
   function closeExpiryModal() {

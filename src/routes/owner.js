@@ -150,6 +150,63 @@ function verifyPassword(password, salt, hashHex) {
  * Owner Login
  * body: { email, password }
  */
+// --- Expiry helpers (robust parsing across Android/legacy fields) ---
+function _asMsMaybe(v){
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number" && isFinite(v)) {
+    // if seconds, convert to ms
+    return v < 1e12 ? Math.floor(v * 1000) : Math.floor(v);
+  }
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return null;
+    // numeric string
+    if (/^\d+$/.test(s)) {
+      const n = Number(s);
+      return n < 1e12 ? Math.floor(n * 1000) : Math.floor(n);
+    }
+    // date-only YYYY-MM-DD (treat as local midnight to avoid TZ shift)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y,m,d] = s.split("-").map(Number);
+      const dt = new Date(y, m-1, d, 0, 0, 0, 0);
+      const ms = dt.getTime();
+      return isFinite(ms) ? ms : null;
+    }
+    const ms = Date.parse(s);
+    return isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
+function getExpiryMs(p){
+  if (!p) return null;
+  const candidates = [
+    p.expiryDate,
+    p.expiringDate,
+    p.expiry,
+    p.expiry_date,
+    p.expiryDateMs,
+    p.expDate,
+    p.expiryAt,
+    p.expiry_at,
+    p.exp,
+  ];
+  for (const c of candidates){
+    const ms = _asMsMaybe(c);
+    if (ms) return ms;
+  }
+  return null;
+}
+
+function msToYmd(ms){
+  if (!ms || !isFinite(ms)) return "";
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const da = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${da}`;
+}
+
 r.post("/auth/login", (req, res) => {
   const email = trim(req.body?.email).toLowerCase();
   const password = trim(req.body?.password);
