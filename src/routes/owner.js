@@ -852,4 +852,223 @@ r.post("/shop/:shopId/settings/expirySoonDays", authMiddleware, (req, res) => {
   return res.json({ ok: true, shopId, expirySoonDays: soonDays });
 });
 
+
+function toCsv(rows, headers) {
+  const esc = (v) => {
+    const s = (v === null || v === undefined) ? "" : String(v);
+    const needs = /[",\n\r]/.test(s);
+    const out = s.replace(/"/g, '""');
+    return needs ? `"${out}"` : out;
+  };
+  const head = headers.map(h => esc(h)).join(",");
+  const lines = rows.map(r => headers.map(h => esc(r[h])).join(","));
+  return [head, ...lines].join("\n");
+}
+
+function dayKey(ts) {
+  const d = new Date(ts);
+  if (!Number.isFinite(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+}
+
+function getSaleItems(sale) {
+  const s = sale || {};
+  const items = Array.isArray(s.items) ? s.items :
+                Array.isArray(s.cartItems) ? s.cartItems :
+                Array.isArray(s.saleItems) ? s.saleItems :
+                Array.isArray(s.rows) ? s.rows : [];
+  return items.filter(Boolean);
+}
+
+function num(v, d=0){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+}
+
+function getCost(p){
+  return num(p?.costPrice ?? p?.cost ?? p?.buyPrice ?? p?.purchasePrice ?? p?.cost_price ?? 0, 0);
+}
+
+function buildProductIndex(db, shopId){
+  const idx = { byId: new Map(), byBarcode: new Map(), bySku: new Map(), byName: new Map() };
+  const prods = (db.products || []).filter(p => pickShopId(p) === shopId);
+  for (const p of prods){
+    const pid = trim(p.productId || p.id);
+    const bc = trim(p.barcode);
+    const sku = trim(p.sku);
+    const nm = trim(p.name || p.productName).toLowerCase();
+    if (pid) idx.byId.set(pid, p);
+    if (bc) idx.byBarcode.set(bc, p);
+    if (sku) idx.bySku.set(sku, p);
+    if (nm) idx.byName.set(nm, p);
+  }
+  return idx;
+}
+
+function findProduct(idx, it){
+  const barcode = trim(it?.barcode);
+  const sku = trim(it?.sku);
+  const pid = trim(it?.productId || it?.id);
+  const name = trim(it?.productName || it?.name).toLowerCase();
+  if (barcode && idx.byBarcode.has(barcode)) return idx.byBarcode.get(barcode);
+  if (sku && idx.bySku.has(sku)) return idx.bySku.get(sku);
+  if (pid && idx.byId.has(pid)) return idx.byId.get(pid);
+  if (name && idx.byName.has(name)) return idx.byName.get(name);
+  return null;
+}
+
+/**
+ * Insights: daily revenue + profit (requires costPrice)
+ */
+r.get("/shop/:shopId/insights", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const days = Math.max(1, Math.min(asInt(req.query.days || 30, 30), 365));
+  const now = Date.now();
+  const since = now - (days * 24 * 60 * 60 * 1000);
+
+  const db = readDB();
+  const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
+  const currency = trim(shop.currency || "");
+
+  const idx = buildProductIndex(db, shopId);
+
+  const sales = (db.sales || []).filter(s => pickShopId(s) === shopId && asNum(s.createdAt || 0, 0) >= since);
+  const by = new Map();
+
+  let hasAnyCost = false;
+
+  for (const s of sales){
+    const ts = asNum(s.createdAt || s.time || s.timestamp || 0, 0) || now;
+    const k = dayKey(ts);
+    if (!k) continue;
+    const row = by.get(k) || { day: k, revenue: 0, profit: 0, salesCount: 0 };
+    row.revenue += pickSaleTotal(s);
+    row.salesCount += 1;
+
+    // compute profit per item when possible
+    const items = getSaleItems(s);
+    for (const it of items){
+      const qty = Math.max(0, num(it?.qty ?? it?.quantity ?? it?.count ?? 1, 1));
+      const price = num(it?.price ?? it?.unitPrice ?? it?.sellingPrice ?? 0, 0);
+      const p = findProduct(idx, it);
+      const cost = p ? getCost(p) : 0;
+      if (p && cost > 0) hasAnyCost = true;
+      // If cost is 0/missing, profit contribution is 0 (safe).
+      row.profit += Math.max(0, (price - cost)) * qty;
+    }
+
+    by.set(k, row);
+  }
+
+  const byDay = Array.from(by.values()).sort((a,b) => a.day.localeCompare(b.day));
+
+  // Summary windows
+  const todayKey = dayKey(now);
+  const last7since = now - (7 * 24 * 60 * 60 * 1000);
+  const last30since = now - (30 * 24 * 60 * 60 * 1000);
+
+  let todayProfit = 0, d7 = 0, d30 = 0;
+  for (const r0 of byDay){
+    // dayKey parsing to ms:
+    const dt = new Date(r0.day + "T00:00:00Z").getTime();
+    if (r0.day === todayKey) todayProfit += asNum(r0.profit, 0);
+    if (Number.isFinite(dt) && dt >= last7since) d7 += asNum(r0.profit, 0);
+    if (Number.isFinite(dt) && dt >= last30since) d30 += asNum(r0.profit, 0);
+  }
+
+  return res.json({
+    ok: true,
+    shopId,
+    profit: {
+      summary: { today: todayProfit, d7, d30, currency, hasCost: hasAnyCost },
+      byDay
+    }
+  });
+});
+
+/**
+ * Export expiry list to CSV
+ */
+r.get("/shop/:shopId/expiry/export", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const type = trim(req.query.type || "expired").toLowerCase();
+  const db = readDB();
+  const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
+
+  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  if (!soonDays || soonDays <= 0) {
+    const sds = asInt(shop?.expirySoonDays || 0, 0);
+    soonDays = (sds > 0 && sds <= 365) ? sds : 90;
+  }
+
+  function parseExpiry(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number") return v > 1e12 ? v : v * 1000;
+    const s = String(v).trim();
+    if (!s) return null;
+    const t = Date.parse(s);
+    if (Number.isFinite(t)) return t;
+    const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) {
+      const y = asInt(m[1], 0), mo = asInt(m[2], 1) - 1, d = asInt(m[3], 1);
+      return Date.UTC(y, mo, d, 0, 0, 0, 0);
+    }
+    return null;
+  }
+
+  const now = Date.now();
+  const startToday = new Date(); startToday.setHours(0,0,0,0);
+  const today0 = startToday.getTime();
+  const soonLimit = today0 + (soonDays * 24 * 60 * 60 * 1000);
+
+  const products = (db.products || []).filter(p => pickShopId(p) === shopId);
+  const rows = [];
+
+  for (const p of products){
+    const expTs = parseExpiry(p.expiryDate || p.expireDate || p.exp);
+    if (!expTs) continue;
+
+    const isExpired = expTs < today0;
+    const isSoon = !isExpired && expTs <= soonLimit;
+
+    if (type === "expired" && !isExpired) continue;
+    if (type !== "expired" && !isSoon) continue;
+
+    const daysLeft = Math.ceil((expTs - today0) / (24*60*60*1000));
+    rows.push({
+      name: trim(p.name || p.productName),
+      barcode: trim(p.barcode),
+      sku: trim(p.sku),
+      expiryDate: new Date(expTs).toISOString().slice(0,10),
+      daysLeft: String(daysLeft),
+      qty: String(asNum(p.stock ?? p.qty ?? 0, 0)),
+    });
+  }
+
+  rows.sort((a,b)=> (a.expiryDate||"").localeCompare(b.expiryDate||""));
+
+  const csv = toCsv(rows, ["name","barcode","sku","expiryDate","daysLeft","qty"]);
+  const fn = `superposng_${type}_shop_${shopId}.csv`;
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${fn}"`);
+  return res.status(200).send(csv);
+});
+
+
 export default r;

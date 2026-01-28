@@ -1,293 +1,305 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>SuperPOSNG Owner Dashboard</title>
-  <link rel="stylesheet" href="style.css"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<title>SuperPOSNG Owner Dashboard</title>
+<link href="style.css" rel="stylesheet"/>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">SP</div>
-      <div>
-        <div style="font-weight:800">SuperPOSNG</div>
-        <div class="muted">Owner Cloud Dashboard</div>
-      </div>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <section class="card" id="loginCard">
-      <h2 style="margin:0 0 8px 0;">Sign in</h2>
-      <div class="muted">Use the owner account created from Developer Portal.</div>
-      <div style="height:14px"></div>
-      <div class="grid">
-        <div>
-          <label>Email</label>
-          <input id="email" placeholder="owner@shop.com" autocomplete="username"/>
-        </div>
-        <div>
-          <label>Password</label>
-          <input id="password" type="password" placeholder="********" autocomplete="current-password"/>
-        </div>
-      </div>
-      <div style="height:14px"></div>
-      <div class="row">
-        <button id="btnLogin" class="btn">Login</button>
-        <div class="muted" id="loginHint"></div>
-      </div>
-      <div id="loginErr" class="err hidden"></div>
-    </section>
-
-    <section class="card hidden" id="meCard">
-      <div class="row" style="justify-content:space-between">
-        <div>
-          <h2 style="margin:0 0 6px 0;">Welcome</h2>
-          <div class="muted" id="meEmail"></div>
-        </div>
-        <button id="btnLogout" class="btn" style="background:#ef4444">Logout</button>
-      </div>
-      <div style="height:12px"></div>
-      <div class="muted">Your Shops</div>
-      <div id="shops"></div>
-    </section>
-
-    <!-- Shop Dashboard -->
-    <section class="card hidden" id="shopCard">
-      <div class="row" style="justify-content:space-between; align-items:flex-start">
-        <div>
-          <h2 style="margin:0 0 6px 0;" id="shopTitle">Shop</h2>
-          <div class="muted" id="shopMeta"></div>
-
-          <div id="alertBar" class="alert hidden"></div>
-
-          <div class="row" id="expiryButtons" style="gap:10px; flex-wrap:wrap; margin:10px 0 6px 0;">
-            <button id="btnViewExpired" class="btn danger hidden" type="button">View Expired List</button>
-            <button id="btnViewSoon" class="btn warn hidden" type="button">View Expiring Soon List</button>
-          </div>
-
-
-          <div class="settingsRow">
-            <div class="muted" style="margin-bottom:6px">Expiry Settings</div>
-            <div class="row" style="gap:10px; flex-wrap:wrap; align-items:center">
-              <label class="muted" for="soonDaysSelect">Expiring Soon:</label>
-              <select id="soonDaysSelect" class="input" style="max-width:190px">
-                <option value="30">30 days</option>
-                <option value="60">60 days</option>
-                <option value="90">90 days (3 months)</option>
-                <option value="120">120 days</option>
-                <option value="custom">Custom</option>
-              </select>
-
-              <input id="soonDaysCustom" class="input hidden" style="max-width:140px" type="number" min="1" max="365" placeholder="e.g. 150"/>
-
-              <button id="btnSaveSoonDays" class="btn" style="background:#16a34a">Save</button>
-              <span id="soonDaysMsg" class="muted"></span>
-            </div>
-          </div>
-
-	      </div>
-	      <button id="btnBack" class="btn" style="background:#334155">Back to shops</button>
-	      </div>
-      <div style="height:14px"></div>
-
-      <div class="kpis" id="kpis"></div>
-
-      <div class="dashGrid" id="dashGrid">
-        <div class="cardInner">
-          <div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
-            <div>
-              <div class="muted">Sales Trend</div>
-              <div class="muted tiny" id="trendMeta">Last 30 days</div>
-            </div>
-            <div class="row" style="gap:8px; flex-wrap:wrap">
-              <button class="chip" data-range="7">7d</button>
-              <button class="chip active" data-range="30">30d</button>
-              <button class="chip" data-range="90">90d</button>
-            </div>
-          </div>
-          <div style="height:10px"></div>
-          <canvas id="chartSalesTrend" height="120"></canvas>
-        </div>
-
-        <div class="cardInner">
-          <div class="muted">Top Products (By Qty)</div>
-          <div style="height:10px"></div>
-          <canvas id="chartTopProducts" height="140"></canvas>
-        </div>
-      </div>
-
-
-      <div style="height:16px"></div>
-      <div class="tabs">
-        <button class="tab active" data-tab="products">Products</button>
-        <button class="tab" data-tab="sales">Sales</button>
-        <button class="tab" data-tab="debtors">Debtors</button>
-      </div>
-
-      
-      <div id="tab_products" class="tabpanel">
-        <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
-          <div class="muted">Products</div>
-          <input id="qProducts" class="input" placeholder="Search name / barcode / SKU" style="max-width:320px"/>
-        </div>
-        <div style="height:12px"></div>
-        <div class="insightsGrid">
-          <div class="cardInner">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted">Best Sellers</div>
-              <div class="muted tiny">Top 5</div>
-            </div>
-            <div id="bestSellers" class="miniList"></div>
-          </div>
-          <div class="cardInner">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted">Slow Moving</div>
-              <div class="muted tiny">Bottom 5</div>
-            </div>
-            <div id="slowMoving" class="miniList"></div>
-          </div>
-        </div>
-        <div style="height:12px"></div>
+<header class="topbar">
+<div class="brand">
+<div class="logo">SP</div>
+<div>
+<div style="font-weight:800">SuperPOSNG</div>
+<div class="muted">Owner Cloud Dashboard</div>
+</div>
+</div>
+</header>
+<main class="wrap">
+<section class="card" id="loginCard">
+<h2 style="margin:0 0 8px 0;">Sign in</h2>
+<div class="muted">Use the owner account created from Developer Portal.</div>
+<div style="height:14px"></div>
+<div class="grid">
+<div>
+<label>Email</label>
+<input autocomplete="username" id="email" placeholder="owner@shop.com"/>
+</div>
+<div>
+<label>Password</label>
+<input autocomplete="current-password" id="password" placeholder="********" type="password"/>
+</div>
+</div>
+<div style="height:14px"></div>
+<div class="row">
+<button class="btn" id="btnLogin">Login</button>
+<div class="muted" id="loginHint"></div>
+</div>
+<div class="err hidden" id="loginErr"></div>
+</section>
+<section class="card hidden" id="meCard">
+<div class="row" style="justify-content:space-between">
+<div>
+<h2 style="margin:0 0 6px 0;">Welcome</h2>
+<div class="muted" id="meEmail"></div>
+</div>
+<button class="btn" id="btnLogout" style="background:#ef4444">Logout</button>
+</div>
+<div style="height:12px"></div>
+<div class="muted">Your Shops</div>
+<div id="shops"></div>
+</section>
+<!-- Shop Dashboard -->
+<section class="card hidden" id="shopCard">
+<div class="row" style="justify-content:space-between; align-items:flex-start">
+<div>
+<h2 id="shopTitle" style="margin:0 0 6px 0;">Shop</h2>
+<div class="muted" id="shopMeta"></div>
+<div class="alert hidden" id="alertBar"></div>
+<div class="row" id="expiryButtons" style="gap:10px; flex-wrap:wrap; margin:10px 0 6px 0;">
+<button class="btn danger hidden" id="btnViewExpired" type="button">View Expired List</button>
+<button class="btn warn hidden" id="btnViewSoon" type="button">View Expiring Soon List</button>
+</div>
+<div class="settingsRow">
+<div class="muted" style="margin-bottom:6px">Expiry Settings</div>
+<div class="row" style="gap:10px; flex-wrap:wrap; align-items:center">
+<label class="muted" for="soonDaysSelect">Expiring Soon:</label>
+<select class="input" id="soonDaysSelect" style="max-width:190px">
+<option value="30">30 days</option>
+<option value="60">60 days</option>
+<option value="90">90 days (3 months)</option>
+<option value="120">120 days</option>
+<option value="custom">Custom</option>
+</select>
+<input class="input hidden" id="soonDaysCustom" max="365" min="1" placeholder="e.g. 150" style="max-width:140px" type="number"/>
+<button class="btn" id="btnSaveSoonDays" style="background:#16a34a">Save</button>
+<span class="muted" id="soonDaysMsg"></span>
+</div>
+</div>
+</div>
+<button class="btn" id="btnBack" style="background:#334155">Back to shops</button>
+</div>
+<div style="height:14px"></div>
+<div class="kpis" id="kpis"></div>
+<div class="dashGrid" id="dashGrid">
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+<div>
+<div class="muted">Sales Trend</div>
+<div class="muted tiny" id="trendMeta">Last 30 days</div>
+</div>
+<div class="row" style="gap:8px; flex-wrap:wrap">
+<button class="chip" data-range="7">7d</button>
+<button class="chip active" data-range="30">30d</button>
+<button class="chip" data-range="90">90d</button>
+</div>
+</div>
 <div style="height:10px"></div>
-        <div class="tableWrap">
-          <table class="table">
-            <thead><tr>
-              <th>Name</th><th>Barcode/SKU</th><th>Stock</th><th>Price</th>
-            </tr></thead>
-            <tbody id="productsBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="tab_sales" class="tabpanel hidden">
-        <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
-          <div class="muted">Sales (latest)</div>
-          <div class="row" style="gap:10px; flex-wrap:wrap">
-            <input id="qSales" class="input" placeholder="Search receipt / staff / method" style="max-width:320px"/>
-            <button id="btnReloadSales" class="btn" style="background:#334155">Reload</button>
-          </div>
-        </div>
-        <div style="height:12px"></div>
-        <div class="insightsGrid">
-          <div class="cardInner">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted">Best Sellers</div>
-              <div class="muted tiny">Top 5</div>
-            </div>
-            <div id="bestSellers" class="miniList"></div>
-          </div>
-          <div class="cardInner">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted">Slow Moving</div>
-              <div class="muted tiny">Bottom 5</div>
-            </div>
-            <div id="slowMoving" class="miniList"></div>
-          </div>
-        </div>
-        <div style="height:12px"></div>
+<div class="trendBars" id="trendBars"></div>
+</div>
+<div class="cardInner">
+<div class="muted">Top Products (By Qty)</div>
 <div style="height:10px"></div>
-        <div class="tableWrap">
-          <table class="table">
-            <thead><tr>
-              <th>Receipt</th><th>Staff</th><th>Method</th><th>Status</th><th>Items</th><th>Paid</th><th>Balance</th><th>Total</th><th>Date/Time</th>
-            </tr></thead>
-            <tbody id="salesBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div id="tab_debtors" class="tabpanel hidden">
-        <div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
-          <div class="muted">Debtors</div>
-          <div class="row" style="gap:10px; flex-wrap:wrap">
-            <input id="qDebtors" class="input" placeholder="Search name / phone / receipt" style="max-width:320px"/>
-            <button id="btnReloadDebtors" class="btn" style="background:#334155">Reload</button>
-          </div>
-        </div>
-        <div style="height:12px"></div>
-        <div class="insightsGrid">
-          <div class="cardInner">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted">Best Sellers</div>
-              <div class="muted tiny">Top 5</div>
-            </div>
-            <div id="bestSellers" class="miniList"></div>
-          </div>
-          <div class="cardInner">
-            <div class="row" style="justify-content:space-between; align-items:center">
-              <div class="muted">Slow Moving</div>
-              <div class="muted tiny">Bottom 5</div>
-            </div>
-            <div id="slowMoving" class="miniList"></div>
-          </div>
-        </div>
-        <div style="height:12px"></div>
+<div class="topProductsList" id="topProductsList"></div>
+</div><div class="cardInner">
+<div class="rowBetween">
+<div>
+<div class="muted">Profit (Daily / Weekly)</div>
+<div class="muted small" id="profitMeta">—</div>
+</div>
+</div>
 <div style="height:10px"></div>
-        <div class="tableWrap">
-          <table class="table">
-            <thead><tr>
-              <th>Name</th><th>Phone</th><th>Receipt</th><th>Status</th><th>Paid</th><th>Balance</th><th>Total</th><th>Date/Time</th><th>Action</th>
-            </tr></thead>
-            <tbody id="debtorsBody"></tbody>
-          </table>
-        </div>
-      </div>
+<div class="profitCards">
+<div class="miniCard">
+<div class="miniLabel">Today</div>
+<div class="miniValue" id="profitToday">0.00</div>
+</div>
+<div class="miniCard">
+<div class="miniLabel">Last 7 Days</div>
+<div class="miniValue" id="profit7d">0.00</div>
+</div>
+<div class="miniCard">
+<div class="miniLabel">Last 30 Days</div>
+<div class="miniValue" id="profit30d">0.00</div>
+</div>
+</div>
+<div style="height:12px"></div>
+<div class="tableWrap">
+<table class="table">
+<thead>
+<tr>
+<th>Date</th>
+<th style="text-align:right">Revenue</th>
+<th style="text-align:right">Profit</th>
+<th style="text-align:right">Sales</th>
+</tr>
+</thead>
+<tbody id="profitTableBody">
+</tbody>
+</table>
+</div>
+<div class="muted small" id="profitNote"></div>
+</div>
+</div>
+<div style="height:16px"></div>
+<div class="tabs">
+<button class="tab active" data-tab="products">Products</button>
+<button class="tab" data-tab="sales">Sales</button>
+<button class="tab" data-tab="debtors">Debtors</button>
+</div>
+<div class="tabpanel" id="tab_products">
+<div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+<div class="muted">Products</div>
+<input class="input" id="qProducts" placeholder="Search name / barcode / SKU" style="max-width:320px"/>
+</div>
+<div style="height:12px"></div>
+<div class="insightsGrid">
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center">
+<div class="muted">Best Sellers</div>
+<div class="muted tiny">Top 5</div>
+</div>
+<div class="miniList" id="bestSellers"></div>
+</div>
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center">
+<div class="muted">Slow Moving</div>
+<div class="muted tiny">Bottom 5</div>
+</div>
+<div class="miniList" id="slowMoving"></div>
+</div>
+</div>
+<div style="height:12px"></div>
+<div style="height:10px"></div>
+<div class="tableWrap">
+<table class="table">
+<thead><tr>
+<th>Name</th><th>Barcode/SKU</th><th>Stock</th><th>Price</th>
+</tr></thead>
+<tbody id="productsBody"></tbody>
+</table>
+</div>
+</div>
+<div class="tabpanel hidden" id="tab_sales">
+<div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+<div class="muted">Sales (latest)</div>
+<div class="row" style="gap:10px; flex-wrap:wrap">
+<input class="input" id="qSales" placeholder="Search receipt / staff / method" style="max-width:320px"/>
+<button class="btn" id="btnReloadSales" style="background:#334155">Reload</button>
+</div>
+</div>
+<div style="height:12px"></div>
+<div class="insightsGrid">
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center">
+<div class="muted">Best Sellers</div>
+<div class="muted tiny">Top 5</div>
+</div>
+<div class="miniList" id="bestSellers"></div>
+</div>
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center">
+<div class="muted">Slow Moving</div>
+<div class="muted tiny">Bottom 5</div>
+</div>
+<div class="miniList" id="slowMoving"></div>
+</div>
+</div>
+<div style="height:12px"></div>
+<div style="height:10px"></div>
+<div class="tableWrap">
+<table class="table">
+<thead><tr>
+<th>Receipt</th><th>Staff</th><th>Method</th><th>Status</th><th>Items</th><th>Paid</th><th>Balance</th><th>Total</th><th>Date/Time</th>
+</tr></thead>
+<tbody id="salesBody"></tbody>
+</table>
+</div>
+</div>
+<div class="tabpanel hidden" id="tab_debtors">
+<div class="row" style="justify-content:space-between; gap:10px; flex-wrap:wrap">
+<div class="muted">Debtors</div>
+<div class="row" style="gap:10px; flex-wrap:wrap">
+<input class="input" id="qDebtors" placeholder="Search name / phone / receipt" style="max-width:320px"/>
+<button class="btn" id="btnReloadDebtors" style="background:#334155">Reload</button>
+</div>
+</div>
+<div style="height:12px"></div>
+<div class="insightsGrid">
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center">
+<div class="muted">Best Sellers</div>
+<div class="muted tiny">Top 5</div>
+</div>
+<div class="miniList" id="bestSellers"></div>
+</div>
+<div class="cardInner">
+<div class="row" style="justify-content:space-between; align-items:center">
+<div class="muted">Slow Moving</div>
+<div class="muted tiny">Bottom 5</div>
+</div>
+<div class="miniList" id="slowMoving"></div>
+</div>
+</div>
+<div style="height:12px"></div>
+<div style="height:10px"></div>
+<div class="tableWrap">
+<table class="table">
+<thead><tr>
+<th>Name</th><th>Phone</th><th>Receipt</th><th>Status</th><th>Paid</th><th>Balance</th><th>Total</th><th>Date/Time</th><th>Action</th>
+</tr></thead>
+<tbody id="debtorsBody"></tbody>
+</table>
+</div>
+</div>
+<div class="err hidden" id="shopErr" style="margin-top:12px"></div>
+</section>
+</main>
+<footer>SuperPOSNG © 2026</footer>
+<script defer="defer" src="app.js"></script>
+<div aria-labelledby="expiryModalTitle" aria-modal="true" class="modal-overlay hidden" id="expiryModalOverlay" role="dialog" style="display:none">
+<div class="modal modal-lg">
+<div class="modal-body">
+<div class="row" style="justify-content:space-between; align-items:flex-start; gap:12px;">
+<div>
+<h3 id="expiryModalTitle" style="margin:0 0 4px 0;">Expiry List</h3>
+<div class="muted tiny" id="expiryModalSub">—</div>
+</div>
+<button class="btn" id="btnCloseExpiryModal" style="background:#334155" type="button">Close</button>
+</div>
+<div style="height:12px"></div>
+<div class="row" style="gap:10px; flex-wrap:wrap; align-items:center;">
+<input class="input" id="expirySearch" placeholder="Search / Bincike (name, barcode, SKU)" style="flex:1; min-width:220px"/>
+<span class="pill" id="expiryCountPill">0 items</span>
+</div>
+<div class="row" style="gap:10px; flex-wrap:wrap; align-items:center;">
+<button class="btn" id="btnExportExpiryCsv" type="button">Export CSV</button>
+<div class="muted tiny" id="exportMsg">—</div>
+</div>
 
-
-      <div id="shopErr" class="err hidden" style="margin-top:12px"></div>
-    </section>
-
-  </main>
-
-  <footer>SuperPOSNG © 2026</footer>
-
-<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script defer src="app.js"></script>
-
-  <div id="expiryModalOverlay" class="modal-overlay hidden" style="display:none" role="dialog" aria-modal="true" aria-labelledby="expiryModalTitle">
-    <div class="modal modal-lg">
-      <div class="modal-body">
-        <div class="row" style="justify-content:space-between; align-items:flex-start; gap:12px;">
-          <div>
-            <h3 id="expiryModalTitle" style="margin:0 0 4px 0;">Expiry List</h3>
-            <div class="muted tiny" id="expiryModalSub">—</div>
-          </div>
-          <button id="btnCloseExpiryModal" class="btn" style="background:#334155" type="button">Close</button>
-        </div>
-
-        <div style="height:12px"></div>
-
-        <div class="row" style="gap:10px; flex-wrap:wrap; align-items:center;">
-          <input id="expirySearch" class="input" style="flex:1; min-width:220px" placeholder="Search / Bincike (name, barcode, SKU)"/>
-          <span class="pill" id="expiryCountPill">0 items</span>
-        </div>
-
-        <div style="height:12px"></div>
-
-        <div class="tableWrap" style="max-height:58vh; overflow:auto;">
-          <table class="table">
-            <thead>
-              <tr>
-                <th style="min-width:200px">Product</th>
-                <th>Barcode</th>
-                <th>SKU/PLU</th>
-                <th style="min-width:120px">Expiry</th>
-                <th style="min-width:90px; text-align:right;">Qty</th>
-              </tr>
-            </thead>
-            <tbody id="expiryTbody"></tbody>
-          </table>
-        </div>
-
-        <div class="muted tiny" id="expiryModalHint" style="margin-top:10px;">
+<div style="height:12px"></div>
+<div class="tableWrap" style="max-height:58vh; overflow:auto;">
+<table class="table">
+<thead>
+<tr>
+<th style="min-width:200px">Product</th>
+<th>Barcode</th>
+<th>SKU/PLU</th>
+<th style="min-width:120px">Expiry</th>
+<th style="min-width:90px; text-align:right;">Qty</th>
+</tr>
+</thead>
+<tbody id="expiryTbody"></tbody>
+</table>
+</div>
+<div class="muted tiny" id="expiryModalHint" style="margin-top:10px;">
           Tip: Expired sales are blocked. Expiring-soon items can be sold with warning.
           <br/>Shawara: Ba a yarda a sayar da expired ba. Na kusa karewa ana iya sayarwa da gargadi.
         </div>
-      </div>
-    </div>
-  </div>
-
+</div>
+</div>
+</div>
 </body>
 </html>

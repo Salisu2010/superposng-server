@@ -5,6 +5,21 @@
 
   const LS_TOKEN = "spng_owner_token";
 
+  function jwtPayload(token){
+    try{
+      const p = String(token||"").split(".")[1] || "";
+      const json = atob(p.replace(/-/g,'+').replace(/_/g,'/'));
+      return JSON.parse(decodeURIComponent(escape(json)));
+    }catch(_e){ return {}; }
+  }
+  function isAdminUser(){
+    const t = localStorage.getItem(LS_TOKEN) || "";
+    const p = jwtPayload(t);
+    // owner dashboard: treat owner role as admin
+    return (p && (p.role === "owner" || p.role === "admin")) ? true : false;
+  }
+
+
   const loginCard = $("loginCard");
   const meCard = $("meCard");
   const shopCard = $("shopCard");
@@ -24,20 +39,28 @@
   const btnViewExpired = $("btnViewExpired");
   const btnViewSoon = $("btnViewSoon");
   const expiryModalOverlay = $("expiryModalOverlay");
-  const btnCloseExpiryModal = $("btnExpiryClose");
+  const btnCloseExpiryModal = $("btnCloseExpiryModal");
   const expiryModalTitle = $("expiryModalTitle");
   const expiryModalSub = $("expiryModalSub");
   const expirySearch = $("expirySearch");
-  const expiryCountPill = $("expiryListCount");
-  const expiryTbody = $("expiryTableBody");
+  const expiryCountPill = $("expiryCountPill");
+  const expiryTbody = $("expiryTbody");
+  const btnExportExpiryCsv = $("btnExportExpiryCsv");
+  const exportMsg = $("exportMsg");
   const soonDaysSelect = $("soonDaysSelect");
   const soonDaysCustom = $("soonDaysCustom");
   const btnSaveSoonDays = $("btnSaveSoonDays");
   const soonDaysMsg = $("soonDaysMsg");
   const kpisWrap = $("kpis");
   const trendMeta = $("trendMeta");
-  const chartSalesTrendEl = $("chartSalesTrend");
-  const chartTopProductsEl = $("chartTopProducts");
+  const trendBarsEl = $("trendBars");
+  const topProductsListEl = $("topProductsList");
+  const profitMeta = $("profitMeta");
+  const profitToday = $("profitToday");
+  const profit7d = $("profit7d");
+  const profit30d = $("profit30d");
+  const profitTableBody = $("profitTableBody");
+  const profitNote = $("profitNote");
   const bestSellersWrap = $("bestSellers");
   const slowMovingWrap = $("slowMoving");
   const rangeChips = Array.from(document.querySelectorAll(".chip[data-range]"));
@@ -82,6 +105,36 @@
       openExpiryModal("soon");
     });
   }
+  if (btnExportExpiryCsv) {
+    btnExportExpiryCsv.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const shopId = selectedShopId;
+      if (!shopId) return;
+      const type = currentExpiryType || "expired";
+      try {
+        if (exportMsg) exportMsg.textContent = "Exporting...";
+        const url = `/api/owner/shop/${encodeURIComponent(shopId)}/expiry/export?type=${encodeURIComponent(type)}`;
+        const token = localStorage.getItem(LS_TOKEN) || "";
+        const res = await fetch(url, { headers: token ? { "Authorization": "Bearer " + token } : {} });
+        if (!res.ok) throw new Error("Export failed");
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        const dt = new Date();
+        const stamp = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+        a.href = URL.createObjectURL(blob);
+        a.download = `superposng_${type}_${stamp}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        if (exportMsg) exportMsg.textContent = "Downloaded.";
+      } catch (err) {
+        if (exportMsg) exportMsg.textContent = "Export failed.";
+      }
+    });
+  }
+
+
 
 
   const qProducts = $("qProducts");
@@ -103,9 +156,8 @@
   };
 
   let selectedShopId = "";
+  let currentExpiryType = "expired";
   let salesCache = [];
-  let salesTrendChart = null;
-  let topProductsChart = null;
   let currentRangeDays = 30;
 
   let debtorsCache = [];
@@ -253,6 +305,8 @@
   }
 
   async function openExpiryModal(type) {
+    currentExpiryType = (type || "expired");
+
     __expiryType = (type || "expired").toLowerCase();
     const shopId = String(window.__spng_shopId || "").trim();
     if (!shopId) return;
@@ -391,7 +445,7 @@
          <div style="font-weight:800;margin-bottom:4px">⚠️ An gano kayayyakin da suka expired</div>
          <div class="muted">An hana sayar da expired items. Ka cire expired stock kafin ka sayar.</div>`
       );
-      if (expired > lastExpired) playExpiredBlockSound();
+      if (expired > lastExpired && isAdminUser()) playExpiredBlockSound();
       sessionStorage.setItem("spng_lastExpired_" + shopKey, String(expired));
     } else if (soon > 0) {
       setAlert("warn",
@@ -507,68 +561,100 @@
   }
 
   
-  function destroyChart(ch) {
-    if (ch && typeof ch.destroy === "function") {
-      try { ch.destroy(); } catch (_e) {}
-    }
-    return null;
-  }
-
+  
   function renderSalesTrend(trend, days) {
-    if (!chartSalesTrendEl || typeof Chart === "undefined") return;
     const rows = Array.isArray(trend?.salesByDay) ? trend.salesByDay : [];
-    const labels = rows.map(r => (r.day || "").slice(5)); // MM-DD
-    const values = rows.map(r => Number(r.revenue || 0));
-
-    salesTrendChart = destroyChart(salesTrendChart);
-    salesTrendChart = new Chart(chartSalesTrendEl, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [{ label: "Revenue", data: values, tension: 0.35, fill: true }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { maxTicksLimit: 8 } },
-          y: { ticks: { callback: (v) => money(v) } }
-        }
-      }
-    });
-
     if (trendMeta) trendMeta.textContent = `Last ${days} days`;
-  }
 
-  function renderTopProductsChart(perf) {
-  if (!window.Chart) {
-    const el = document.getElementById("topProductsChartWrap");
-    if (el) {
-      el.innerHTML = `<div style="opacity:.8;padding:12px">Charts disabled (CSP). Showing Top list only.</div>`;
+    if (!trendBarsEl) return;
+    trendBarsEl.innerHTML = "";
+    if (!rows.length) {
+      trendBarsEl.innerHTML = `<div class="muted small" style="padding:8px">No trend data</div>`;
+      return;
     }
-    return;
-  }
 
-    if (!chartTopProductsEl || typeof Chart === "undefined") return;
-    const top = Array.isArray(perf?.topProducts) ? perf.topProducts.slice(0, 6) : [];
-    const labels = top.map(x => (x.name || x.key || "").slice(0, 14));
-    const values = top.map(x => Number(x.qty || 0));
+    const max = Math.max(1, ...rows.map(r => Number(r.revenue || 0)));
+    // Show the most recent 12 points for readability (still respects 7/30/90 range)
+    const view = rows.slice(-12);
 
-    topProductsChart = destroyChart(topProductsChart);
-    topProductsChart = new Chart(chartTopProductsEl, {
-      type: "bar",
-      data: { labels, datasets: [{ label: "Qty", data: values }] },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: true } }
-      }
+    view.forEach(r => {
+      const day = String(r.day || "");
+      const label = day ? day.slice(5) : ""; // MM-DD
+      const revenue = Number(r.revenue || 0);
+      const pct = Math.max(2, Math.round((revenue / max) * 100));
+
+      const row = document.createElement("div");
+      row.className = "trendRow";
+      row.innerHTML = `
+        <div class="trendDate">${escapeHtml(label)}</div>
+        <div class="trendBarWrap"><div class="trendBar" style="width:${pct}%"></div></div>
+        <div class="trendVal">${money(revenue)}</div>
+      `;
+      trendBarsEl.appendChild(row);
     });
   }
 
-  function renderMiniLists(perf) {
+  function renderTopProducts(perf) {
+    if (!topProductsListEl) return;
+    const top = Array.isArray(perf?.topProducts) ? perf.topProducts.slice(0, 10) : [];
+    topProductsListEl.innerHTML = "";
+    if (!top.length) {
+      topProductsListEl.innerHTML = `<div class="muted small" style="padding:8px">No top products</div>`;
+      return;
+    }
+
+    top.forEach((x) => {
+      const name = (x.name || x.key || "").trim() || "—";
+      const qty = Number(x.qty || 0);
+      const revenue = Number(x.revenue || 0);
+
+      const row = document.createElement("div");
+      row.className = "tpRow";
+      row.innerHTML = `
+        <div class="tpName">${escapeHtml(name)}</div>
+        <div class="tpMeta">${money(revenue)}</div>
+        <div class="tpQty">${qty}</div>
+      `;
+      topProductsListEl.appendChild(row);
+    });
+  }
+
+  function renderProfit(profit) {
+    // profit payload shape: { summary:{today, d7, d30, currency, hasCost}, byDay:[{day,revenue,profit,salesCount}] }
+    try {
+      const cur = (profit?.summary?.currency || "").trim();
+      const hasCost = !!profit?.summary?.hasCost;
+      if (profitNote) {
+        profitNote.textContent = hasCost ? "" : "Note: Profit requires cost price. Showing revenue; profit may be 0 if cost is missing.";
+      }
+
+      if (profitMeta) profitMeta.textContent = `Updated: ${new Date().toLocaleString()}`;
+
+      if (profitToday) profitToday.textContent = money(profit?.summary?.today ?? 0);
+      if (profit7d) profit7d.textContent = money(profit?.summary?.d7 ?? 0);
+      if (profit30d) profit30d.textContent = money(profit?.summary?.d30 ?? 0);
+
+      if (!profitTableBody) return;
+      profitTableBody.innerHTML = "";
+      const rows = Array.isArray(profit?.byDay) ? profit.byDay.slice(-14).reverse() : [];
+      if (!rows.length) {
+        profitTableBody.innerHTML = `<tr><td colspan="4" class="muted small">No profit data</td></tr>`;
+        return;
+      }
+
+      rows.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${escapeHtml(String(r.day || ""))}</td>
+          <td style="text-align:right">${money(r.revenue || 0)}</td>
+          <td style="text-align:right">${money(r.profit || 0)}</td>
+          <td style="text-align:right">${Number(r.salesCount || 0)}</td>
+        `;
+        profitTableBody.appendChild(tr);
+      });
+    } catch (_e) {}
+  }
+function renderMiniLists(perf) {
     if (!bestSellersWrap || !slowMovingWrap) return;
     const best = Array.isArray(perf?.topProducts) ? perf.topProducts.slice(0, 5) : [];
     const slow = Array.isArray(perf?.slowProducts) ? perf.slowProducts.slice(0, 5) : [];
@@ -618,8 +704,15 @@
 
     setKpis(ov.kpi || {});
     renderSalesTrend(ov.trend || {}, days);
-    renderTopProductsChart(ov.productPerformance || {});
+    renderTopProducts(ov.productPerformance || {});
     renderMiniLists(ov.productPerformance || {});
+    // Profit + daily table
+    try {
+      const ins = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/insights?days=${encodeURIComponent(days)}`);
+      if (ins && ins.ok !== false) {
+        renderProfit(ins.profit || {});
+      }
+    } catch(_e) {}
   }
 
 async function loadOverview() {
