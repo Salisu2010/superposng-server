@@ -136,6 +136,67 @@ r.post("/products", (req, res) => {
   ensureDbArrays(db);
 
   const now = Date.now();
+
+  // ✅ EXPIRED BLOCK (server-level protection)
+  // Professional policy:
+  // - Expired: BLOCK SELL (English + Hausa message)
+  // - Expiring soon: ALLOW but return warnings (client may display)
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+
+  const expiredItems = [];
+  const expiringSoonItems = [];
+
+  // Determine expiring-soon window from shop setting if present (default 90 days).
+  let soonDaysSetting = 90;
+  try {
+    const shop = (db.shops || []).find((s) => s.shopId === shopId);
+    const sd = shop ? toInt(shop.expirySoonDays, 0) : 0;
+    if (sd > 0 && sd <= 365) soonDaysSetting = sd;
+  } catch (_e) {}
+
+  const soonMs = soonDaysSetting * 24 * 60 * 60 * 1000;
+
+  function itemLabel(it) {
+    return trim(it?.productName || it?.name || it?.code || it?.barcode || it?.sku || it?.plu || it?.productId || "");
+  }
+
+  try {
+    const items = Array.isArray(sale.items) ? sale.items : [];
+    for (const it of items) {
+      const p = findProductForItem(it);
+      if (!p) continue;
+      const d = expiryDateFromProduct(p);
+      if (!d) continue;
+
+      const t = d.getTime();
+      if (t < today0.getTime()) {
+        expiredItems.push({
+          name: trim(p.name) || itemLabel(it) || "Item",
+          code: trim(p.barcode) || trim(p.sku) || trim(p.plu) || trim(p.productId || p.id) || itemLabel(it),
+          expiryDate: ymdFromDate(d)
+        });
+      } else if (t <= (today0.getTime() + soonMs)) {
+        expiringSoonItems.push({
+          name: trim(p.name) || itemLabel(it) || "Item",
+          code: trim(p.barcode) || trim(p.sku) || trim(p.plu) || trim(p.productId || p.id) || itemLabel(it),
+          expiryDate: ymdFromDate(d)
+        });
+      }
+    }
+  } catch (_e) {}
+
+  if (expiredItems.length > 0) {
+    return res.status(409).json({
+      ok: false,
+      code: "EXPIRED_BLOCK",
+      messageEn: "Sale blocked: expired product(s) found. Please remove expired items before checkout.",
+      messageHa: "An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.",
+      items: expiredItems
+    });
+  }
+
+
   let upserts = 0;
 
   for (const it of items) {
@@ -341,6 +402,65 @@ function extractSaleFromBody(body) {
   return null;
 }
 
+
+function parseExpiryAny(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "number" && Number.isFinite(v)) {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const s = trim(v);
+  if (!s) return null;
+
+  // YYYYMMDD (common from Android/local)
+  const m8 = /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+  if (m8) {
+    const d = new Date(`${m8[1]}-${m8[2]}-${m8[3]}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // YYYY-MM-DD
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m) {
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const n = Number(s);
+  if (Number.isFinite(n) && s.length >= 10) {
+    const d = new Date(n);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function expiryDateFromProduct(p) {
+  return (
+    parseExpiryAny(p?.expiryDate) ||
+    parseExpiryAny(p?.expiringDate) ||
+    parseExpiryAny(p?.expDate) ||
+    parseExpiryAny(p?.expiry) ||
+    parseExpiryAny(p?.exp) ||
+    null
+  );
+}
+
+function ymdFromDate(d) {
+  if (!d) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${da}`;
+}
+
+function daysBetween(a, b) {
+  const ms = 24 * 60 * 60 * 1000;
+  return Math.floor((a - b) / ms);
+}
+
+
 const SALE_PATHS = [
   "/sale",
   "/sale/create",
@@ -523,6 +643,10 @@ r.post(SALE_PATHS, (req, res) => {
     saved: true,
     stock: { deductedItems, notFoundItems, qtyTotal: touched },
     serverTime: now,
+    warnings: {
+      expiringSoonDays: soonDaysSetting,
+      expiringSoon: expiringSoonItems
+    }
   });
 });
 

@@ -20,6 +20,20 @@
 
   const shopTitle = $("shopTitle");
   const shopMeta = $("shopMeta");
+  const alertBar = $("alertBar");
+  const btnViewExpired = $("btnViewExpired");
+  const btnViewSoon = $("btnViewSoon");
+  const expiryModalOverlay = $("expiryModalOverlay");
+  const btnCloseExpiryModal = $("btnCloseExpiryModal");
+  const expiryModalTitle = $("expiryModalTitle");
+  const expiryModalSub = $("expiryModalSub");
+  const expirySearch = $("expirySearch");
+  const expiryCountPill = $("expiryCountPill");
+  const expiryTbody = $("expiryTbody");
+  const soonDaysSelect = $("soonDaysSelect");
+  const soonDaysCustom = $("soonDaysCustom");
+  const btnSaveSoonDays = $("btnSaveSoonDays");
+  const soonDaysMsg = $("soonDaysMsg");
   const kpisWrap = $("kpis");
   const trendMeta = $("trendMeta");
   const chartSalesTrendEl = $("chartSalesTrend");
@@ -71,10 +85,164 @@
     return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+
+  function playExpiredBlockSound() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.value = 0.0001;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      // quick beep pattern
+      const t0 = ctx.currentTime;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.6, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+      g.gain.exponentialRampToValueAtTime(0.6, t0 + 0.24);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.40);
+      o.stop(t0 + 0.45);
+      o.onended = () => ctx.close().catch(() => {});
+    } catch (_e) {}
+  }
+
+  function setAlert(kind, html) {
+    if (!alertBar) return;
+    if (!html) {
+      alertBar.classList.add("hidden");
+      alertBar.innerHTML = "";
+      return;
+    }
+    alertBar.classList.remove("hidden");
+    alertBar.classList.remove("warn");
+    if (kind === "warn") alertBar.classList.add("warn");
+    alertBar.innerHTML = html;
+  }
+
   function escapeHtml(str) {
     return String(str || "").replace(/[&<>"']/g, (s) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[s])
     );
+  }
+
+
+  // -----------------------------
+  // Expiry list modal (Expired / Expiring Soon)
+  // -----------------------------
+  let __expiryItems = [];
+  let __expiryType = "expired";
+
+  function showExpiryButtons(expiredCount, soonCount) {
+    if (btnViewExpired) btnViewExpired.classList.toggle("hidden", !(Number(expiredCount) > 0));
+    if (btnViewSoon) btnViewSoon.classList.toggle("hidden", !(Number(soonCount) > 0));
+  }
+
+  function closeExpiryModal() {
+    if (!expiryModalOverlay) return;
+    expiryModalOverlay.classList.add("hidden");
+    __expiryItems = [];
+    if (expirySearch) expirySearch.value = "";
+    if (expiryTbody) expiryTbody.innerHTML = "";
+    if (expiryCountPill) expiryCountPill.textContent = "0 items";
+  }
+
+  function matchesExpirySearch(it, q) {
+    if (!q) return true;
+    const s = (q || "").toLowerCase().trim();
+    const hay = [
+      it?.name, it?.barcode, it?.sku, it?.productId
+    ].map(v => String(v || "").toLowerCase()).join(" ");
+    return hay.includes(s);
+  }
+
+  function renderExpiryTable() {
+    if (!expiryTbody) return;
+    const q = (expirySearch?.value || "").trim();
+    const rows = __expiryItems.filter(it => matchesExpirySearch(it, q));
+    expiryTbody.innerHTML = "";
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 5;
+      td.className = "muted";
+      td.style.padding = "14px 10px";
+      td.textContent = q ? "No matching results / Babu sakamakon da ya dace" : "No data / Babu bayanai";
+      tr.appendChild(td);
+      expiryTbody.appendChild(tr);
+    } else {
+      for (const it of rows) {
+        const tr = document.createElement("tr");
+
+        const tdName = document.createElement("td");
+        tdName.innerHTML = `<div style="font-weight:700">${escapeHtml(it.name || "—")}</div>
+          <div class="muted tiny">${escapeHtml(it.productId || "")}</div>`;
+        tr.appendChild(tdName);
+
+        const tdBar = document.createElement("td");
+        tdBar.textContent = it.barcode || "—";
+        tr.appendChild(tdBar);
+
+        const tdSku = document.createElement("td");
+        tdSku.textContent = it.sku || "—";
+        tr.appendChild(tdSku);
+
+        const tdExp = document.createElement("td");
+        const dl = Number(it.daysLeft ?? 0);
+        tdExp.innerHTML = `<div style="font-weight:700">${escapeHtml(it.expiryDate || "—")}</div>
+          <div class="muted tiny">${dl < 0 ? (Math.abs(dl) + " days ago") : (dl + " days left")}</div>`;
+        tr.appendChild(tdExp);
+
+        const tdQty = document.createElement("td");
+        tdQty.style.textAlign = "right";
+        tdQty.textContent = String(it.stock ?? 0);
+        tr.appendChild(tdQty);
+
+        expiryTbody.appendChild(tr);
+      }
+    }
+
+    if (expiryCountPill) {
+      const n = rows.length;
+      expiryCountPill.textContent = `${n} item${n === 1 ? "" : "s"}`;
+    }
+  }
+
+  async function openExpiryModal(type) {
+    __expiryType = (type || "expired").toLowerCase();
+    const shopId = String(window.__spng_shopId || "").trim();
+    if (!shopId) return;
+
+    const isExpired = (__expiryType === "expired");
+    if (expiryModalTitle) {
+      expiryModalTitle.textContent = isExpired ? "Expired Products / Kayayyakin da suka expired" : "Expiring Soon / Kayayyaki na kusa karewa";
+    }
+    if (expiryModalSub) expiryModalSub.textContent = "Loading…";
+
+    if (expiryModalOverlay) expiryModalOverlay.classList.remove("hidden");
+
+    try {
+      const data = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/expiry?type=${encodeURIComponent(isExpired ? "expired" : "soon")}`);
+      __expiryItems = Array.isArray(data.items) ? data.items : [];
+      const shopName = (data.shop && (data.shop.shopName || data.shop.name)) || "";
+      const soonDays = Number(data.soonDays || 90);
+      const count = Number(data.count || __expiryItems.length || 0);
+      if (expiryModalSub) {
+        expiryModalSub.textContent = isExpired
+          ? `Shop: ${shopName || shopId} • ${count} items`
+          : `Shop: ${shopName || shopId} • ${count} items • Soon window: ${soonDays} days`;
+      }
+      renderExpiryTable();
+      if (expirySearch) expirySearch.focus();
+    } catch (e) {
+      if (expiryModalSub) expiryModalSub.textContent = String(e?.message || "Failed to load");
+      __expiryItems = [];
+      renderExpiryTable();
+    }
   }
 
   function debounce(fn, ms) {
@@ -167,6 +335,38 @@
       { k: "Expiring Soon", v: kpi?.expiringSoon ?? 0, tone: "warn" },
       { k: "Expired", v: kpi?.expired ?? 0, tone: "danger" },
     ];
+
+    // Bilingual alert bar + sound for expired
+    const expired = Number(kpi?.expired ?? 0);
+    const soon = Number(kpi?.expiringSoon ?? 0);
+    showExpiryButtons(expired, soon);
+    const shopKey = (window.__spng_shopId || "shop") + "";
+    const lastExpired = Number(sessionStorage.getItem("spng_lastExpired_" + shopKey) || "0");
+
+    if (expired > 0) {
+      setAlert("danger",
+        `<div style="font-weight:800;margin-bottom:4px">⚠️ Expired products detected</div>
+         <div class="muted">Sale blocked for expired items. Please remove expired stock before selling.</div>
+         <div style="height:6px"></div>
+         <div style="font-weight:800;margin-bottom:4px">⚠️ An gano kayayyakin da suka expired</div>
+         <div class="muted">An hana sayar da expired items. Ka cire expired stock kafin ka sayar.</div>`
+      );
+      if (expired > lastExpired) playExpiredBlockSound();
+      sessionStorage.setItem("spng_lastExpired_" + shopKey, String(expired));
+    } else if (soon > 0) {
+      setAlert("warn",
+        `<div style="font-weight:800;margin-bottom:4px">⏳ Products expiring soon</div>
+         <div class="muted">Some items will expire soon. Please discount or prioritize selling them.</div>
+         <div style="height:6px"></div>
+         <div style="font-weight:800;margin-bottom:4px">⏳ Kayayyaki na kusa karewa</div>
+         <div class="muted">Wasu kaya suna kusa karewa. Ka fifita sayar da su ko ka yi rangwame.</div>`
+      );
+    } else {
+      setAlert("", "");
+      sessionStorage.setItem("spng_lastExpired_" + shopKey, "0");
+    }
+
+
 
     // Keep it neat: 6 KPI cards (2 rows on desktop)
     items.forEach((it) => {
@@ -349,10 +549,24 @@
     const days = Number(daysOverride || currentRangeDays || 30) || 30;
     currentRangeDays = days;
 
-    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3&soonDays=30`);
+    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3`);
     const shop = ov.shop || { shopId };
     shopTitle.textContent = shop.shopName || "Shop";
     shopMeta.textContent = `Shop ID: ${shop.shopId || shopId}${shop.shopCode ? " • Code: " + shop.shopCode : ""}`;
+
+
+    // Expiring-soon setting UI
+    try {
+      const sd = Number(ov?.range?.soonDays || 90) || 90;
+      if (soonDaysSelect) {
+        const preset = ["30","60","90"].includes(String(sd)) ? String(sd) : "custom";
+        soonDaysSelect.value = preset;
+      }
+      if (soonDaysCustom) {
+        soonDaysCustom.value = (["30","60","90"].includes(String(sd))) ? "" : String(sd);
+      }
+      if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${sd} days`;
+    } catch (_e) {}
 
     setKpis(ov.kpi || {});
     renderSalesTrend(ov.trend || {}, days);
@@ -604,12 +818,52 @@ async function loadOverview() {
     showLogin();
   }
 
+
+  async function saveSoonDaysSetting() {
+    const shopId = selectedShopId;
+    if (!shopId) return;
+    let val = 0;
+    const sel = trim(soonDaysSelect?.value || "");
+    if (sel === "custom") val = parseInt(trim(soonDaysCustom?.value || "0"), 10);
+    else val = parseInt(sel || "0", 10);
+
+    if (!Number.isFinite(val) || val <= 0 || val > 365) {
+      if (soonDaysMsg) soonDaysMsg.textContent = "Please enter 1 - 365 days";
+      return;
+    }
+
+    try {
+      if (btnSaveSoonDays) btnSaveSoonDays.disabled = true;
+      if (soonDaysMsg) soonDaysMsg.textContent = "Saving...";
+      await api(`/api/owner/shop/${encodeURIComponent(shopId)}/settings/expirySoonDays`, {
+        method: "POST",
+        body: JSON.stringify({ soonDays: val })
+      });
+      if (soonDaysMsg) soonDaysMsg.textContent = `Saved: ${val} days`;
+      await refreshOverview(currentRangeDays || 30);
+    } catch (e) {
+      if (soonDaysMsg) soonDaysMsg.textContent = e.message || "Save failed";
+    } finally {
+      if (btnSaveSoonDays) btnSaveSoonDays.disabled = false;
+    }
+  }
+
+
   // Events
   btnLogin?.addEventListener("click", doLogin);
   $("password")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") doLogin();
   });
   btnLogout?.addEventListener("click", logout);
+  btnBack?.addEventListener("click", () => {
+    selectedShopId = "";
+    showMe();
+  });
+  btnSaveSoonDays?.addEventListener("click", saveSoonDaysSetting);
+  soonDaysSelect?.addEventListener("change", () => {
+    const v = trim(soonDaysSelect?.value || "");
+    if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", v !== "custom");
+  });
 
   tabBtns.forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   btnBack?.addEventListener("click", () => {

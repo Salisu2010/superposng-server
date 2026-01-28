@@ -148,3 +148,25 @@ footer{opacity:.7;text-align:center;padding:20px 0}
   background: rgba(239,68,68,0.14);
   border-color: rgba(239,68,68,0.35);
 }
+
+
+.alert{margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(239,68,68,.12)}
+.alert.warn{background:rgba(245,158,11,.12)}
+.alert.hidden{display:none}
+.settingsRow{margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.10);background:rgba(59,130,246,.08)}
+.input{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(17,26,51,.8);color:var(--text);outline:none}
+.input:focus{border-color:rgba(59,130,246,.6)}
+
+
+.modal.modal-lg{
+  width:min(860px,100%);
+}
+.btn.warn{background:#f59e0b}
+.btn.danger{background:#ef4444}
+.pill{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:7px 10px;border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.12);
+  font-size:12px;opacity:.95;
+}

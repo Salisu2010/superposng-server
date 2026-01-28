@@ -368,7 +368,12 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
   const lowStockThreshold = Math.max(0, asInt(req.query.lowStock || 3, 3));
   const lowStockCount = products.filter(p => asInt(p.stock ?? p.quantity ?? 0, 0) <= lowStockThreshold).length;
 
-  const soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 30, 30), 365));
+  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  // Default: 90 days (3 months). Allow per-shop override.
+  if (!soonDays || soonDays <= 0) {
+    const sds = asInt(shop?.expirySoonDays || 0, 0);
+    soonDays = (sds > 0 && sds <= 365) ? sds : 90;
+  }
 
   function parseExpiry(v) {
     if (v === null || v === undefined) return null;
@@ -712,6 +717,139 @@ r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
   } catch (e) {
     return res.status(500).json({ ok: false, error: "Server error" });
   }
+});
+
+
+
+// -----------------------------
+// Expiry lists + settings
+// -----------------------------
+r.get("/shop/:shopId/expiry", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const type = trim(req.query.type || "expired").toLowerCase();
+  const db = readDB();
+  const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
+
+  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  if (!soonDays || soonDays <= 0) {
+    const sds = asInt(shop?.expirySoonDays || 0, 0);
+    soonDays = (sds > 0 && sds <= 365) ? sds : 90;
+  }
+
+  function parseExpiry(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "number" && Number.isFinite(v)) {
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const s = String(v).trim();
+    if (!s) return null;
+
+    const m8 = /^(\d{4})(\d{2})(\d{2})$/.exec(s);
+    if (m8) {
+      const d = new Date(`${m8[1]}-${m8[2]}-${m8[3]}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+    if (m) {
+      const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    const n = Number(s);
+    if (Number.isFinite(n) && s.length >= 10) {
+      const d = new Date(n);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function expiryDateFromProduct(p) {
+    return (
+      parseExpiry(p.expiryDate) ||
+      parseExpiry(p.expiringDate) ||
+      parseExpiry(p.expDate) ||
+      parseExpiry(p.expiry) ||
+      parseExpiry(p.exp) ||
+      null
+    );
+  }
+
+  const products = (db.products || []).filter(p => pickShopId(p) === shopId);
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const soonMs = soonDays * 24 * 60 * 60 * 1000;
+
+  const list = [];
+  for (const p of products) {
+    const d = expiryDateFromProduct(p);
+    if (!d) continue;
+    const t = d.getTime();
+    const isExpired = t < today0.getTime();
+    const isSoon = (!isExpired) && t <= (today0.getTime() + soonMs);
+
+    if (type === "expired" && !isExpired) continue;
+    if ((type === "soon" || type === "expiring" || type === "expiringsoon") && !isSoon) continue;
+
+    const daysLeft = Math.floor((t - today0.getTime()) / (24 * 60 * 60 * 1000));
+    list.push({
+      productId: trim(p.productId || p.id),
+      name: trim(p.name),
+      barcode: trim(p.barcode),
+      sku: trim(p.sku),
+      stock: asInt(p.stock ?? p.quantity ?? 0, 0),
+      price: asNum(p.price ?? p.sellingPrice ?? p.unitPrice ?? 0, 0),
+      expiryDate: d.toISOString().slice(0, 10),
+      daysLeft
+    });
+  }
+
+  // expired: older first (most negative daysLeft)
+  // soon: earliest expiry first
+  list.sort((a, b) => (a.daysLeft - b.daysLeft));
+
+  return res.json({
+    ok: true,
+    shop: { shopId: shop.shopId, shopName: shop.shopName || shop.name || "" },
+    type,
+    soonDays,
+    count: list.length,
+    items: list
+  });
+});
+
+r.post("/shop/:shopId/settings/expirySoonDays", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const soonDays = Math.max(1, Math.min(asInt(req.body?.soonDays || req.body?.expirySoonDays || 0, 0), 365));
+  if (!soonDays) return res.status(400).json({ ok: false, error: "soonDays required" });
+
+  const db = readDB();
+  if (!Array.isArray(db.shops)) db.shops = [];
+  const idx = db.shops.findIndex(s => s.shopId === shopId);
+
+  if (idx >= 0) {
+    db.shops[idx] = { ...db.shops[idx], expirySoonDays: soonDays, updatedAt: Date.now() };
+  } else {
+    db.shops.push({ shopId, expirySoonDays: soonDays, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+
+  writeDB(db);
+  return res.json({ ok: true, shopId, expirySoonDays: soonDays });
 });
 
 export default r;
