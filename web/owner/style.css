@@ -13,7 +13,44 @@ input,select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rg
 .row{display:flex;gap:10px;align-items:center}
 .muted{color:rgba(238,241,255,.70);font-size:13px}
 .err{color:#ffb4b4;margin-top:8px}
-.hidden{display:none}
+.hidden{display:none !important;}
+
+/* Modal (Expiry List) */
+.modalOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 9999;
+}
+.modalCard{
+  width: min(980px, 96vw);
+  max-height: 86vh;
+  overflow: auto;
+  background: rgba(15,23,42,0.96);
+  border: 1px solid rgba(148,163,184,0.25);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+}
+.modalHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(148,163,184,0.18);
+}
+.modalTitle{
+  font-weight: 700;
+  font-size: 18px;
+}
+.modalBody{ padding: 14px 16px 16px; }
+.modalTools{ display:flex; gap:10px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+.modalTools .input{ flex: 1 1 420px; }
+.tableWrap{ overflow:auto; border: 1px solid rgba(148,163,184,0.16); border-radius: 12px; }
+.expiryTip{ opacity:0.9; font-size: 12px; margin-top: 10px; }
 .shop{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:#0f1732;margin-top:8px}
 
 .shopsList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}

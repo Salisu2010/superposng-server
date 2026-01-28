@@ -24,12 +24,12 @@
   const btnViewExpired = $("btnViewExpired");
   const btnViewSoon = $("btnViewSoon");
   const expiryModalOverlay = $("expiryModalOverlay");
-  const btnCloseExpiryModal = $("btnCloseExpiryModal");
+  const btnCloseExpiryModal = $("btnExpiryClose");
   const expiryModalTitle = $("expiryModalTitle");
   const expiryModalSub = $("expiryModalSub");
   const expirySearch = $("expirySearch");
-  const expiryCountPill = $("expiryCountPill");
-  const expiryTbody = $("expiryTbody");
+  const expiryCountPill = $("expiryListCount");
+  const expiryTbody = $("expiryTableBody");
   const soonDaysSelect = $("soonDaysSelect");
   const soonDaysCustom = $("soonDaysCustom");
   const btnSaveSoonDays = $("btnSaveSoonDays");
@@ -41,6 +41,47 @@
   const bestSellersWrap = $("bestSellers");
   const slowMovingWrap = $("slowMoving");
   const rangeChips = Array.from(document.querySelectorAll(".chip[data-range]"));
+
+  function setExpiryOverlayVisible(visible){
+    if(!expiryModalOverlay) return;
+    expiryModalOverlay.classList.toggle("hidden", !visible);
+    // Hard-enforce display so even if CSS is cached/broken the modal won't block UI
+    expiryModalOverlay.style.display = visible ? "flex" : "none";
+    document.body.style.overflow = visible ? "hidden" : "";
+  }
+
+  // Always start hidden (prevents accidental blocking on login page)
+  setExpiryOverlayVisible(false);
+
+  // Close handlers
+  if(btnCloseExpiryModal){
+    btnCloseExpiryModal.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeExpiryModal();
+    });
+  }
+  if(expiryModalOverlay){
+    expiryModalOverlay.addEventListener("click", (e) => {
+      if(e.target === expiryModalOverlay) closeExpiryModal();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if(e.key === "Escape") closeExpiryModal();
+  });
+
+  // Open handlers (only when user clicks)
+  if(btnViewExpired){
+    btnViewExpired.addEventListener("click", (e) => {
+      e.preventDefault();
+      openExpiryModal("expired");
+    });
+  }
+  if(btnViewSoon){
+    btnViewSoon.addEventListener("click", (e) => {
+      e.preventDefault();
+      openExpiryModal("soon");
+    });
+  }
 
 
   const qProducts = $("qProducts");
@@ -143,8 +184,7 @@
   }
 
   function closeExpiryModal() {
-    if (!expiryModalOverlay) return;
-    expiryModalOverlay.classList.add("hidden");
+    setExpiryOverlayVisible(false);
     __expiryItems = [];
     if (expirySearch) expirySearch.value = "";
     if (expiryTbody) expiryTbody.innerHTML = "";
@@ -223,7 +263,7 @@
     }
     if (expiryModalSub) expiryModalSub.textContent = "Loading…";
 
-    if (expiryModalOverlay) expiryModalOverlay.classList.remove("hidden");
+    setExpiryOverlayVisible(true);
 
     try {
       const data = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/expiry?type=${encodeURIComponent(isExpired ? "expired" : "soon")}`);
