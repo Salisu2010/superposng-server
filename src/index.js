@@ -27,7 +27,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const WEB_DIR = path.join(__dirname, "../web");
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "default-src": ["'self'"],
+      "script-src": ["'self'", "https://cdn.jsdelivr.net"],
+      "script-src-elem": ["'self'", "https://cdn.jsdelivr.net"],
+      "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      "img-src": ["'self'", "data:"],
+      "font-src": ["'self'", "data:"],
+      "connect-src": ["'self'"],
+      "object-src": ["'none'"],
+      "base-uri": ["'self'"],
+      "frame-ancestors": ["'self'"]
+    }
+  }
+}));
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
