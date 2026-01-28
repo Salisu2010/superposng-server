@@ -207,3 +207,53 @@ footer{opacity:.7;text-align:center;padding:20px 0}
   border:1px solid rgba(255,255,255,.12);
   font-size:12px;opacity:.95;
 }
+
+
+
+/* --- FIX: Expiry modal overlay + hidden class (override) --- */
+.hidden{ display:none !important; }
+
+.modal-overlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.modal{
+  width: min(980px, 96vw);
+  max-height: min(80vh, 720px);
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(10, 18, 40, 0.92);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+}
+
+.modal .modal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.modal .modal-body{
+  padding: 12px 14px 16px;
+  overflow:auto;
+  max-height: calc(min(80vh, 720px) - 54px);
+}
+
+.modal .btn-close{
+  cursor:pointer;
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+
+.modal-overlay * { pointer-events: auto; }
+/* --- END FIX --- */

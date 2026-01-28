@@ -542,6 +542,14 @@
   }
 
   function renderTopProductsChart(perf) {
+  if (!window.Chart) {
+    const el = document.getElementById("topProductsChartWrap");
+    if (el) {
+      el.innerHTML = `<div style="opacity:.8;padding:12px">Charts disabled (CSP). Showing Top list only.</div>`;
+    }
+    return;
+  }
+
     if (!chartTopProductsEl || typeof Chart === "undefined") return;
     const top = Array.isArray(perf?.topProducts) ? perf.topProducts.slice(0, 6) : [];
     const labels = top.map(x => (x.name || x.key || "").slice(0, 14));
