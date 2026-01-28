@@ -39,7 +39,8 @@
   const btnViewExpired = $("btnViewExpired");
   const btnViewSoon = $("btnViewSoon");
   const expiryModalOverlay = $("expiryModalOverlay");
-  const btnCloseExpiryModal = $("btnCloseExpiryModal");
+    if (expiryModalOverlay) { expiryModalOverlay.style.display = "none"; expiryModalOverlay.setAttribute("aria-hidden","true"); }
+const btnCloseExpiryModal = $("btnCloseExpiryModal");
   const expiryModalTitle = $("expiryModalTitle");
   const expiryModalSub = $("expiryModalSub");
   const expirySearch = $("expirySearch");
