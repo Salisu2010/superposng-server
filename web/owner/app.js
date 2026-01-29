@@ -251,7 +251,6 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   // -----------------------------
   let __expiryItems = [];
   let __expiryType = "expired";
-  let __expiryWindowDays = 30;
 
   function showExpiryButtons(expiredCount, soonCount) {
     const ex = Number(expiredCount) || 0;
@@ -286,31 +285,11 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     return hay.includes(s);
   }
 
-    function renderExpiryTable() {
+  function renderExpiryTable() {
     if (!expiryTbody) return;
-
-    const q = String((expirySearch && expirySearch.value) || "").trim();
-    let rows = __expiryItems.filter(it => matchesExpirySearch(it, q));
-
-    // Sorting:
-    // - Expired: oldest expired first (most negative daysLeft)
-    // - Expiring soon: closest to expiry first (lowest positive daysLeft)
-    rows.sort((a, b) => {
-      const da = Number(a.daysLeft ?? 0);
-      const db = Number(b.daysLeft ?? 0);
-
-      if (__expiryType === "expired") {
-        return da - db; // e.g. -30 comes before -2
-      }
-
-      // soon list
-      const aa = (da < 0) ? 999999 : da;
-      const bb = (db < 0) ? 999999 : db;
-      return aa - bb;
-    });
-
+    const q = (expirySearch?.value || "").trim();
+    const rows = __expiryItems.filter(it => matchesExpirySearch(it, q));
     expiryTbody.innerHTML = "";
-
     if (!rows.length) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
@@ -323,16 +302,6 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     } else {
       for (const it of rows) {
         const tr = document.createElement("tr");
-        const dlNum = Number(it.daysLeft ?? 0);
-
-        // Highlight rows for quick scanning
-        if (dlNum < 0 || __expiryType === "expired") {
-          tr.classList.add("row-expired");
-        } else {
-          if (dlNum <= 7) tr.classList.add("row-soon-critical");
-          else if (dlNum <= 14) tr.classList.add("row-soon-warn");
-          else tr.classList.add("row-soon-info");
-        }
 
         const tdName = document.createElement("td");
         tdName.innerHTML = `<div style="font-weight:700">${escapeHtml(it.name || "—")}</div>
@@ -348,7 +317,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
         tr.appendChild(tdSku);
 
         const tdExp = document.createElement("td");
-        const dl = dlNum;
+        const dl = Number(it.daysLeft ?? 0);
         tdExp.innerHTML = `<div style="font-weight:700">${escapeHtml(it.expiryDate || "—")}</div>
           <div class="muted tiny">${dl < 0 ? (Math.abs(dl) + " days ago") : (dl + " days left")}</div>`;
         tr.appendChild(tdExp);
@@ -395,7 +364,6 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
       __expiryItems = Array.isArray(data.items) ? data.items : [];
       const shopName = (data.shop && (data.shop.shopName || data.shop.name)) || "";
       const soonDays = Number(data.soonDays || 90);
-      __expiryWindowDays = soonDays;
       const count = Number(data.count || __expiryItems.length || 0);
       if (expiryModalSub) {
         expiryModalSub.textContent = isExpired
@@ -483,6 +451,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     function onKey(e) { if (e.key === "Escape") close(); }
     overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
     overlay.querySelector(".modal-close").addEventListener("click", close);
+    overlay.querySelectorAll("[data-close]").forEach((b)=>b.addEventListener("click", close));
     document.addEventListener("keydown", onKey);
     return { overlay, close };
   }
@@ -987,8 +956,8 @@ async function loadOverview() {
       e.preventDefault();
       err.textContent = "";
       const amount = Number(amountEl.value || 0);
-      const method = String(modal.querySelector("#payMethod").value || "CASH");
-      const note = String(modal.querySelector("#payNote").value || "");
+      const method = String(root.querySelector("#payMethod").value || "CASH");
+      const note = String(root.querySelector("#payNote").value || "");
       if (!amount || amount <= 0) {
         err.textContent = "Enter a valid amount.";
         return;

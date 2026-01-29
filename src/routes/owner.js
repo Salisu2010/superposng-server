@@ -836,7 +836,9 @@ r.get("/shop/:shopId/expiry", authMiddleware, (req, res) => {
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
 
-  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  let soonDays = asInt(req.query.soonDays || 0, 0);
+  if (soonDays > 365) soonDays = 365;
+  if (soonDays < 1) soonDays = 0;
   if (!soonDays || soonDays <= 0) {
     const sds = asInt(shop?.expirySoonDays || 0, 0);
     soonDays = (sds > 0 && sds <= 365) ? sds : 90;
@@ -1104,7 +1106,9 @@ r.get("/shop/:shopId/expiry/export", authMiddleware, (req, res) => {
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
 
-  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  let soonDays = asInt(req.query.soonDays || 0, 0);
+  if (soonDays > 365) soonDays = 365;
+  if (soonDays < 1) soonDays = 0;
   if (!soonDays || soonDays <= 0) {
     const sds = asInt(shop?.expirySoonDays || 0, 0);
     soonDays = (sds > 0 && sds <= 365) ? sds : 90;

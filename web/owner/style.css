@@ -287,29 +287,3 @@ footer{opacity:.7;text-align:center;padding:20px 0}
 /* Make modal overlay always hidden by default; JS controls display */
 #expiryModalOverlay{display:none}
 #expiryModalOverlay:not(.hidden){display:flex}
-
-/* Expiry list highlighting (modal) */
-.table tbody tr.row-expired td{
-  background: rgba(220,38,38,.12);
-}
-.table tbody tr.row-soon-critical td{
-  background: rgba(245,158,11,.14);
-}
-.table tbody tr.row-soon-warn td{
-  background: rgba(251,191,36,.10);
-}
-.table tbody tr.row-soon-info td{
-  background: rgba(59,130,246,.10);
-}
-.table tbody tr.row-expired td:first-child{
-  box-shadow: inset 4px 0 0 rgba(220,38,38,.9);
-}
-.table tbody tr.row-soon-critical td:first-child{
-  box-shadow: inset 4px 0 0 rgba(245,158,11,.95);
-}
-.table tbody tr.row-soon-warn td:first-child{
-  box-shadow: inset 4px 0 0 rgba(251,191,36,.9);
-}
-.table tbody tr.row-soon-info td:first-child{
-  box-shadow: inset 4px 0 0 rgba(59,130,246,.85);
-}
