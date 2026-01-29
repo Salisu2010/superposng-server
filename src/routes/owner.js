@@ -203,11 +203,6 @@ function getExpiryMs(p){
     p.expDate,
     p.expiryAt,
     p.expiry_at,
-    // Android/common date-only fields
-    p.expiryYmd,
-    p.expYmd,
-    p.expiringYmd,
-    p.expiry_date_ymd,
     p.exp,
   ];
   for (const c of candidates){

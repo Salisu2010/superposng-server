@@ -976,8 +976,8 @@ async function loadOverview() {
     const shopId = selectedShopId;
     if (!shopId) return;
     let val = 0;
-    const sel = trim(soonDaysSelect?.value || "");
-    if (sel === "custom") val = parseInt(trim(soonDaysCustom?.value || "0"), 10);
+    const sel = (soonDaysSelect?.value || "").trim();
+    if (sel === "custom") val = parseInt((soonDaysCustom?.value || "0").trim(), 10);
     else val = parseInt(sel || "0", 10);
 
     if (!Number.isFinite(val) || val <= 0 || val > 365) {
@@ -1014,7 +1014,7 @@ async function loadOverview() {
   });
   btnSaveSoonDays?.addEventListener("click", saveSoonDaysSetting);
   soonDaysSelect?.addEventListener("change", () => {
-    const v = trim(soonDaysSelect?.value || "");
+    const v = (soonDaysSelect?.value || "").trim();
     if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", v !== "custom");
   });
 

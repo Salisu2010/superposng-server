@@ -63,7 +63,7 @@ r.post("/generate", (req, res) => {
 r.post("/connect", (req, res) => {
   const pairingCode = (req.body?.pairingCode || "").toUpperCase().trim();
   const deviceId = (req.body?.deviceId || "").trim();
-  const requestedRole = (req.body?.role || "").toString().toUpperCase().trim();
+  const role = (req.body?.role || "CASHIER").toString().toUpperCase().trim();
 
   if (!pairingCode || !deviceId) {
     return res
@@ -89,8 +89,6 @@ r.post("/connect", (req, res) => {
   const shop = db.shops.find((s) => s.shopId === p.shopId);
   if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
 
-  const role = (requestedRole || p.role || "CASHIER").toString().toUpperCase().trim();
-
   // mark used
   p.used = true;
   p.usedAt = now();
@@ -98,10 +96,6 @@ r.post("/connect", (req, res) => {
 
   // register/update device
   const existing = db.devices.find((d) => d.deviceId === deviceId);
-
-  if (existing && existing.isRevoked === true) {
-    return res.status(403).json({ ok: false, error: "Device revoked" });
-  }
   if (existing) {
     existing.shopId = p.shopId;
     existing.role = role;
