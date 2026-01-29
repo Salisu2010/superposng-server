@@ -251,6 +251,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   // -----------------------------
   let __expiryItems = [];
   let __expiryType = "expired";
+  let __expiryWindowDays = 30;
 
   function showExpiryButtons(expiredCount, soonCount) {
     const ex = Number(expiredCount) || 0;
@@ -285,11 +286,31 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     return hay.includes(s);
   }
 
-  function renderExpiryTable() {
+    function renderExpiryTable() {
     if (!expiryTbody) return;
-    const q = (expirySearch?.value || "").trim();
-    const rows = __expiryItems.filter(it => matchesExpirySearch(it, q));
+
+    const q = String((expirySearch && expirySearch.value) || "").trim();
+    let rows = __expiryItems.filter(it => matchesExpirySearch(it, q));
+
+    // Sorting:
+    // - Expired: oldest expired first (most negative daysLeft)
+    // - Expiring soon: closest to expiry first (lowest positive daysLeft)
+    rows.sort((a, b) => {
+      const da = Number(a.daysLeft ?? 0);
+      const db = Number(b.daysLeft ?? 0);
+
+      if (__expiryType === "expired") {
+        return da - db; // e.g. -30 comes before -2
+      }
+
+      // soon list
+      const aa = (da < 0) ? 999999 : da;
+      const bb = (db < 0) ? 999999 : db;
+      return aa - bb;
+    });
+
     expiryTbody.innerHTML = "";
+
     if (!rows.length) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
@@ -302,6 +323,16 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     } else {
       for (const it of rows) {
         const tr = document.createElement("tr");
+        const dlNum = Number(it.daysLeft ?? 0);
+
+        // Highlight rows for quick scanning
+        if (dlNum < 0 || __expiryType === "expired") {
+          tr.classList.add("row-expired");
+        } else {
+          if (dlNum <= 7) tr.classList.add("row-soon-critical");
+          else if (dlNum <= 14) tr.classList.add("row-soon-warn");
+          else tr.classList.add("row-soon-info");
+        }
 
         const tdName = document.createElement("td");
         tdName.innerHTML = `<div style="font-weight:700">${escapeHtml(it.name || "—")}</div>
@@ -317,7 +348,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
         tr.appendChild(tdSku);
 
         const tdExp = document.createElement("td");
-        const dl = Number(it.daysLeft ?? 0);
+        const dl = dlNum;
         tdExp.innerHTML = `<div style="font-weight:700">${escapeHtml(it.expiryDate || "—")}</div>
           <div class="muted tiny">${dl < 0 ? (Math.abs(dl) + " days ago") : (dl + " days left")}</div>`;
         tr.appendChild(tdExp);
@@ -341,8 +372,15 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     currentExpiryType = (type || "expired");
 
     __expiryType = (type || "expired").toLowerCase();
-    const shopId = String(window.__spng_shopId || "").trim();
-    if (!shopId) return;
+    // Use the currently selected shop in this dashboard session.
+    // Older builds referenced window.__spng_shopId which was never set,
+    // causing the Expired/Expiring-Soon buttons to do nothing.
+    const shopId = String(selectedShopId || "").trim();
+    if (!shopId) {
+      // If no shop is selected, just close the modal safely.
+      setExpiryOverlayVisible(false);
+      return;
+    }
 
     const isExpired = (__expiryType === "expired");
     if (expiryModalTitle) {
@@ -357,6 +395,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
       __expiryItems = Array.isArray(data.items) ? data.items : [];
       const shopName = (data.shop && (data.shop.shopName || data.shop.name)) || "";
       const soonDays = Number(data.soonDays || 90);
+      __expiryWindowDays = soonDays;
       const count = Number(data.count || __expiryItems.length || 0);
       if (expiryModalSub) {
         expiryModalSub.textContent = isExpired
@@ -468,7 +507,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     const expired = Number(kpi?.expired ?? 0);
     const soon = Number(kpi?.expiringSoon ?? 0);
     showExpiryButtons(expired, soon);
-    const shopKey = (window.__spng_shopId || "shop") + "";
+    const shopKey = (selectedShopId || "shop") + "";
     const lastExpired = Number(sessionStorage.getItem("spng_lastExpired_" + shopKey) || "0");
 
     if (expired > 0) {
