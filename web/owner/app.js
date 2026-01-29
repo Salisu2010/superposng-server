@@ -965,11 +965,38 @@ async function loadOverview() {
       }
 
       try {
-        await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ receiptNo: row.receiptNo, phone: row.customerPhone, amount, method, note }),
-        });
+        const debtorId = String(row.debtorId || row.id || row.receiptNo || "").trim();
+        const payBody = { receiptNo: row.receiptNo, phone: row.customerPhone, amount, method, note };
+
+        try {
+          // Prefer specific debtorId route when available (more reliable), fallback to legacy route.
+          if (debtorId) {
+            try {
+              await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/${encodeURIComponent(debtorId)}/pay`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payBody),
+              });
+            } catch (ex1) {
+              const msg1 = (ex1 && ex1.message) ? String(ex1.message) : "";
+              if (msg1.includes("404") || msg1.toLowerCase().includes("not found")) {
+                await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payBody),
+                });
+              } else {
+                throw ex1;
+              }
+            }
+          } else {
+            await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payBody),
+            });
+          }
+        } catch (ex) { throw ex; }
         modal.close();
         await loadDebtors();
         await loadKPIs();
