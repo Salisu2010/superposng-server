@@ -716,7 +716,7 @@ function renderMiniLists(perf) {
       }
       if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${sd} days`;
       try {
-        const vNow = (soonDaysSelect?.value || "").trim();
+        const vNow = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
         if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", vNow !== "custom");
       } catch(_e) {}
 
@@ -980,13 +980,13 @@ async function loadOverview() {
   }
 
 
-  async async function saveSoonDaysSetting() {
+  async function saveSoonDaysSetting() {
     const shopId = selectedShopId;
     if (!shopId) return;
     let val = 0;
-    const sel = (soonDaysSelect?.value || "").trim();
+    const sel = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
     if (sel === "custom") {
-      let cv = (soonDaysCustom?.value || "").trim();
+      let cv = ((soonDaysCustom && soonDaysCustom.value) ? String(soonDaysCustom.value) : "").trim();
       if (!cv) {
         const p = prompt("Enter Expiring Soon Days (1 - 365):", String(Number.isFinite(Number(ovLastSoonDays)) ? ovLastSoonDays : 90));
         cv = (p || "").trim();
@@ -1031,7 +1031,7 @@ async function loadOverview() {
   });
   btnSaveSoonDays?.addEventListener("click", saveSoonDaysSetting);
   soonDaysSelect?.addEventListener("change", () => {
-    const v = (soonDaysSelect?.value || "").trim();
+    const v = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
     if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", v !== "custom");
   });
 
