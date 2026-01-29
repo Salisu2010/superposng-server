@@ -151,32 +151,46 @@ function verifyPassword(password, salt, hashHex) {
  * body: { email, password }
  */
 // --- Expiry helpers (robust parsing across Android/legacy fields) ---
-function _asMsMaybe(v){
+function _asMsMaybe(v) {
   if (v === null || v === undefined) return null;
-  if (typeof v === "number" && isFinite(v)) {
-    // if seconds, convert to ms
+
+  // numeric input (ms or seconds)
+  if (typeof v === "number" && Number.isFinite(v)) {
     return v < 1e12 ? Math.floor(v * 1000) : Math.floor(v);
   }
-  if (typeof v === "string") {
-    const s = v.trim();
-    if (!s) return null;
-    // numeric string
-    if (/^\d+$/.test(s)) {
-      const n = Number(s);
-      return n < 1e12 ? Math.floor(n * 1000) : Math.floor(n);
-    }
-    // date-only YYYY-MM-DD (treat as local midnight to avoid TZ shift)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-      const [y,m,d] = s.split("-").map(Number);
-      const dt = new Date(y, m-1, d, 0, 0, 0, 0);
-      const ms = dt.getTime();
-      return isFinite(ms) ? ms : null;
-    }
-    const ms = Date.parse(s);
-    return isFinite(ms) ? ms : null;
+
+  const s = String(v).trim();
+  if (!s) return null;
+
+  // date-only YYYYMMDD (Android expiryYmd, e.g. "20260127")
+  if (/^\d{8}$/.test(s)) {
+    const y = Number(s.slice(0, 4));
+    const m = Number(s.slice(4, 6));
+    const d = Number(s.slice(6, 8));
+    const dt = new Date(y, m - 1, d, 0, 0, 0, 0);
+    return isNaN(dt.getTime()) ? null : dt.getTime();
   }
+
+  // numeric string (ms or seconds)
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    return n < 1e12 ? Math.floor(n * 1000) : Math.floor(n);
+  }
+
+  // ISO or parseable date string
+  const t = Date.parse(s);
+  if (!isNaN(t)) return t;
+
+  // Try common YYYY-MM-DD
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+    return isNaN(dt.getTime()) ? null : dt.getTime();
+  }
+
   return null;
 }
+
 
 function getExpiryMs(p){
   if (!p) return null;
@@ -454,16 +468,10 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-
   function expiryDateFromProduct(p) {
-    return (
-      parseExpiry(p.expiryDate) ||
-      parseExpiry(p.expiringDate) ||
-      parseExpiry(p.expDate) ||
-      parseExpiry(p.expiry) ||
-      parseExpiry(p.exp) ||
-      null
-    );
+    const ms = getExpiryMs(p);
+    if (!ms) return null;
+    return new Date(ms);
   }
 
   const today0 = new Date();
@@ -829,16 +837,10 @@ r.get("/shop/:shopId/expiry", authMiddleware, (req, res) => {
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-
   function expiryDateFromProduct(p) {
-    return (
-      parseExpiry(p.expiryDate) ||
-      parseExpiry(p.expiringDate) ||
-      parseExpiry(p.expDate) ||
-      parseExpiry(p.expiry) ||
-      parseExpiry(p.exp) ||
-      null
-    );
+    const ms = getExpiryMs(p);
+    if (!ms) return null;
+    return new Date(ms);
   }
 
   const products = (db.products || []).filter(p => pickShopId(p) === shopId);
