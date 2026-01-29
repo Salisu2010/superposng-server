@@ -14,6 +14,7 @@ import dashboardRoutes from "./routes/dashboard.js";
 import devRoutes from "./routes/dev.js";
 import licenseRoutes from "./routes/license.js";
 import ownerRoutes from "./routes/owner.js";
+import devicesRoutes from "./routes/devices.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -84,6 +85,8 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/dev", devRoutes);
 // Owner (Shop User) APIs
 app.use("/api/owner", ownerRoutes);
+// Device registry APIs (Owner/Admin)
+app.use("/api/devices", devicesRoutes);
 
 // Public license claim endpoint for device activation
 app.use("/api/license", licenseRoutes);

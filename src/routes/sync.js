@@ -137,66 +137,6 @@ r.post("/products", (req, res) => {
 
   const now = Date.now();
 
-  // ✅ EXPIRED BLOCK (server-level protection)
-  // Professional policy:
-  // - Expired: BLOCK SELL (English + Hausa message)
-  // - Expiring soon: ALLOW but return warnings (client may display)
-  const today0 = new Date();
-  today0.setHours(0, 0, 0, 0);
-
-  const expiredItems = [];
-  const expiringSoonItems = [];
-
-  // Determine expiring-soon window from shop setting if present (default 90 days).
-  let soonDaysSetting = 90;
-  try {
-    const shop = (db.shops || []).find((s) => s.shopId === shopId);
-    const sd = shop ? toInt(shop.expirySoonDays, 0) : 0;
-    if (sd > 0 && sd <= 365) soonDaysSetting = sd;
-  } catch (_e) {}
-
-  const soonMs = soonDaysSetting * 24 * 60 * 60 * 1000;
-
-  function itemLabel(it) {
-    return trim(it?.productName || it?.name || it?.code || it?.barcode || it?.sku || it?.plu || it?.productId || "");
-  }
-
-  try {
-    const items = Array.isArray(sale.items) ? sale.items : [];
-    for (const it of items) {
-      const p = findProductForItem(it);
-      if (!p) continue;
-      const d = expiryDateFromProduct(p);
-      if (!d) continue;
-
-      const t = d.getTime();
-      if (t < today0.getTime()) {
-        expiredItems.push({
-          name: trim(p.name) || itemLabel(it) || "Item",
-          code: trim(p.barcode) || trim(p.sku) || trim(p.plu) || trim(p.productId || p.id) || itemLabel(it),
-          expiryDate: ymdFromDate(d)
-        });
-      } else if (t <= (today0.getTime() + soonMs)) {
-        expiringSoonItems.push({
-          name: trim(p.name) || itemLabel(it) || "Item",
-          code: trim(p.barcode) || trim(p.sku) || trim(p.plu) || trim(p.productId || p.id) || itemLabel(it),
-          expiryDate: ymdFromDate(d)
-        });
-      }
-    }
-  } catch (_e) {}
-
-  if (expiredItems.length > 0) {
-    return res.status(409).json({
-      ok: false,
-      code: "EXPIRED_BLOCK",
-      messageEn: "Sale blocked: expired product(s) found. Please remove expired items before checkout.",
-      messageHa: "An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.",
-      items: expiredItems
-    });
-  }
-
-
   let upserts = 0;
 
   for (const it of items) {
@@ -440,6 +380,15 @@ function expiryDateFromProduct(p) {
   return (
     parseExpiryAny(p?.expiryDate) ||
     parseExpiryAny(p?.expiringDate) ||
+    parseExpiryAny(p?.expiry_date) ||
+    parseExpiryAny(p?.expiryDateMs) ||
+    parseExpiryAny(p?.expiryAt) ||
+    parseExpiryAny(p?.expiry_at) ||
+    // Android/common date-only fields
+    parseExpiryAny(p?.expiryYmd) ||
+    parseExpiryAny(p?.expYmd) ||
+    parseExpiryAny(p?.expiringYmd) ||
+    parseExpiryAny(p?.expiry_date_ymd) ||
     parseExpiryAny(p?.expDate) ||
     parseExpiryAny(p?.expiry) ||
     parseExpiryAny(p?.exp) ||
@@ -484,6 +433,54 @@ r.post(SALE_PATHS, (req, res) => {
   ensureDbArrays(db);
 
   const now = Date.now();
+
+  // --- Expiry enforcement (server-side) ---
+  // Policy:
+  // - Expired items: BLOCK sale (409 EXPIRED_BLOCK)
+  // - Expiring soon: allow sale but return warnings
+  const shop = (db.shops || []).find((s) => s.shopId === shopId) || { shopId };
+
+  let soonDaysSetting = 90;
+  try {
+    const sd = Number(shop.expirySoonDays || 0);
+    if (Number.isFinite(sd) && sd > 0 && sd <= 365) soonDaysSetting = Math.floor(sd);
+  } catch (_e) {}
+
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const soonMs = soonDaysSetting * 24 * 60 * 60 * 1000;
+
+  const expiredItems = [];
+  const expiringSoonItems = [];
+
+  const saleItemsForExpiry = Array.isArray(sale.items) ? sale.items : [];
+  for (const it of saleItemsForExpiry) {
+    const prod = findProductForSaleItem(db, shopId, it);
+    if (!prod) continue;
+    const d = expiryDateFromProduct(prod);
+    if (!d) continue;
+
+    const t = d.getTime();
+    const code = trim(prod.barcode || prod.sku || prod.plu || prod.productId || prod.id || it?.barcode || it?.sku || it?.code || it?.productId || it?.id || '');
+    const name = trim(prod.name || it?.productName || it?.name || 'Item');
+
+    if (t < today0.getTime()) {
+      expiredItems.push({ name, code, expiryDate: ymdFromDate(d) });
+    } else if (t <= (today0.getTime() + soonMs)) {
+      expiringSoonItems.push({ name, code, expiryDate: ymdFromDate(d) });
+    }
+  }
+
+  if (expiredItems.length > 0) {
+    return res.status(409).json({
+      ok: false,
+      code: 'EXPIRED_BLOCK',
+      messageEn: 'Sale blocked: expired product(s) found. Please remove expired items before checkout.',
+      messageHa: 'An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.',
+      items: expiredItems
+    });
+  }
+
 
   // de-duplicate by receiptNo if provided
   const receiptNo = trim(sale.receiptNo || sale.receipt || sale.invoiceNo || sale.billNo);
