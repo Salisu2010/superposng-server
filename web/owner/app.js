@@ -946,9 +946,10 @@ async function loadOverview() {
     `;
 
     const modal = openModal(html);
-    const form = modal.querySelector("#payDebtorForm");
-    const err = modal.querySelector("#payErr");
-    const amountEl = modal.querySelector("#payAmount");
+    const root = (modal && modal.overlay) ? modal.overlay : modal;
+    const form = root.querySelector("#payDebtorForm");
+    const err = root.querySelector("#payErr");
+    const amountEl = root.querySelector("#payAmount");
     amountEl.value = String(Math.min(balance, balance) || "");
     amountEl.focus();
 
