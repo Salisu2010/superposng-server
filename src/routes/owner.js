@@ -753,7 +753,7 @@ r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
     const did = String(debtorId);
 
     const candidates = db.debtors
-      .filter(d => (d && d.shopId === shopId))
+      .filter(d => (d && pickShopId(d) === shopId))
       .filter(d => {
         const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || d.debtorId || "").toString();
         if (rn === did) return true;
@@ -775,7 +775,7 @@ r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
       // Fallback: if debtorId isn't found, try phone-based payment for open debtor(s)
       if (!phone) return res.status(404).json({ ok: false, error: "Debtor not found" });
       const byPhone = db.debtors
-        .filter(d => (d && d.shopId === shopId))
+        .filter(d => (d && pickShopId(d) === shopId))
         .filter(d => {
           const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
           return ph && phone && ph === phone;
@@ -863,7 +863,7 @@ r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
     // Candidates: either match by receiptNo OR by phone and open balance
     const now = Date.now();
     const candidates = db.debtors
-      .filter(d => (d && d.shopId === shopId))
+      .filter(d => (d && pickShopId(d) === shopId))
       .filter(d => {
         const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || "").toString();
         const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
