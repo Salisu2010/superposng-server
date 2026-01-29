@@ -162,6 +162,26 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   let currentRangeDays = 30;
   let ovLastSoonDays = 90;
 
+  // Persist per-shop Expiring-Soon days on the client as a reliable fallback.
+  // This prevents the UI from reverting (e.g. due to caching or server storage issues).
+  function lsSoonKey(shopId){
+    return `spng_expiry_soon_days__${String(shopId || "")}`;
+  }
+  function getLocalSoonDays(shopId){
+    try{
+      const raw = localStorage.getItem(lsSoonKey(shopId));
+      const n = parseInt(String(raw || ""), 10);
+      return (Number.isFinite(n) && n >= 1 && n <= 365) ? n : 0;
+    }catch(_e){ return 0; }
+  }
+  function setLocalSoonDays(shopId, val){
+    try{
+      const n = parseInt(String(val || "0"), 10);
+      if (!Number.isFinite(n) || n < 1 || n > 365) return;
+      localStorage.setItem(lsSoonKey(shopId), String(n));
+    }catch(_e){}
+  }
+
   let debtorsCache = [];
 
   function showLoginErr(msg) {
@@ -697,7 +717,10 @@ function renderMiniLists(perf) {
     const days = Number(daysOverride || currentRangeDays || 30) || 30;
     currentRangeDays = days;
 
-    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3&_=${Date.now()}`);
+    // Prefer locally saved soonDays (per-shop) so the UI doesn't revert.
+    const localSoon = getLocalSoonDays(shopId);
+    const soonQ = localSoon ? `&soonDays=${encodeURIComponent(localSoon)}` : "";
+    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3${soonQ}&_=${Date.now()}`);
     const shop = ov.shop || { shopId };
     shopTitle.textContent = shop.shopName || "Shop";
     shopMeta.textContent = `Shop ID: ${shop.shopId || shopId}${shop.shopCode ? " • Code: " + shop.shopCode : ""}`;
@@ -705,8 +728,10 @@ function renderMiniLists(perf) {
 
     // Expiring-soon setting UI
     try {
-      const sd = Number(ov?.range?.soonDays || 90) || 90;
+      // If we have a local override, always display/use it.
+      const sd = localSoon || (Number(ov?.range?.soonDays || 90) || 90);
       ovLastSoonDays = sd;
+      if (localSoon) setLocalSoonDays(shopId, sd);
       if (soonDaysSelect) {
         const preset = ["30","60","90"].includes(String(sd)) ? String(sd) : "custom";
         soonDaysSelect.value = preset;
@@ -1008,6 +1033,8 @@ async function loadOverview() {
         method: "POST",
         body: JSON.stringify({ soonDays: val })
       });
+      // Persist locally as fallback and as query param for overview calls.
+      setLocalSoonDays(shopId, val);
       ovLastSoonDays = val;
       if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${val} days`;
       await refreshOverview(currentRangeDays || 30);
