@@ -188,6 +188,22 @@ function _asMsMaybe(v) {
     return isNaN(dt.getTime()) ? null : dt.getTime();
   }
 
+
+  // Try common DD/MM/YYYY or MM/DD/YYYY
+  const dm = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dm) {
+    const a = Number(dm[1]);
+    const b = Number(dm[2]);
+    const y = Number(dm[3]);
+    // Prefer DD/MM/YYYY for NG; if ambiguous (<=12 and <=12), treat as DD/MM.
+    const day = a;
+    const month = b;
+    const dt = new Date(y, month - 1, day, 0, 0, 0, 0);
+    if (!isNaN(dt.getTime())) return dt.getTime();
+    // fallback swap
+    const dt2 = new Date(y, a - 1, b, 0, 0, 0, 0);
+    return isNaN(dt2.getTime()) ? null : dt2.getTime();
+  }
   return null;
 }
 
@@ -217,6 +233,17 @@ function getExpiryMs(p){
     const ms = _asMsMaybe(c);
     if (ms) return ms;
   }
+
+  // Heuristic fallback: look for any field name containing "expir"
+  try {
+    for (const k of Object.keys(p)) {
+      if (!k) continue;
+      if (!/expir/i.test(k)) continue;
+      const ms = _asMsMaybe(p[k]);
+      if (ms) return ms;
+    }
+  } catch (e) {}
+
   return null;
 }
 
