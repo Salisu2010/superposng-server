@@ -373,7 +373,8 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
       headers["Authorization"] = "Bearer " + token;
     }
 
-    const res = await fetch(path, { ...opts, headers });
+    headers["Cache-Control"] = headers["Cache-Control"] || "no-cache";
+    const res = await fetch(path, { ...opts, headers, cache: "no-store" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
       const msg = data.error || data.message || ("HTTP " + res.status);
@@ -696,7 +697,7 @@ function renderMiniLists(perf) {
     const days = Number(daysOverride || currentRangeDays || 30) || 30;
     currentRangeDays = days;
 
-    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3`);
+    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3&_=${Date.now()}`);
     const shop = ov.shop || { shopId };
     shopTitle.textContent = shop.shopName || "Shop";
     shopMeta.textContent = `Shop ID: ${shop.shopId || shopId}${shop.shopCode ? " • Code: " + shop.shopCode : ""}`;
@@ -979,7 +980,7 @@ async function loadOverview() {
   }
 
 
-  async function saveSoonDaysSetting() {
+  async async function saveSoonDaysSetting() {
     const shopId = selectedShopId;
     if (!shopId) return;
     let val = 0;
@@ -1007,7 +1008,8 @@ async function loadOverview() {
         method: "POST",
         body: JSON.stringify({ soonDays: val })
       });
-      if (soonDaysMsg) soonDaysMsg.textContent = `Saved: ${val} days`;
+      ovLastSoonDays = val;
+      if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${val} days`;
       await refreshOverview(currentRangeDays || 30);
     } catch (e) {
       if (soonDaysMsg) soonDaysMsg.textContent = e.message || "Save failed";
