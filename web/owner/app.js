@@ -160,6 +160,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   let currentExpiryType = "expired";
   let salesCache = [];
   let currentRangeDays = 30;
+  let ovLastSoonDays = 90;
 
   let debtorsCache = [];
 
@@ -704,6 +705,7 @@ function renderMiniLists(perf) {
     // Expiring-soon setting UI
     try {
       const sd = Number(ov?.range?.soonDays || 90) || 90;
+      ovLastSoonDays = sd;
       if (soonDaysSelect) {
         const preset = ["30","60","90"].includes(String(sd)) ? String(sd) : "custom";
         soonDaysSelect.value = preset;
@@ -712,6 +714,11 @@ function renderMiniLists(perf) {
         soonDaysCustom.value = (["30","60","90"].includes(String(sd))) ? "" : String(sd);
       }
       if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${sd} days`;
+      try {
+        const vNow = (soonDaysSelect?.value || "").trim();
+        if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", vNow !== "custom");
+      } catch(_e) {}
+
     } catch (_e) {}
 
     setKpis(ov.kpi || {});
@@ -977,7 +984,15 @@ async function loadOverview() {
     if (!shopId) return;
     let val = 0;
     const sel = (soonDaysSelect?.value || "").trim();
-    if (sel === "custom") val = parseInt((soonDaysCustom?.value || "0").trim(), 10);
+    if (sel === "custom") {
+      let cv = (soonDaysCustom?.value || "").trim();
+      if (!cv) {
+        const p = prompt("Enter Expiring Soon Days (1 - 365):", String(Number.isFinite(Number(ovLastSoonDays)) ? ovLastSoonDays : 90));
+        cv = (p || "").trim();
+        if (soonDaysCustom) soonDaysCustom.value = cv;
+      }
+      val = parseInt((cv || "0"), 10);
+    }
     else val = parseInt(sel || "0", 10);
 
     if (!Number.isFinite(val) || val <= 0 || val > 365) {

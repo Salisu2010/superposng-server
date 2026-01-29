@@ -195,6 +195,7 @@ function _asMsMaybe(v) {
 function getExpiryMs(p){
   if (!p) return null;
   const candidates = [
+    // Most common (web/legacy)
     p.expiryDate,
     p.expiringDate,
     p.expiry,
@@ -204,6 +205,13 @@ function getExpiryMs(p){
     p.expiryAt,
     p.expiry_at,
     p.exp,
+
+    // Android vNext (YYYYMMDD)
+    p.expiryYmd,
+    p.expYmd,
+    p.expiry_ymd,
+    p.expYMD,
+    p.expiryYMD,
   ];
   for (const c of candidates){
     const ms = _asMsMaybe(c);
