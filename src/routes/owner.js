@@ -188,6 +188,22 @@ function _asMsMaybe(v) {
     return isNaN(dt.getTime()) ? null : dt.getTime();
   }
 
+
+  // Try common DD/MM/YYYY or MM/DD/YYYY
+  const dm = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dm) {
+    const a = Number(dm[1]);
+    const b = Number(dm[2]);
+    const y = Number(dm[3]);
+    // Prefer DD/MM/YYYY for NG; if ambiguous (<=12 and <=12), treat as DD/MM.
+    const day = a;
+    const month = b;
+    const dt = new Date(y, month - 1, day, 0, 0, 0, 0);
+    if (!isNaN(dt.getTime())) return dt.getTime();
+    // fallback swap
+    const dt2 = new Date(y, a - 1, b, 0, 0, 0, 0);
+    return isNaN(dt2.getTime()) ? null : dt2.getTime();
+  }
   return null;
 }
 
@@ -195,6 +211,7 @@ function _asMsMaybe(v) {
 function getExpiryMs(p){
   if (!p) return null;
   const candidates = [
+    // Most common (web/legacy)
     p.expiryDate,
     p.expiringDate,
     p.expiry,
@@ -204,11 +221,29 @@ function getExpiryMs(p){
     p.expiryAt,
     p.expiry_at,
     p.exp,
+
+    // Android vNext (YYYYMMDD)
+    p.expiryYmd,
+    p.expYmd,
+    p.expiry_ymd,
+    p.expYMD,
+    p.expiryYMD,
   ];
   for (const c of candidates){
     const ms = _asMsMaybe(c);
     if (ms) return ms;
   }
+
+  // Heuristic fallback: look for any field name containing "expir"
+  try {
+    for (const k of Object.keys(p)) {
+      if (!k) continue;
+      if (!/expir/i.test(k)) continue;
+      const ms = _asMsMaybe(p[k]);
+      if (ms) return ms;
+    }
+  } catch (e) {}
+
   return null;
 }
 
@@ -693,119 +728,210 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
 // Records a payment against a debtor row (prefer receiptNo). If receiptNo is missing,
 // it will pay oldest open debtor(s) for the provided phone.
 // Body: { receiptNo?, phone?, amount, method?, note? }
-// Records a payment against a debtor row.
-// Supports multiple URL styles for backward compatibility:
-//   POST /shop/:shopId/debtors/pay
-//   POST /shop/:shopId/debtors/:debtorId/pay
-//   POST /shop/:shopId/debtors/pay/:debtorId
-//   POST /shop/:shopId/:debtorId/pay
-function payDebtorCore(req, res, debtorIdFromPath) {
+
+// Pay a specific debtor by debtorId (id/receiptNo). Body: { amount, method?, note?, receiptNo?, phone? }
+r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
   try {
-    const { shopId } = req.params;
+    const { shopId, debtorId } = req.params;
     const body = req.body || {};
-    // Many deployments use receiptNo as the primary debtor key. Some UIs send it in the path.
-    const receiptNo = (debtorIdFromPath || body.receiptNo || body.receipt || body.receipt_no || body.saleNo || body.sale_no || body.id || "").toString().trim();
-    const phone = (body.phone || body.customerPhone || body.customer_phone || "").toString().trim();
-    const amount = asNum(body.amount || body.paid || 0, 0);
+    // Prefer explicit debtorId match; fallback to receiptNo/phone if provided
+    const receiptNo = (body.receiptNo || body.receipt || body.saleNo || debtorId || "").toString().trim();
+    const phone = (body.phone || body.customerPhone || "").toString().trim();
     const method = (body.method || body.paymentMethod || "CASH").toString().trim().toUpperCase();
     const note = (body.note || "").toString().trim();
+    const amount = Number(body.amount || body.paid || 0);
 
-    if (amount <= 0) return res.status(400).json({ ok: false, error: "Amount must be > 0" });
+    if (!shopId || !shopId.trim()) return res.status(400).json({ ok: false, error: "Missing shopId" });
+    if (!debtorId || !String(debtorId).trim()) return res.status(400).json({ ok: false, error: "Missing debtorId" });
+    if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "Invalid amount" });
 
     const db = readDB();
     if (!Array.isArray(db.debtors)) db.debtors = [];
     if (!Array.isArray(db.debtorPayments)) db.debtorPayments = [];
 
-    const candidates = db.debtors
-      .filter(d => pickShopId(d) === shopId)
-      .filter(d => asNum(d.totalOwed, 0) > 0);
-
-    // Prefer matching by receiptNo if provided, else pay oldest open debtor(s) for phone.
-    let targets = [];
-    if (receiptNo) {
-      targets = candidates.filter(d => (toStr(d.receiptNo || d.receipt || d.id || "").trim() === receiptNo));
-    } else if (phone) {
-      targets = candidates.filter(d => toStr(d.phone || d.customerPhone || "").trim() === phone);
-      // Oldest first
-      targets.sort((a,b)=> asInt(a.createdAt||0,0) - asInt(b.createdAt||0,0));
-    }
-
-    if (!targets.length) {
-      return res.status(404).json({ ok: false, error: "No open debtor found" });
-    }
-
-    let remainingToPay = amount;
     const now = Date.now();
-    const paidRows = [];
+    const did = String(debtorId);
 
-    for (const d of targets) {
-      if (remainingToPay <= 0) break;
-      const owed = asNum(d.totalOwed, 0);
-      if (owed <= 0) continue;
+    const candidates = db.debtors
+      .filter(d => (d && d.shopId === shopId))
+      .filter(d => {
+        const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || d.debtorId || "").toString();
+        if (rn === did) return true;
+        // allow matching by explicit receiptNo too
+        if (receiptNo && rn === receiptNo) return true;
+        return false;
+      })
+      .map(d => {
+        const total = pickDebtorTotal(d);
+        const paid = pickDebtorPaid(d);
+        const remaining = pickDebtorRemaining(d);
+        const createdAt = asInt(d.createdAt, 0) || 0;
+        return { d, total, paid, remaining, createdAt };
+      })
+      .filter(x => x.remaining > 0.0001)
+      .sort((a,b) => a.createdAt - b.createdAt);
 
-      const payNow = Math.min(owed, remainingToPay);
-      remainingToPay -= payNow;
+    if (candidates.length === 0) {
+      // Fallback: if debtorId isn't found, try phone-based payment for open debtor(s)
+      if (!phone) return res.status(404).json({ ok: false, error: "Debtor not found" });
+      const byPhone = db.debtors
+        .filter(d => (d && d.shopId === shopId))
+        .filter(d => {
+          const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
+          return ph && phone && ph === phone;
+        })
+        .map(d => {
+          const total = pickDebtorTotal(d);
+          const paid = pickDebtorPaid(d);
+          const remaining = pickDebtorRemaining(d);
+          const createdAt = asInt(d.createdAt, 0) || 0;
+          return { d, total, paid, remaining, createdAt };
+        })
+        .filter(x => x.remaining > 0.0001)
+        .sort((a,b) => a.createdAt - b.createdAt);
 
-      const newOwed = Math.max(0, owed - payNow);
+      if (byPhone.length === 0) return res.status(404).json({ ok: false, error: "Debtor not found" });
+      candidates.splice(0, candidates.length, ...byPhone);
+    }
 
-      // Update debtor row (keep backward compatible fields too)
-      d.totalOwed = newOwed;
-      d.remaining = newOwed;
-      d.paid = asNum(d.paid, 0) + payNow;
-      d.updatedAt = now;
-      d.lastPaymentAt = now;
-      d.lastPaymentAmount = payNow;
-      d.lastPaymentMethod = method;
+    let left = amount;
+    let touched = 0;
+    const paymentsWritten = [];
 
-      // status
-      d.status = newOwed <= 0 ? "PAID" : "PARTIAL";
+    for (const it of candidates) {
+      if (left <= 0) break;
+      const take = Math.min(left, it.remaining);
+      if (take <= 0) continue;
+
+      const row = it.d;
+      const newPaid = (Number(row.paid || 0) || 0) + take;
+      const newTotal = Math.max(it.total, Number(row.total || 0) || 0, Number(row.totalOwed || 0) || 0);
+      const newBalance = Math.max(0, newTotal - newPaid);
+
+      row.total = newTotal;
+      row.paid = newPaid;
+      row.balance = newBalance;
+      row.remaining = newBalance;
+      row.remainingOwed = newBalance;
+      row.updatedAt = now;
+      row.status = newBalance <= 0.0001 ? "PAID" : (row.status || "PARTIAL");
 
       const payRec = {
+        id: `PAY-${now}-${Math.floor(Math.random()*1e6)}`,
         shopId,
-        receiptNo: toStr(d.receiptNo || d.receipt || d.id || receiptNo),
-        phone: toStr(d.phone || d.customerPhone || phone),
-        customerName: toStr(d.customerName || d.name || ""),
-        amount: payNow,
+        receiptNo: (row.receiptNo || row.receipt || row.saleNo || row.id || "").toString(),
+        customerName: (row.customerName || row.name || "").toString(),
+        customerPhone: (row.customerPhone || row.phone || "").toString(),
+        amount: take,
         method,
         note,
-        createdAt: now
+        createdAt: now,
+        by: (req.user && (req.user.username || req.user.user)) || "owner",
       };
       db.debtorPayments.push(payRec);
+      paymentsWritten.push(payRec);
 
-      paidRows.push({ receiptNo: payRec.receiptNo, paid: payNow, remaining: newOwed, status: d.status });
+      touched++;
+      left -= take;
     }
 
     writeDB(db);
-
-    return res.json({
-      ok: true,
-      shopId,
-      requested: amount,
-      applied: amount - remainingToPay,
-      unapplied: remainingToPay,
-      items: paidRows
-    });
+    return res.json({ ok: true, applied: amount - left, touched, payments: paymentsWritten });
   } catch (e) {
-    return res.status(500).json({ ok: false, error: String((e && e.message) || e) });
+    return res.status(500).json({ ok: false, error: "Server error" });
   }
-}
+});
 
 r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
-  return payDebtorCore(req, res, null);
-});
+  try {
+    const { shopId } = req.params;
+    const body = req.body || {};
+    const receiptNo = (body.receiptNo || body.receipt || body.saleNo || "").toString().trim();
+    const phone = (body.phone || body.customerPhone || "").toString().trim();
+    const method = (body.method || body.paymentMethod || "CASH").toString().trim().toUpperCase();
+    const note = (body.note || "").toString().trim();
+    const amount = Number(body.amount || body.paid || 0);
 
-r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
-  return payDebtorCore(req, res, req.params.debtorId);
-});
+    if (!shopId || !shopId.trim()) return res.status(400).json({ ok: false, error: "Missing shopId" });
+    if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "Invalid amount" });
+    if (!receiptNo && !phone) return res.status(400).json({ ok: false, error: "Provide receiptNo or phone" });
 
-r.post("/shop/:shopId/debtors/pay/:debtorId", authMiddleware, (req, res) => {
-  return payDebtorCore(req, res, req.params.debtorId);
-});
+    const db = readDB();
+    if (!Array.isArray(db.debtors)) db.debtors = [];
+    if (!Array.isArray(db.debtorPayments)) db.debtorPayments = [];
 
-r.post("/shop/:shopId/:debtorId/pay", authMiddleware, (req, res) => {
-  return payDebtorCore(req, res, req.params.debtorId);
-});
+    // Candidates: either match by receiptNo OR by phone and open balance
+    const now = Date.now();
+    const candidates = db.debtors
+      .filter(d => (d && d.shopId === shopId))
+      .filter(d => {
+        const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || "").toString();
+        const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
+        if (receiptNo) return rn === receiptNo;
+        return ph && phone && ph === phone;
+      })
+      .map(d => {
+        const total = pickDebtorTotal(d);
+        const paid = pickDebtorPaid(d);
+        const remaining = pickDebtorRemaining(d);
+        const createdAt = asInt(d.createdAt, 0) || 0;
+        return { d, total, paid, remaining, createdAt };
+      })
+      .filter(x => x.remaining > 0.0001)
+      .sort((a,b) => a.createdAt - b.createdAt);
 
+    if (candidates.length === 0) {
+      return res.status(404).json({ ok: false, error: "No open debtor found" });
+    }
+
+    let left = amount;
+    let touched = 0;
+    const paymentsWritten = [];
+
+    for (const it of candidates) {
+      if (left <= 0) break;
+      const take = Math.min(left, it.remaining);
+      if (take <= 0) continue;
+
+      // Update debtor row (keep backward compatible fields too)
+      const row = it.d;
+      const newPaid = (Number(row.paid || 0) || 0) + take;
+      const newTotal = Math.max(it.total, Number(row.total || 0) || 0, Number(row.totalOwed || 0) || 0);
+      const newBalance = Math.max(0, newTotal - newPaid);
+
+      row.total = newTotal;
+      row.paid = newPaid;
+      row.balance = newBalance;
+      row.remaining = newBalance;
+      row.remainingOwed = newBalance;
+      row.updatedAt = now;
+      row.status = newBalance <= 0.0001 ? "PAID" : (row.status || "PARTIAL");
+
+      const payRec = {
+        id: `PAY-${now}-${Math.floor(Math.random()*1e6)}`,
+        shopId,
+        receiptNo: (row.receiptNo || row.receipt || row.saleNo || row.id || "").toString(),
+        customerName: (row.customerName || row.name || "").toString(),
+        customerPhone: (row.customerPhone || row.phone || "").toString(),
+        amount: take,
+        method,
+        note,
+        createdAt: now,
+        by: (req.user && (req.user.username || req.user.user)) || "owner",
+      };
+      db.debtorPayments.push(payRec);
+      paymentsWritten.push(payRec);
+
+      touched++;
+      left -= take;
+    }
+
+    writeDB(db);
+    return res.json({ ok: true, applied: amount - left, touched, payments: paymentsWritten });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
 
 
 
@@ -824,7 +950,9 @@ r.get("/shop/:shopId/expiry", authMiddleware, (req, res) => {
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
 
-  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  let soonDays = asInt(req.query.soonDays || 0, 0);
+  if (soonDays > 365) soonDays = 365;
+  if (soonDays < 1) soonDays = 0;
   if (!soonDays || soonDays <= 0) {
     const sds = asInt(shop?.expirySoonDays || 0, 0);
     soonDays = (sds > 0 && sds <= 365) ? sds : 90;
@@ -1092,7 +1220,9 @@ r.get("/shop/:shopId/expiry/export", authMiddleware, (req, res) => {
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId) || { shopId };
 
-  let soonDays = Math.max(1, Math.min(asInt(req.query.soonDays || 0, 0), 365));
+  let soonDays = asInt(req.query.soonDays || 0, 0);
+  if (soonDays > 365) soonDays = 365;
+  if (soonDays < 1) soonDays = 0;
   if (!soonDays || soonDays <= 0) {
     const sds = asInt(shop?.expirySoonDays || 0, 0);
     soonDays = (sds > 0 && sds <= 365) ? sds : 90;

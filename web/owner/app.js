@@ -160,6 +160,27 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   let currentExpiryType = "expired";
   let salesCache = [];
   let currentRangeDays = 30;
+  let ovLastSoonDays = 90;
+
+  // Persist per-shop Expiring-Soon days on the client as a reliable fallback.
+  // This prevents the UI from reverting (e.g. due to caching or server storage issues).
+  function lsSoonKey(shopId){
+    return `spng_expiry_soon_days__${String(shopId || "")}`;
+  }
+  function getLocalSoonDays(shopId){
+    try{
+      const raw = localStorage.getItem(lsSoonKey(shopId));
+      const n = parseInt(String(raw || ""), 10);
+      return (Number.isFinite(n) && n >= 1 && n <= 365) ? n : 0;
+    }catch(_e){ return 0; }
+  }
+  function setLocalSoonDays(shopId, val){
+    try{
+      const n = parseInt(String(val || "0"), 10);
+      if (!Number.isFinite(n) || n < 1 || n > 365) return;
+      localStorage.setItem(lsSoonKey(shopId), String(n));
+    }catch(_e){}
+  }
 
   let debtorsCache = [];
 
@@ -320,8 +341,15 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     currentExpiryType = (type || "expired");
 
     __expiryType = (type || "expired").toLowerCase();
-    const shopId = String(window.__spng_shopId || "").trim();
-    if (!shopId) return;
+    // Use the currently selected shop in this dashboard session.
+    // Older builds referenced window.__spng_shopId which was never set,
+    // causing the Expired/Expiring-Soon buttons to do nothing.
+    const shopId = String(selectedShopId || "").trim();
+    if (!shopId) {
+      // If no shop is selected, just close the modal safely.
+      setExpiryOverlayVisible(false);
+      return;
+    }
 
     const isExpired = (__expiryType === "expired");
     if (expiryModalTitle) {
@@ -372,7 +400,8 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
       headers["Authorization"] = "Bearer " + token;
     }
 
-    const res = await fetch(path, { ...opts, headers });
+    headers["Cache-Control"] = headers["Cache-Control"] || "no-cache";
+    const res = await fetch(path, { ...opts, headers, cache: "no-store" });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
       const msg = data.error || data.message || ("HTTP " + res.status);
@@ -422,6 +451,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     function onKey(e) { if (e.key === "Escape") close(); }
     overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
     overlay.querySelector(".modal-close").addEventListener("click", close);
+    overlay.querySelectorAll("[data-close]").forEach((b)=>b.addEventListener("click", close));
     document.addEventListener("keydown", onKey);
     return { overlay, close };
   }
@@ -446,7 +476,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     const expired = Number(kpi?.expired ?? 0);
     const soon = Number(kpi?.expiringSoon ?? 0);
     showExpiryButtons(expired, soon);
-    const shopKey = (window.__spng_shopId || "shop") + "";
+    const shopKey = (selectedShopId || "shop") + "";
     const lastExpired = Number(sessionStorage.getItem("spng_lastExpired_" + shopKey) || "0");
 
     if (expired > 0) {
@@ -695,7 +725,10 @@ function renderMiniLists(perf) {
     const days = Number(daysOverride || currentRangeDays || 30) || 30;
     currentRangeDays = days;
 
-    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3`);
+    // Prefer locally saved soonDays (per-shop) so the UI doesn't revert.
+    const localSoon = getLocalSoonDays(shopId);
+    const soonQ = localSoon ? `&soonDays=${encodeURIComponent(localSoon)}` : "";
+    const ov = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/overview?days=${encodeURIComponent(days)}&lowStock=3${soonQ}&_=${Date.now()}`);
     const shop = ov.shop || { shopId };
     shopTitle.textContent = shop.shopName || "Shop";
     shopMeta.textContent = `Shop ID: ${shop.shopId || shopId}${shop.shopCode ? " • Code: " + shop.shopCode : ""}`;
@@ -703,7 +736,10 @@ function renderMiniLists(perf) {
 
     // Expiring-soon setting UI
     try {
-      const sd = Number(ov?.range?.soonDays || 90) || 90;
+      // If we have a local override, always display/use it.
+      const sd = localSoon || (Number(ov?.range?.soonDays || 90) || 90);
+      ovLastSoonDays = sd;
+      if (localSoon) setLocalSoonDays(shopId, sd);
       if (soonDaysSelect) {
         const preset = ["30","60","90"].includes(String(sd)) ? String(sd) : "custom";
         soonDaysSelect.value = preset;
@@ -712,6 +748,11 @@ function renderMiniLists(perf) {
         soonDaysCustom.value = (["30","60","90"].includes(String(sd))) ? "" : String(sd);
       }
       if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${sd} days`;
+      try {
+        const vNow = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
+        if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", vNow !== "custom");
+      } catch(_e) {}
+
     } catch (_e) {}
 
     setKpis(ov.kpi || {});
@@ -905,9 +946,10 @@ async function loadOverview() {
     `;
 
     const modal = openModal(html);
-    const form = modal.querySelector("#payDebtorForm");
-    const err = modal.querySelector("#payErr");
-    const amountEl = modal.querySelector("#payAmount");
+    const root = (modal && modal.overlay) ? modal.overlay : modal;
+    const form = root.querySelector("#payDebtorForm");
+    const err = root.querySelector("#payErr");
+    const amountEl = root.querySelector("#payAmount");
     amountEl.value = String(Math.min(balance, balance) || "");
     amountEl.focus();
 
@@ -915,19 +957,46 @@ async function loadOverview() {
       e.preventDefault();
       err.textContent = "";
       const amount = Number(amountEl.value || 0);
-      const method = String(modal.querySelector("#payMethod").value || "CASH");
-      const note = String(modal.querySelector("#payNote").value || "");
+      const method = String(root.querySelector("#payMethod").value || "CASH");
+      const note = String(root.querySelector("#payNote").value || "");
       if (!amount || amount <= 0) {
         err.textContent = "Enter a valid amount.";
         return;
       }
 
       try {
-        await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ receiptNo: row.receiptNo, phone: row.customerPhone, amount, method, note }),
-        });
+        const debtorId = String(row.debtorId || row.id || row.receiptNo || "").trim();
+        const payBody = { receiptNo: row.receiptNo, phone: row.customerPhone, amount, method, note };
+
+        try {
+          // Prefer specific debtorId route when available (more reliable), fallback to legacy route.
+          if (debtorId) {
+            try {
+              await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/${encodeURIComponent(debtorId)}/pay`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payBody),
+              });
+            } catch (ex1) {
+              const msg1 = (ex1 && ex1.message) ? String(ex1.message) : "";
+              if (msg1.includes("404") || msg1.toLowerCase().includes("not found")) {
+                await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payBody),
+                });
+              } else {
+                throw ex1;
+              }
+            }
+          } else {
+            await api(`/api/owner/shop/${encodeURIComponent(selectedShopId)}/debtors/pay`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payBody),
+            });
+          }
+        } catch (ex) { throw ex; }
         modal.close();
         await loadDebtors();
         await loadKPIs();
@@ -976,8 +1045,16 @@ async function loadOverview() {
     const shopId = selectedShopId;
     if (!shopId) return;
     let val = 0;
-    const sel = trim(soonDaysSelect?.value || "");
-    if (sel === "custom") val = parseInt(trim(soonDaysCustom?.value || "0"), 10);
+    const sel = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
+    if (sel === "custom") {
+      let cv = ((soonDaysCustom && soonDaysCustom.value) ? String(soonDaysCustom.value) : "").trim();
+      if (!cv) {
+        const p = prompt("Enter Expiring Soon Days (1 - 365):", String(Number.isFinite(Number(ovLastSoonDays)) ? ovLastSoonDays : 90));
+        cv = (p || "").trim();
+        if (soonDaysCustom) soonDaysCustom.value = cv;
+      }
+      val = parseInt((cv || "0"), 10);
+    }
     else val = parseInt(sel || "0", 10);
 
     if (!Number.isFinite(val) || val <= 0 || val > 365) {
@@ -992,7 +1069,10 @@ async function loadOverview() {
         method: "POST",
         body: JSON.stringify({ soonDays: val })
       });
-      if (soonDaysMsg) soonDaysMsg.textContent = `Saved: ${val} days`;
+      // Persist locally as fallback and as query param for overview calls.
+      setLocalSoonDays(shopId, val);
+      ovLastSoonDays = val;
+      if (soonDaysMsg) soonDaysMsg.textContent = `Current: ${val} days`;
       await refreshOverview(currentRangeDays || 30);
     } catch (e) {
       if (soonDaysMsg) soonDaysMsg.textContent = e.message || "Save failed";
@@ -1014,7 +1094,7 @@ async function loadOverview() {
   });
   btnSaveSoonDays?.addEventListener("click", saveSoonDaysSetting);
   soonDaysSelect?.addEventListener("change", () => {
-    const v = trim(soonDaysSelect?.value || "");
+    const v = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
     if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", v !== "custom");
   });
 
