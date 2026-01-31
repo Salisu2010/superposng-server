@@ -853,4 +853,49 @@ r.post("/shops/:shopCodeOrId/cashiers/:username/permissions", requireDevKey, (re
 });
 
 
+// ----------------------------
+// Cashier Permission Templates (DEV only)
+// ----------------------------
+const CASHIER_PERMISSION_TEMPLATES = [
+  { id: "sales_only", name: "Sales Only", permissions: { sales:true, products:false, debtors:false, expiry:false, settings:false, insights:false, export:false } },
+  { id: "sales_debtors", name: "Sales + Debtors", permissions: { sales:true, products:false, debtors:true, expiry:false, settings:false, insights:false, export:false } },
+  { id: "supervisor", name: "Supervisor", permissions: { sales:true, products:true, debtors:true, expiry:true, settings:false, insights:false, export:true } },
+  { id: "manager", name: "Manager", permissions: { sales:true, products:true, debtors:true, expiry:true, settings:false, insights:true, export:true } },
+  { id: "full_access", name: "Full Access (No Settings)", permissions: { sales:true, products:true, debtors:true, expiry:true, settings:false, insights:true, export:true } },
+];
+
+r.get("/cashier-permission-templates", requireDevKey, (req, res) => {
+  return res.json({ ok: true, templates: CASHIER_PERMISSION_TEMPLATES });
+});
+
+// Apply a template to many/all cashiers in a shop
+// POST /api/dev/shops/:shopCodeOrId/cashiers/apply-template  body: { templateId, usernames?:[] }
+r.post("/shops/:shopCodeOrId/cashiers/apply-template", requireDevKey, (req, res) => {
+  const db = readDB();
+  const shop = resolveShopByCodeOrId(db, req.params.shopCodeOrId);
+  if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+  const templateId = trim(req.body?.templateId || req.body?.id).toLowerCase();
+  const tpl = CASHIER_PERMISSION_TEMPLATES.find(t => t.id === templateId);
+  if (!tpl) return res.status(400).json({ ok: false, error: "Invalid templateId" });
+
+  const usernames = Array.isArray(req.body?.usernames) ? req.body.usernames.map(x => trim(x).toLowerCase()).filter(Boolean) : null;
+
+  let updated = 0;
+  (db.staffs || []).forEach((st) => {
+    const sid = trim(st.shopId || st.shopID || st.shop_id || st.sid || "");
+    if (sid !== shop.shopId) return;
+    if (st.active === false) return;
+    const un = trim(st.username).toLowerCase();
+    if (!un) return;
+    if (usernames && !usernames.includes(un)) return;
+    st.permissions = normPermsDev(tpl.permissions);
+    updated++;
+  });
+
+  writeDB(db);
+  return res.json({ ok: true, shopId: shop.shopId, templateId: tpl.id, updated });
+});
+
+
 export default r;

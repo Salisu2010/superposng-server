@@ -781,6 +781,8 @@ if ($("btnMergeShop")) {
   // ----------------------------
   const permShopCode = $("permShopCode");
   const btnLoadCashiers = $("btnLoadCashiers");
+  const permTemplate = $("permTemplate");
+  const btnApplyTemplateAll = $("btnApplyTemplateAll");
   const cashierPermMsg = $("cashierPermMsg");
   const tCashierPerms = $("tCashierPerms");
 
@@ -797,6 +799,24 @@ if ($("btnMergeShop")) {
     input.type = "checkbox";
     input.checked = !!checked;
     return input;
+  }
+
+
+  async function loadPermTemplates(){
+    if(!permTemplate) return;
+    try{
+      const data = await devApi(`/api/dev/cashier-permission-templates`);
+      if(!data.ok) throw new Error(data.error || "Failed to load templates");
+      permTemplate.innerHTML = `<option value="">Permission Template…</option>`;
+      (data.templates || []).forEach((t) => {
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = t.name;
+        permTemplate.appendChild(opt);
+      });
+    }catch(e){
+      // keep silent; templates are optional
+    }
   }
 
   async function loadCashiers(){
@@ -887,4 +907,30 @@ if ($("btnMergeShop")) {
   }
 
   if(btnLoadCashiers) btnLoadCashiers.addEventListener("click", loadCashiers);
+
+  async function applyTemplateAll(){
+    showPermMsg("");
+    const code = (permShopCode?.value || "").trim();
+    const tplId = (permTemplate?.value || "").trim();
+    if(!code) return showPermMsg("Enter Shop Code or Shop ID", false);
+    if(!tplId) return showPermMsg("Select a permission template", false);
+
+    try{
+      const resp = await devApi(`/api/dev/shops/${encodeURIComponent(code)}/cashiers/apply-template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: tplId })
+      });
+      if(!resp.ok) throw new Error(resp.error || "Apply failed");
+      showPermMsg(`Applied template to ${resp.updated || 0} cashier(s). Reloading...`, true);
+      await loadCashiers();
+    }catch(e){
+      showPermMsg(String(e.message || e), false);
+    }
+  }
+
+  if(btnApplyTemplateAll) btnApplyTemplateAll.addEventListener("click", applyTemplateAll);
+
+  // load templates on page init
+  loadPermTemplates();
 
