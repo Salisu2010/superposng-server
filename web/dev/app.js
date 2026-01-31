@@ -546,19 +546,44 @@ function esc(s){return String(s||"").replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&
 async function loadShopOptions() {
   try {
     const data = await api("/api/dev/shops/list");
-    const sel = $("ownShops");
-    if (!sel) return;
-    sel.innerHTML = "";
-    (data.shops || []).forEach(sh => {
-      const opt = document.createElement("option");
-      opt.value = sh.shopId;
-      opt.textContent = `${sh.shopName || "Shop"} (${sh.shopCode || sh.shopId})`;
-      sel.appendChild(opt);
+    const shops = (data.shops || []);
+    const ownSel = $("ownShops");
+    const fromSel = $("mergeFromShop");
+    const toSel = $("mergeToShop");
+
+    if (ownSel) ownSel.innerHTML = "";
+    if (fromSel) fromSel.innerHTML = "";
+    if (toSel) toSel.innerHTML = "";
+
+    shops.forEach(sh => {
+      const label = `${sh.shopName || "Shop"} (${sh.shopCode || sh.shopId})`;
+
+      if (ownSel) {
+        const opt = document.createElement("option");
+        opt.value = sh.shopId;
+        opt.textContent = label;
+        ownSel.appendChild(opt);
+      }
+
+      if (fromSel) {
+        const opt = document.createElement("option");
+        opt.value = sh.shopId;
+        opt.textContent = label;
+        fromSel.appendChild(opt);
+      }
+
+      if (toSel) {
+        const opt = document.createElement("option");
+        opt.value = sh.shopId;
+        opt.textContent = label;
+        toSel.appendChild(opt);
+      }
     });
   } catch (e) {
     // ignore until dev key saved
   }
 }
+
 
 async function loadOwners() {
   const wrap = $("ownersTable");
@@ -609,6 +634,37 @@ function getSelectedShopIds() {
   return Array.from(sel.selectedOptions || []).map(o => o.value).filter(Boolean);
 }
 
+
+async function mergeShops() {
+  const fromShopId = ($("mergeFromShop")?.value || "").trim();
+  const toShopId = ($("mergeToShop")?.value || "").trim();
+  const msg = $("mergeMsg");
+  if (msg) msg.textContent = "";
+  if (!fromShopId || !toShopId) return toast("Select From and To shops");
+  if (fromShopId === toShopId) return toast("From and To must be different");
+
+  const fromText = $("mergeFromShop").selectedOptions[0]?.textContent || fromShopId;
+  const toText = $("mergeToShop").selectedOptions[0]?.textContent || toShopId;
+
+  const ok = confirm(`Merge shops?\n\nFROM: ${fromText}\nTO:   ${toText}\n\nThis will MOVE all data from FROM -> TO.`);
+  if (!ok) return;
+
+  const data = await api("/api/dev/shops/merge", {
+    method: "POST",
+    body: JSON.stringify({ fromShopId, toShopId })
+  });
+
+  toast("Merged successfully");
+  if (msg) {
+    const moved = data.moved || {};
+    const parts = Object.keys(moved).map(k => `${k}:${moved[k]}`).join(" | ");
+    msg.textContent = `Done. ${parts}. Owners updated: ${data.ownersUpdated || 0}`;
+  }
+  // refresh dropdowns and owners
+  await loadShopOptions();
+  await loadOwners().catch(() => {});
+}
+
 async function createOwner() {
   const email = ($("ownEmail").value || "").trim();
   const password = ($("ownPass").value || "").trim();
@@ -648,3 +704,11 @@ if ($("btnOwnCreate")) {
   // after dev key save, try load
   setTimeout(() => { loadShopOptions(); loadOwners(); }, 300);
 }
+
+
+if ($("btnMergeShop")) {
+  $("btnMergeShop").addEventListener("click", () => mergeShops().catch(e => toast(e.message)));
+  // Load shops even if Owner Accounts section isn't used
+  setTimeout(() => { loadShopOptions(); }, 300);
+}
+

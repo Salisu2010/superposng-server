@@ -42,7 +42,14 @@ r.post("/create", (req, res) => {
 
   if (phone && pin) {
     shop = db.shops.find((s) => normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin);
-    if (shop) reused = true;
+    if (shop) {
+      // If this shop was merged, return the canonical shop
+      if (shop.isMerged === true && shop.mergedInto) {
+        const canonical = db.shops.find(x => x.shopId === shop.mergedInto);
+        if (canonical) shop = canonical;
+      }
+      reused = true;
+    }
   }
 
   if (!shop) {

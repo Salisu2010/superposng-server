@@ -499,6 +499,103 @@ r.get("/shops/list", requireDevKey, (req, res) => {
   return res.json({ ok: true, shops });
 });
 
+
+// Merge Shops (Dev Portal)
+// body: { fromShopId, toShopId }
+// - Moves all data rows from fromShopId -> toShopId across collections
+// - Records alias in db.shopAliases and marks fromShop as merged
+r.post("/shops/merge", requireDevKey, (req, res) => {
+  const fromShopId = trim(req.body?.fromShopId);
+  const toShopId = trim(req.body?.toShopId);
+
+  if (!fromShopId || !toShopId) return res.status(400).json({ ok: false, error: "fromShopId and toShopId required" });
+  if (fromShopId === toShopId) return res.status(400).json({ ok: false, error: "fromShopId and toShopId must be different" });
+
+  const db = readDB();
+  if (!Array.isArray(db.shops)) db.shops = [];
+  if (!Array.isArray(db.shopAliases)) db.shopAliases = [];
+  if (!Array.isArray(db.owners)) db.owners = [];
+
+  const fromShop = db.shops.find(s => s.shopId === fromShopId);
+  const toShop = db.shops.find(s => s.shopId === toShopId);
+
+  if (!fromShop) return res.status(404).json({ ok: false, error: "fromShopId not found" });
+  if (!toShop) return res.status(404).json({ ok: false, error: "toShopId not found" });
+
+  // Helper: detect shop id field and rewrite
+  const rewriteShopId = (obj) => {
+    if (!obj || typeof obj !== "object") return 0;
+    const keys = ["shopId", "shopID", "shop_id", "sid", "shop", "shop_id_fk"];
+    let changed = 0;
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k) && trim(obj[k]) === fromShopId) {
+        obj[k] = toShopId;
+        changed++;
+      }
+    }
+    return changed;
+  };
+
+  const collections = [
+    "devices",
+    "pairCodes",
+    "products",
+    "staffs",
+    "sales",
+    "debtors",
+    "debtorPayments",
+    "licenses",
+    "pendingActivations"
+  ];
+
+  const stats = {};
+  for (const name of collections) {
+    const arr = Array.isArray(db[name]) ? db[name] : [];
+    let moved = 0;
+    for (const row of arr) {
+      moved += rewriteShopId(row) ? 1 : 0;
+    }
+    db[name] = arr;
+    stats[name] = moved;
+  }
+
+  // Also update owners shop lists (if any)
+  let ownersUpdated = 0;
+  for (const o of (db.owners || [])) {
+    if (!Array.isArray(o.shops)) continue;
+    const before = o.shops.slice();
+    o.shops = o.shops.map(id => (trim(id) === fromShopId ? toShopId : id));
+    // de-dupe
+    o.shops = Array.from(new Set(o.shops.filter(Boolean)));
+    if (JSON.stringify(before) !== JSON.stringify(o.shops)) ownersUpdated++;
+  }
+
+  // Record alias
+  db.shopAliases.unshift({
+    fromShopId,
+    toShopId,
+    createdAt: now(),
+    note: "dev-portal-merge"
+  });
+
+  // Mark fromShop merged (but keep record)
+  fromShop.isMerged = true;
+  fromShop.mergedInto = toShopId;
+  fromShop.updatedAt = now();
+
+  // Optionally: if fromShop has ownerPhone/pin and toShop lacks it, keep it on toShop
+  if ((fromShop.ownerPhone || fromShop.ownerPin) && (!toShop.ownerPhone && !toShop.ownerPin)) {
+    toShop.ownerPhone = fromShop.ownerPhone || toShop.ownerPhone || "";
+    toShop.ownerPin = fromShop.ownerPin || toShop.ownerPin || "";
+    toShop.updatedAt = now();
+  }
+
+  writeDB(db);
+
+  return res.json({ ok: true, fromShopId, toShopId, moved: stats, ownersUpdated });
+});
+
+
 // Create Owner
 r.post("/owners/create", requireDevKey, (req, res) => {
   const email = sanitizeEmail(req.body?.email);

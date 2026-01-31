@@ -197,7 +197,37 @@
       <p class="hint">Tip: Click a row action to auto-fill <b>Target</b> for Extend/Revoke/Reset.</p>
     </section>
 
+    
     <section class="card">
+      <h2>Merge Shops</h2>
+      <p class="hint">
+        Use this when a user mistakenly created a new shop or changed phone/device.
+        Select the <b>From</b> shop (data will be moved) and the <b>To</b> shop (kept).
+      </p>
+
+      <div class="grid2">
+        <div>
+          <label>From Shop (move data)</label>
+          <select id="mergeFromShop"></select>
+        </div>
+        <div>
+          <label>To Shop (keep)</label>
+          <select id="mergeToShop"></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="btnMergeShop" class="btn danger">Merge Now</button>
+        <span id="mergeMsg" class="hint"></span>
+      </div>
+
+      <p class="hint small">
+        Notes: This will move products, staff, sales, debtors, payments, devices, licenses, and pair codes
+        from <b>From</b> into <b>To</b>. The old shop remains in the database but is marked as merged.
+      </p>
+    </section>
+
+<section class="card">
       <h2>Owner Accounts (Shop Users)</h2>
       <p class="hint">Option 1: Owners are created here (Dev Portal) and can then login at <code>/owner</code>.</p>
 
