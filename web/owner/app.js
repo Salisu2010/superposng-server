@@ -4,6 +4,7 @@
   const $ = (id) => document.getElementById(id);
 
   const LS_TOKEN = "spng_owner_token";
+  const LS_DESIRED_SHOPCODE = "spng_owner_desired_shopcode";
 
   function jwtPayload(token){
     try{
@@ -552,6 +553,9 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
       } else {
         const email = $("email").value.trim();
         const password = $("password").value.trim();
+        const desiredShopCode = ($("ownerShopCode")?.value || "").trim();
+        if (desiredShopCode) localStorage.setItem(LS_DESIRED_SHOPCODE, desiredShopCode);
+        else localStorage.removeItem(LS_DESIRED_SHOPCODE);
         const data = await api("/api/owner/auth/login", {
           method: "POST",
           body: JSON.stringify({ email, password }),
@@ -621,6 +625,18 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
           div.addEventListener("click", () => selectShop(s.shopId, s.shopName));
           shopsWrap.appendChild(div);
         });
+      }
+
+      // Auto-select a shop by Shop Code if provided (Owner mode)
+      if (LOGIN_MODE !== "cashier") {
+        const desired = (localStorage.getItem(LS_DESIRED_SHOPCODE) || "").trim().toUpperCase();
+        if (desired && Array.isArray(shops) && shops.length) {
+          const hit = shops.find(s => String(s.shopCode || "").trim().toUpperCase() === desired);
+          if (hit && hit.shopId) {
+            await selectShop(hit.shopId, hit.shopName || "Shop");
+            return;
+          }
+        }
       }
 
       showMe();
