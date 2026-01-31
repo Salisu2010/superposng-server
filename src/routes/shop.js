@@ -124,14 +124,40 @@ r.post("/restore-login", (req, res) => {
   if (!Array.isArray(db.shops)) db.shops = [];
   if (!Array.isArray(db.devices)) db.devices = [];
 
-  const shops = db.shops
-    .filter((s) => normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin)
-    .map((s) => ({ shopId: s.shopId, shopCode: s.shopCode, shopName: s.shopName }));
+const matches = db.shops.filter((s) => normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin);
 
-  if (shops.length === 0) return res.status(404).json({ ok: false, error: "No shop found for this phone/PIN" });
+if (matches.length === 0) return res.status(404).json({ ok: false, error: "No shop found for this phone/PIN" });
 
+// Resolve merged shops to their canonical targets
+const canonicalOf = (s) => {
+  if (!s) return null;
+  if (s.isMerged === true && s.mergedInto) {
+    const canonical = db.shops.find(x => x.shopId === s.mergedInto);
+    if (canonical) return canonical;
+  }
+  return s;
+};
+
+const canonicalMap = new Map();
+for (const s of matches) {
+  const c = canonicalOf(s);
+  if (c) canonicalMap.set(c.shopId, c);
+}
+
+const canonicalList = Array.from(canonicalMap.values());
+const shops = canonicalList.map((s) => ({ shopId: s.shopId, shopCode: s.shopCode, shopName: s.shopName }));
+
+const mergeRequired = canonicalList.length > 1;
+// Pick a recommended canonical shop: most recently updated/created
+let chosen = canonicalList[0];
+for (const s of canonicalList) {
+  const a = Number(s.updatedAt || s.createdAt || 0);
+  const b = Number(chosen.updatedAt || chosen.createdAt || 0);
+  if (a > b) chosen = s;
+}
+const recommendedShopId = chosen ? chosen.shopId : (shops[0]?.shopId || "");
   // For simplicity, auto-select the first shop for token
-  const shopId = shops[0].shopId;
+  const shopId = recommendedShopId || (shops[0] ? shops[0].shopId : "");
 
   // bind device as ADMIN
   const existing = db.devices.find((d) => d.deviceId === deviceId);
@@ -147,7 +173,7 @@ r.post("/restore-login", (req, res) => {
   writeDB(db);
 
   const token = signToken({ deviceId, shopId, role: "ADMIN" });
-  return res.json({ ok: true, shops, shopId, token });
+  return res.json({ ok: true, shops, shopId, token, mergeRequired, mergeCandidates: shops, recommendedShopId });
 });
 
 /**

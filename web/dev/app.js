@@ -628,6 +628,39 @@ async function loadOwners() {
   }
 }
 
+
+
+async function loadMergeHistory() {
+  const wrap = $("mergeHistoryTable");
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="hint">Loading merge history...</div>';
+  try {
+    const data = await api("/api/dev/shops/merge/history?limit=100");
+    const logs = data.logs || [];
+    if (!logs.length) {
+      wrap.innerHTML = '<div class="hint">No merges yet.</div>';
+      return;
+    }
+    const rows = logs.map(x => {
+      const when = fmtTs(x.createdAt || 0);
+      const from = `${x.fromShopName || ""} (${x.fromShopCode || x.fromShopId})`;
+      const to = `${x.toShopName || ""} (${x.toShopCode || x.toShopId})`;
+      const moved = x.moved || {};
+      const movedTxt = Object.keys(moved).map(k => `${k}:${moved[k]}`).join(" | ");
+      return `<div class="result-row" style="gap:10px;align-items:flex-start">
+        <div style="min-width:90px"><b>${esc(when)}</b></div>
+        <div style="flex:1">
+          <div><b>FROM:</b> ${esc(from)}</div>
+          <div><b>TO:</b> ${esc(to)}</div>
+          <div class="hint small">${esc(movedTxt || "")}</div>
+        </div>
+      </div>`;
+    }).join("");
+    wrap.innerHTML = `<div class="results">${rows}</div>`;
+  } catch (e) {
+    wrap.innerHTML = '<div class="hint">Enter DEV KEY and click Save, then reload.</div>';
+  }
+}
 function getSelectedShopIds() {
   const sel = $("ownShops");
   if (!sel) return [];
@@ -646,7 +679,36 @@ async function mergeShops() {
   const fromText = $("mergeFromShop").selectedOptions[0]?.textContent || fromShopId;
   const toText = $("mergeToShop").selectedOptions[0]?.textContent || toShopId;
 
-  const ok = confirm(`Merge shops?\n\nFROM: ${fromText}\nTO:   ${toText}\n\nThis will MOVE all data from FROM -> TO.`);
+  // Preview first (counts)
+  let pv = null;
+  try {
+    pv = await api("/api/dev/shops/merge/preview", {
+      method: "POST",
+      body: JSON.stringify({ fromShopId, toShopId })
+    });
+  } catch (e) {
+    pv = null;
+  }
+
+  let previewLines = "";
+  if (pv && pv.ok) {
+    const p = pv.preview || {};
+    const owners = pv.ownersWouldUpdate || 0;
+    const parts = Object.keys(p).map(k => `${k}: ${p[k]}`).join("\n");
+    previewLines =
+      `\n\nPREVIEW (rows to move)\n` +
+      `${parts || "-"}\n` +
+      `owners: ${owners}`;
+    if (pv.fromShop?.isMerged && pv.fromShop?.mergedInto) {
+      previewLines += `\n\n⚠ FROM shop is already merged into: ${pv.fromShop.mergedInto}`;
+    }
+  }
+
+  const ok = confirm(
+    `Merge shops?\n\nFROM: ${fromText}\nTO:   ${toText}` +
+    previewLines +
+    `\n\nThis will MOVE all data from FROM -> TO.`
+  );
   if (!ok) return;
 
   const data = await api("/api/dev/shops/merge", {
@@ -660,11 +722,11 @@ async function mergeShops() {
     const parts = Object.keys(moved).map(k => `${k}:${moved[k]}`).join(" | ");
     msg.textContent = `Done. ${parts}. Owners updated: ${data.ownersUpdated || 0}`;
   }
-  // refresh dropdowns and owners
+  // refresh dropdowns and owners + merge history
   await loadShopOptions();
   await loadOwners().catch(() => {});
+  await loadMergeHistory().catch(() => {});
 }
-
 async function createOwner() {
   const email = ($("ownEmail").value || "").trim();
   const password = ($("ownPass").value || "").trim();
@@ -702,12 +764,13 @@ if ($("btnOwnCreate")) {
   $("btnOwnReload").addEventListener("click", () => loadOwners().catch(() => {}));
 
   // after dev key save, try load
-  setTimeout(() => { loadShopOptions(); loadOwners(); }, 300);
+  setTimeout(() => { loadShopOptions(); loadOwners(); loadMergeHistory(); }, 300);
 }
 
 
 if ($("btnMergeShop")) {
   $("btnMergeShop").addEventListener("click", () => mergeShops().catch(e => toast(e.message)));
+  if ($("btnMergeHistory")) $("btnMergeHistory").addEventListener("click", () => loadMergeHistory().catch(e => toast(e.message)));
   // Load shops even if Owner Accounts section isn't used
   setTimeout(() => { loadShopOptions(); }, 300);
 }

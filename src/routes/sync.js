@@ -4,11 +4,35 @@ import { readDB, writeDB } from "../db.js";
 const r = Router();
 
 function requireShop(req, res) {
-  if (!req.auth?.shopId) {
+  const raw = req.auth?.shopId ? String(req.auth.shopId) : "";
+  if (!raw) {
     res.status(401).json({ ok: false, error: "Missing auth shopId" });
     return null;
   }
-  return req.auth.shopId;
+
+  // Resolve merged shops to canonical shopId (safe for old devices holding old shopId)
+  try {
+    const db = readDB();
+    if (!Array.isArray(db.shops)) db.shops = [];
+    let cur = raw;
+    let hops = 0;
+    while (hops < 5) {
+      const s = db.shops.find(x => String(x.shopId) === String(cur));
+      if (s && s.isMerged === true && s.mergedInto) {
+        cur = String(s.mergedInto);
+        hops++;
+        continue;
+      }
+      break;
+    }
+    req.originalShopId = raw;
+    req.canonicalShopId = cur;
+    return cur;
+  } catch (e) {
+    req.originalShopId = raw;
+    req.canonicalShopId = raw;
+    return raw;
+  }
 }
 
 function toStr(v) {
@@ -318,11 +342,13 @@ r.get("/shop/profile", (req, res) => {
     return res.json({
       ok: true,
       shop: { shopId, shopName: "", address: "", phone: "", whatsapp: "", tagline: "", currency: "", footer: "", createdAt: Date.now(), updatedAt: Date.now() },
-      serverTime: Date.now()
+      serverTime: Date.now(),
+      canonicalShopId: req.canonicalShopId || shopId,
+      mergedFromShopId: (req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)) ? req.originalShopId : ""
     });
   }
 
-  return res.json({ ok: true, shop, serverTime: Date.now() });
+  return res.json({ ok: true, shop, serverTime: Date.now(), canonicalShopId: req.canonicalShopId || shopId, mergedFromShopId: (req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)) ? req.originalShopId : "" });
 });
 
 /**
@@ -374,7 +400,7 @@ r.post("/shop/profile", (req, res) => {
   };
 
   writeDB(db);
-  return res.json({ ok: true, saved: true, shop: db.shops[idx], serverTime: now });
+  return res.json({ ok: true, saved: true, shop: db.shops[idx], serverTime: now, canonicalShopId: req.canonicalShopId || shopId, mergedFromShopId: (req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)) ? req.originalShopId : "" });
 });
 
 /**

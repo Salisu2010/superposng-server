@@ -189,6 +189,23 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   };
 
   db.licenses.unshift(lic);
+
+
+// Merge log (for audit trail in Dev Portal)
+db.mergeLogs.unshift({
+  id: "ML_" + crypto.randomBytes(6).toString("hex"),
+  fromShopId,
+  toShopId,
+  fromShopName: fromShop.shopName || "",
+  toShopName: toShop.shopName || "",
+  fromShopCode: fromShop.shopCode || "",
+  toShopCode: toShop.shopCode || "",
+  moved: stats,
+  ownersUpdated,
+  mergedBy: "DEV",
+  createdAt: now(),
+});
+
   writeDB(db);
   res.json({ ok: true, license: lic, serverTime: createdAt });
 });
@@ -500,6 +517,78 @@ r.get("/shops/list", requireDevKey, (req, res) => {
 });
 
 
+
+
+// Merge Preview (Dev Portal)
+// body: { fromShopId, toShopId }
+// - Returns counts for each collection before running merge
+r.post("/shops/merge/preview", requireDevKey, (req, res) => {
+  const fromShopId = trim(req.body?.fromShopId);
+  const toShopId = trim(req.body?.toShopId);
+
+  if (!fromShopId || !toShopId) return res.status(400).json({ ok: false, error: "fromShopId and toShopId required" });
+  if (fromShopId === toShopId) return res.status(400).json({ ok: false, error: "fromShopId and toShopId must be different" });
+
+  const db = readDB();
+  if (!Array.isArray(db.shops)) db.shops = [];
+
+  const fromShop = db.shops.find(s => s.shopId === fromShopId);
+  const toShop = db.shops.find(s => s.shopId === toShopId);
+
+  if (!fromShop) return res.status(404).json({ ok: false, error: "fromShopId not found" });
+  if (!toShop) return res.status(404).json({ ok: false, error: "toShopId not found" });
+
+  const keys = ["shopId", "shopID", "shop_id", "sid", "shop", "shop_id_fk"];
+  const matchesShop = (obj, sid) => {
+    if (!obj || typeof obj !== "object") return false;
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k) && trim(obj[k]) === sid) return true;
+    }
+    return false;
+  };
+
+  const collections = [
+    "devices",
+    "pairCodes",
+    "products",
+    "staffs",
+    "sales",
+    "debtors",
+    "debtorPayments",
+    "licenses",
+    "pendingActivations"
+  ];
+
+  const preview = {};
+  for (const name of collections) {
+    const arr = Array.isArray(db[name]) ? db[name] : [];
+    preview[name] = arr.filter(row => matchesShop(row, fromShopId)).length;
+  }
+
+  // owners preview
+  let ownersWouldUpdate = 0;
+  for (const o of (db.owners || [])) {
+    if (!Array.isArray(o.shops)) continue;
+    if (o.shops.some(id => trim(id) === fromShopId)) ownersWouldUpdate++;
+  }
+
+  return res.json({
+    ok: true,
+    fromShop: { shopId: fromShop.shopId, shopName: fromShop.shopName, shopCode: fromShop.shopCode, isMerged: fromShop.isMerged === true, mergedInto: fromShop.mergedInto || "" },
+    toShop: { shopId: toShop.shopId, shopName: toShop.shopName, shopCode: toShop.shopCode },
+    preview,
+    ownersWouldUpdate,
+  });
+});
+
+// Merge History (Dev Portal)
+r.get("/shops/merge/history", requireDevKey, (req, res) => {
+  const db = readDB();
+  const logs = Array.isArray(db.mergeLogs) ? db.mergeLogs : [];
+  const limit = Math.max(1, Math.min(200, parseInt(req.query?.limit, 10) || 100));
+  return res.json({ ok: true, logs: logs.slice(0, limit) });
+});
+
 // Merge Shops (Dev Portal)
 // body: { fromShopId, toShopId }
 // - Moves all data rows from fromShopId -> toShopId across collections
@@ -514,6 +603,7 @@ r.post("/shops/merge", requireDevKey, (req, res) => {
   const db = readDB();
   if (!Array.isArray(db.shops)) db.shops = [];
   if (!Array.isArray(db.shopAliases)) db.shopAliases = [];
+  if (!Array.isArray(db.mergeLogs)) db.mergeLogs = [];
   if (!Array.isArray(db.owners)) db.owners = [];
 
   const fromShop = db.shops.find(s => s.shopId === fromShopId);
