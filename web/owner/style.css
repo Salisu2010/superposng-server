@@ -287,3 +287,5 @@ footer{opacity:.7;text-align:center;padding:20px 0}
 /* Make modal overlay always hidden by default; JS controls display */
 #expiryModalOverlay{display:none}
 #expiryModalOverlay:not(.hidden){display:flex}
+
+.hint{font-size:12px;opacity:.75;margin-top:6px;}

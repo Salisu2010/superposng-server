@@ -357,7 +357,12 @@ r.get("/me", authMiddleware, (req, res) => {
   if (auth.role === "owner") {
     const owner = (db.owners || []).find(o => o.ownerId === auth.sub);
     if (!owner) return res.status(404).json({ ok: false, error: "Owner not found" });
-    return res.json({ ok: true, role: "owner", owner: { ownerId: owner.ownerId, email: owner.email, shops: owner.shops || [] } });
+    const shopIds = (Array.isArray(owner.shops) ? owner.shops : []).map(trim).filter(Boolean);
+    const shops = shopIds.map((id) => {
+      const s = (db.shops || []).find(x => x.shopId === id);
+      return s ? { shopId: s.shopId, shopName: s.shopName || "Shop", shopCode: s.shopCode || "" } : null;
+    }).filter(Boolean);
+    return res.json({ ok: true, role: "owner", owner: { ownerId: owner.ownerId, email: owner.email, shops } });
   }
 
   if (auth.role === "cashier") {
