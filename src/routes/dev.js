@@ -10,6 +10,7 @@ import {
   addMonthsYmd,
   devhash16,
 } from "../spng1.js";
+import { genSpng2Token, parseAndVerifySpng2, devhash16Spng2 } from "../spng2.js";
 
 const r = Router();
 
@@ -131,6 +132,7 @@ function findLicenseByAny(db, { licenseId, token, deviceId, shopId }) {
 // -------------------------
 // DEV: Generate token
 // -------------------------
+// -------------------
 r.post("/generate-token", requireDevKey, (req, res) => {
   const db = readDB();
 
@@ -138,19 +140,33 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   const createdAt = now();
   const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 
-  // ✅ EXACT Offline Token (Python/Android compatible):
-  //   SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12
+  // ✅ Token generator (Professional):
+  // - If fpHash is provided => SPNG2 (Anti-Clone stronger)
+  // - Else => SPNG1 (Legacy compatible)
+  //
+  // SPNG1: SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12
+  // SPNG2: SPNG2|PLAN|YYYYMMDD|DEVHASH16|SIG12   (DEVHASH derived from ANDROID_ID + fpHash)
+
   const deviceId = trim(req.body?.deviceId);
+  const fpHash = trim(req.body?.fpHash);
+
   if (!deviceId) return res.status(400).json({ ok: false, error: "deviceId required" });
 
   let token = "";
+  let tokenVersion = "SPNG1";
+
   try {
-    token = genSpng1Token(plan, deviceId);
+    if (fpHash) {
+      tokenVersion = "SPNG2";
+      token = genSpng2Token(plan, deviceId, fpHash);
+    } else {
+      token = genSpng1Token(plan, deviceId);
+    }
   } catch (e) {
     return res.status(400).json({ ok: false, error: e?.message || "Bad request" });
   }
 
-  const parsed = parseAndVerifySpng1(token);
+  const parsed = tokenVersion === "SPNG2" ? parseAndVerifySpng2(token) : parseAndVerifySpng1(token);
   const expiresAt = parsed.ok ? parsed.expiresAt : 0;
   const expiryYmd = parsed.ok ? parsed.expiryYmd : "";
   const devHash = parsed.ok ? parsed.devHash : "";
@@ -158,12 +174,14 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   const lic = {
     licenseId,
     token,
+    tokenVersion,
     plan,
     status: "ISSUED",
     createdAt,
     expiresAt,
     expiryYmd,
     devHash,
+    fpHash: fpHash || "",
     boundDeviceId: "",
     boundShopId: "",
     activatedAt: 0,
@@ -174,7 +192,6 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   writeDB(db);
   res.json({ ok: true, license: lic, serverTime: createdAt });
 });
-
 // -------------------------
 // DEV: Register/import token (e.g. created externally via Python)
 // Accepts pipe tokens like: SPNG1|MONTHLY|YYYYMMDD|XXXX

@@ -253,7 +253,8 @@ async function doGenerateToken() {
     return;
   }
 
-  const payload = { plan, deviceId };
+  const fpHash = ($("genFpHash") ? $("genFpHash").value : "") || "";
+  const payload = fpHash.trim() ? { plan, deviceId, fpHash } : { plan, deviceId };
 
   const out = await api("/api/dev/generate-token", {
     method: "POST",
