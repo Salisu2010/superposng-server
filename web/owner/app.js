@@ -30,6 +30,18 @@
   const btnLogin = $("btnLogin");
   const btnLogout = $("btnLogout");
 
+  const modeOwner = $("modeOwner");
+  const modeCashier = $("modeCashier");
+  const loginModeDesc = $("loginModeDesc");
+  const ownerFields = $("ownerFields");
+  const cashierFields = $("cashierFields");
+
+  const shopCodeOrId = $("shopCodeOrId");
+  const cashierUser = $("cashierUser");
+  const cashierPin = $("cashierPin");
+
+  let LOGIN_MODE = "owner";
+
   const meEmail = $("meEmail");
   const shopsWrap = $("shops");
 
@@ -527,14 +539,26 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     showLoginErr("");
     btnLogin.disabled = true;
     try {
-      const email = $("email").value.trim();
-      const password = $("password").value.trim();
-      const data = await api("/api/owner/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      localStorage.setItem(LS_TOKEN, data.token || "");
-      await loadMe();
+      if (LOGIN_MODE === "cashier") {
+        const shopCodeOrIdVal = (shopCodeOrId?.value || "").trim();
+        const username = (cashierUser?.value || "").trim();
+        const pin = (cashierPin?.value || "").trim();
+        const data = await api("/api/owner/auth/cashier-login", {
+          method: "POST",
+          body: JSON.stringify({ shopCodeOrId: shopCodeOrIdVal, username, pin }),
+        });
+        localStorage.setItem(LS_TOKEN, data.token || "");
+        await loadMe();
+      } else {
+        const email = $("email").value.trim();
+        const password = $("password").value.trim();
+        const data = await api("/api/owner/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        });
+        localStorage.setItem(LS_TOKEN, data.token || "");
+        await loadMe();
+      }
     } catch (e) {
       showLoginErr(e.message || String(e));
     } finally {
@@ -569,9 +593,15 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
 
     try {
       const data = await api("/api/owner/me");
-      meEmail.textContent = data.owner?.email || "";
+      if ((data.role || "owner") === "cashier") {
+        meEmail.textContent = `Cashier: ${(data.cashier?.username || "").toString()}`.trim();
+      } else {
+        meEmail.textContent = data.owner?.email || "";
+      }
 
-      const shops = Array.isArray(data.owner?.shops) ? data.owner.shops : [];
+      const shops = ((data.role || "owner") === "cashier")
+        ? [{ shopId: data.cashier?.shopId || "", shopName: data.cashier?.shopName || "", shopCode: data.cashier?.shopCode || "" }]
+        : (Array.isArray(data.owner?.shops) ? data.owner.shops : []);
       shopsWrap.innerHTML = "";
       shopsWrap.className = "shopsList";
 
@@ -1083,10 +1113,32 @@ async function loadOverview() {
 
 
   // Events
+  function setLoginMode(mode){
+    LOGIN_MODE = mode === "cashier" ? "cashier" : "owner";
+    modeOwner?.classList.toggle("active", LOGIN_MODE === "owner");
+    modeCashier?.classList.toggle("active", LOGIN_MODE === "cashier");
+    ownerFields?.classList.toggle("hidden", LOGIN_MODE !== "owner");
+    cashierFields?.classList.toggle("hidden", LOGIN_MODE !== "cashier");
+    if (loginModeDesc) {
+      loginModeDesc.textContent = LOGIN_MODE === "owner"
+        ? "Use the owner account created from Developer Portal."
+        : "Cashier login (Shop Code + Username + PIN).";
+    }
+    showLoginErr("");
+  }
+
+  modeOwner?.addEventListener("click", () => setLoginMode("owner"));
+  modeCashier?.addEventListener("click", () => setLoginMode("cashier"));
+
   btnLogin?.addEventListener("click", doLogin);
   $("password")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doLogin();
+    if (e.key === "Enter" && LOGIN_MODE === "owner") doLogin();
   });
+  cashierPin?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && LOGIN_MODE === "cashier") doLogin();
+  });
+
+  setLoginMode("owner");
   btnLogout?.addEventListener("click", logout);
   btnBack?.addEventListener("click", () => {
     selectedShopId = "";

@@ -20,9 +20,14 @@
 <main class="wrap">
 <section class="card" id="loginCard">
 <h2 style="margin:0 0 8px 0;">Sign in</h2>
-<div class="muted">Use the owner account created from Developer Portal.</div>
+
+<div class="pillRow" style="margin:10px 0 6px 0;">
+  <button class="pill active" id="modeOwner" type="button">Owner</button>
+  <button class="pill" id="modeCashier" type="button">Cashier</button>
+</div>
+<div class="muted" id="loginModeDesc">Use the owner account created from Developer Portal.</div>
 <div style="height:14px"></div>
-<div class="grid">
+<div class="grid" id="ownerFields">
 <div>
 <label>Email</label>
 <input autocomplete="username" id="email" placeholder="owner@shop.com"/>
@@ -30,6 +35,23 @@
 <div>
 <label>Password</label>
 <input autocomplete="current-password" id="password" placeholder="********" type="password"/>
+</div>
+</div>
+
+<div class="grid hidden" id="cashierFields">
+<div>
+<label>Shop Code</label>
+<input id="shopCodeOrId" placeholder="SPNG-XXXXXX"/>
+</div>
+<div>
+<label>Username</label>
+<input id="cashierUser" placeholder="cashier"/>
+</div>
+<div>
+<label>PIN</label>
+<input id="cashierPin" placeholder="1234" type="password"/>
+</div>
+</div>
 </div>
 </div>
 <div style="height:14px"></div>

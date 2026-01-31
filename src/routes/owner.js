@@ -127,10 +127,21 @@ function requireOwner(req, res) {
   return true;
 }
 
+function requireOwnerOrCashier(req, res) {
+  if (!req?.auth || (req.auth.role !== "owner" && req.auth.role !== "cashier")) {
+    res.status(403).json({ ok: false, error: "Authentication required" });
+    return false;
+  }
+  return true;
+}
+
 function canAccessShop(req, shopId) {
   try {
-    const shops = Array.isArray(req?.auth?.shops) ? req.auth.shops : [];
-    return shops.includes(shopId);
+    const auth = req.auth || {};
+    if (!shopId) return false;
+    if (auth.role === "owner") return (auth.shops || []).includes(shopId);
+    if (auth.role === "cashier") return trim(auth.shopId) === trim(shopId);
+    return false;
   } catch (e) {
     return false;
   }
@@ -278,36 +289,94 @@ r.post("/auth/login", (req, res) => {
 });
 
 /**
+ * Cashier (Staff) login for Owner Portal
+ * POST /api/owner/auth/cashier-login
+ * body: { shopCodeOrId, username, pin }
+ */
+r.post("/auth/cashier-login", (req, res) => {
+  const shopCodeOrId = trim(req.body?.shopCodeOrId || req.body?.shopCode || req.body?.shopId).toUpperCase();
+  const username = trim(req.body?.username).toString();
+  const pin = trim(req.body?.pin).toString();
+
+  if (!shopCodeOrId || !username || !pin) {
+    return res.status(400).json({ ok: false, error: "shopCodeOrId, username, pin are required" });
+  }
+
+  const db = readDB();
+  const shop = (db.shops || []).find(s =>
+    trim(s.shopId).toUpperCase() === shopCodeOrId ||
+    trim(s.shopCode).toUpperCase() === shopCodeOrId
+  );
+  if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+  // Resolve merged shop to canonical
+  let canonicalShop = shop;
+  if (canonicalShop.isMerged === true && canonicalShop.mergedInto) {
+    const c = (db.shops || []).find(x => x.shopId === canonicalShop.mergedInto);
+    if (c) canonicalShop = c;
+  }
+
+  const staff = (db.staffs || []).find(st =>
+    pickShopId(st) === canonicalShop.shopId &&
+    trim(st.username).toLowerCase() === username.toLowerCase() &&
+    trim(st.pin) === pin &&
+    st.active !== false
+  );
+  if (!staff) return res.status(401).json({ ok: false, error: "Invalid staff credentials" });
+
+  const secret = process.env.JWT_SECRET || "dev_secret_change_me";
+  const token = signToken({
+    sub: `${canonicalShop.shopId}:${trim(staff.username)}`,
+    role: "cashier",
+    shopId: canonicalShop.shopId,
+    username: trim(staff.username),
+    staffId: trim(staff.staffId || staff.id || ""),
+  }, secret, "30d");
+
+  return res.json({
+    ok: true,
+    token,
+    cashier: {
+      username: trim(staff.username),
+      role: trim(staff.role || "cashier"),
+      shopId: canonicalShop.shopId,
+      shopName: canonicalShop.shopName || "",
+      shopCode: canonicalShop.shopCode || "",
+    }
+  });
+});
+
+
+/**
  * Owner profile
  */
 r.get("/me", authMiddleware, (req, res) => {
   const auth = req.auth || {};
-  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
-
   const db = readDB();
-  const owner = (db.owners || []).find(o => o.ownerId === auth.sub);
-  if (!owner) return res.status(404).json({ ok: false, error: "Owner not found" });
 
-  // attach shop names
-  const shops = (owner.shops || []).map(id => {
-    const s = (db.shops || []).find(x => x.shopId === id);
-    return {
-      shopId: id,
-      shopName: s?.shopName || "",
-      shopCode: s?.shopCode || "",
-      // richer shop profile (filled by /api/sync/shop/profile)
-      address: s?.address || "",
-      phone: s?.phone || "",
-      whatsapp: s?.whatsapp || "",
-      tagline: s?.tagline || "",
-      currency: s?.currency || "",
-      footer: s?.footer || "",
-      updatedAt: s?.updatedAt || 0,
-    };
-  });
+  if (auth.role === "owner") {
+    const owner = (db.owners || []).find(o => o.ownerId === auth.sub);
+    if (!owner) return res.status(404).json({ ok: false, error: "Owner not found" });
+    return res.json({ ok: true, role: "owner", owner: { ownerId: owner.ownerId, email: owner.email, shops: owner.shops || [] } });
+  }
 
-  return res.json({ ok: true, owner: { ownerId: owner.ownerId, email: owner.email, shops } });
+  if (auth.role === "cashier") {
+    const shop = (db.shops || []).find(s => s.shopId === auth.shopId);
+    return res.json({
+      ok: true,
+      role: "cashier",
+      cashier: {
+        username: auth.username || "",
+        shopId: auth.shopId || "",
+        shopName: shop?.shopName || "",
+        shopCode: shop?.shopCode || "",
+      }
+    });
+  }
+
+  return res.status(403).json({ ok: false, error: "Forbidden" });
 });
+
 
 /**
  * Owner shop overview (counts + totals + trend + product intelligence)
@@ -319,16 +388,25 @@ r.get("/me", authMiddleware, (req, res) => {
  */
 r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
   const auth = req.auth || {};
-  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  if (!requireOwnerOrCashier(req, res)) return;
 
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
-  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const isCashier = auth.role === "cashier";
+  const staffUserFilter = (auth.username || "").toString().trim().toLowerCase();
 
   const db = readDB();
   const shop = (db.shops || []).find(s => s.shopId === shopId);
   const products = (db.products || []).filter(p => pickShopId(p) === shopId);
-  const salesAll = (db.sales || []).filter(s => pickShopId(s) === shopId);
+  let salesAll = (db.sales || []).filter(s => pickShopId(s) === shopId);
+  if (isCashier && staffUserFilter) {
+    salesAll = salesAll.filter(s => {
+      const su = (s.staffUser || s.staff || s.user || "").toString().trim().toLowerCase();
+      return su && su === staffUserFilter;
+    });
+  }
   const debtors = (db.debtors || []).filter(d => pickShopId(d) === shopId);
 
   // If explicit debtors table is empty, derive debtors count from unpaid sales.
@@ -556,10 +634,10 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
  */
 r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
   const auth = req.auth || {};
-  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  if (!requireOwnerOrCashier(req, res)) return;
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
-  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
 
   const db = readDB();
   const q = trim(req.query.q || "").toLowerCase();
@@ -581,10 +659,13 @@ r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
  */
 r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
   const auth = req.auth || {};
-  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  if (!requireOwnerOrCashier(req, res)) return;
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
-  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const isCashier = auth.role === "cashier";
+  const staffUserFilter = (auth.username || "").toString().trim().toLowerCase();
 
   const from = asInt(req.query.from, 0);
   const to = asInt(req.query.to, 0);
@@ -592,6 +673,12 @@ r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
 
   const db = readDB();
   let items = (db.sales || []).filter(s => pickShopId(s) === shopId);
+  if (isCashier && staffUserFilter) {
+    items = items.filter(s => {
+      const su = (s.staffUser || s.staff || s.user || "").toString().trim().toLowerCase();
+      return su && su === staffUserFilter;
+    });
+  }
   if (from > 0) items = items.filter(s => asInt(s.createdAt, 0) >= from);
   if (to > 0) items = items.filter(s => asInt(s.createdAt, 0) <= to);
   items.sort((a, b) => asInt(b.createdAt, 0) - asInt(a.createdAt, 0));
@@ -631,10 +718,13 @@ r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
  */
 r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
   const auth = req.auth || {};
-  if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
+  if (!requireOwnerOrCashier(req, res)) return;
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
-  if (!(auth.shops || []).includes(shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+
+  const isCashier = auth.role === "cashier";
+  const staffUserFilter = (auth.username || "").toString().trim().toLowerCase();
 
   const db = readDB();
 
