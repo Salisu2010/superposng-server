@@ -361,6 +361,16 @@ r.post("/auth/cashier-login", (req, res) => {
   );
   if (!staff) return res.status(401).json({ ok: false, error: "Invalid staff credentials" });
 
+  // Ensure legacy staff have permissions object (default: Sales Only)
+  if (!staff.permissions && !staff.perms) {
+    staff.permissions = { sales: true, products: false, debtors: false, expiry: false, settings: false, insights: false, export: false };
+    try {
+      writeDB(db);
+    } catch (e) {
+      // ignore write errors; still proceed with defaults in token
+    }
+  }
+
   const secret = process.env.JWT_SECRET || "dev_secret_change_me";
   const token = signToken({
     sub: `${canonicalShop.shopId}:${trim(staff.username)}`,
@@ -410,7 +420,7 @@ r.get("/me", authMiddleware, (req, res) => {
       ok: true,
       role: "cashier",
       cashier: {
-      permissions: normPerms(staff.permissions || staff.perms || {}),
+      permissions: normPerms(auth.perms || auth.permissions || {}),
       username: auth.username || "",
         shopId: auth.shopId || "",
         shopName: shop?.shopName || "",
