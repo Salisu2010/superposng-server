@@ -722,6 +722,69 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
   return res.json({ ok: true, items: norm });
 });
 
+function normId(v){
+  const s = (v===null||v===undefined) ? "" : String(v).trim();
+  return s;
+}
+function normPhone(v){
+  const s = normId(v);
+  if (!s) return "";
+  const digits = s.replace(/\D+/g,"");
+  // NG common: keep last 11-13 digits to avoid country code mismatch
+  if (digits.length > 13) return digits.slice(-13);
+  if (digits.length > 11) return digits.slice(-11);
+  return digits;
+}
+function debtorIdKeys(d){
+  const x = d || {};
+  const keys = [
+    x.id, x.debtorId, x.debtorID,
+    x.receiptNo, x.receipt, x.saleNo, x.saleNO,
+    x.saleId, x.saleID,
+    x.invoiceNo, x.invoice, x.invoiceID, x.invoiceId,
+    x.txnId, x.txnID, x.transactionId, x.transactionID,
+    x.ref, x.reference, x.referenceNo, x.referenceNumber
+  ].map(normId).filter(Boolean);
+  // Some apps prefix IDs like "ID:xxxx"
+  const expanded = [];
+  for (const k of keys){
+    expanded.push(k);
+    if (k.toUpperCase().startsWith("ID:")) expanded.push(k.substring(3).trim());
+  }
+  return Array.from(new Set(expanded.filter(Boolean)));
+}
+function computeOpenRemaining(d){
+  const total = pickDebtorTotal(d);
+  const paid = pickDebtorPaid(d);
+  let rem = pickDebtorRemaining(d);
+  if (!Number.isFinite(rem)) rem = 0;
+  // If remaining looks wrong but total/paid exist, recompute.
+  if (rem <= 0.0001 && Number.isFinite(total) && total > 0) {
+    const recomputed = Math.max(0, total - Math.max(0, paid));
+    if (recomputed > rem) rem = recomputed;
+  }
+  // Extra fallbacks
+  const bal = asNum(d?.balance ?? d?.due ?? d?.amountDue ?? d?.credit ?? 0, 0);
+  if (rem <= 0.0001 && bal > 0.0001) rem = bal;
+  return rem;
+}
+function isDebtorClosed(d){
+  const st = (d?.status || d?.state || "").toString().trim().toUpperCase();
+  if (st === "PAID" || st === "CLOSED" || st === "DONE" || st === "SETTLED") return true;
+  const rem = computeOpenRemaining(d);
+  return rem <= 0.0001;
+}
+function matchDebtorByAnyId(d, wantedIds){
+  if (!d) return false;
+  const keys = debtorIdKeys(d);
+  for (const w of wantedIds){
+    const ww = normId(w);
+    if (!ww) continue;
+    if (keys.includes(ww)) return true;
+  }
+  return false;
+}
+
 // -------------------------------------------------
 // ✅ Professional Debtor Payments (Owner dashboard)
 // -------------------------------------------------
@@ -749,46 +812,57 @@ r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
     if (!Array.isArray(db.debtors)) db.debtors = [];
     if (!Array.isArray(db.debtorPayments)) db.debtorPayments = [];
 
+    
     const now = Date.now();
     const did = String(debtorId);
 
+    const wantedIds = [
+  did,
+  receiptNo,
+  body.debtorId, body.id,
+  body.saleId, body.saleID,
+  body.saleNo, body.saleNO,
+  body.receiptNo, body.receipt,
+  body.invoiceNo, body.invoice,
+  body.transactionId, body.transactionID,
+  body.txnId, body.ref, body.reference
+    ].map(normId).filter(Boolean);
+
     const candidates = db.debtors
-      .filter(d => (d && pickShopId(d) === shopId))
-      .filter(d => {
-        const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || d.debtorId || "").toString();
-        if (rn === did) return true;
-        // allow matching by explicit receiptNo too
-        if (receiptNo && rn === receiptNo) return true;
-        return false;
-      })
-      .map(d => {
-        const total = pickDebtorTotal(d);
-        const paid = pickDebtorPaid(d);
-        const remaining = pickDebtorRemaining(d);
-        const createdAt = asInt(d.createdAt, 0) || 0;
-        return { d, total, paid, remaining, createdAt };
-      })
-      .filter(x => x.remaining > 0.0001)
-      .sort((a,b) => a.createdAt - b.createdAt);
+  .filter(d => (d && pickShopId(d) === shopId))
+  .filter(d => matchDebtorByAnyId(d, wantedIds))
+  .map(d => {
+    const total = pickDebtorTotal(d);
+    const paid = pickDebtorPaid(d);
+    const remaining = computeOpenRemaining(d);
+    const createdAt = asInt(d.createdAt, 0) || 0;
+    return { d, total, paid, remaining, createdAt };
+  })
+  .filter(x => x.remaining > 0.0001)
+  .filter(x => !isDebtorClosed(x.d))
+  .sort((a,b) => a.createdAt - b.createdAt);
 
     if (candidates.length === 0) {
       // Fallback: if debtorId isn't found, try phone-based payment for open debtor(s)
       if (!phone) return res.status(404).json({ ok: false, error: "Debtor not found" });
-      const byPhone = db.debtors
-        .filter(d => (d && pickShopId(d) === shopId))
-        .filter(d => {
-          const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
-          return ph && phone && ph === phone;
-        })
-        .map(d => {
-          const total = pickDebtorTotal(d);
-          const paid = pickDebtorPaid(d);
-          const remaining = pickDebtorRemaining(d);
-          const createdAt = asInt(d.createdAt, 0) || 0;
-          return { d, total, paid, remaining, createdAt };
-        })
-        .filter(x => x.remaining > 0.0001)
-        .sort((a,b) => a.createdAt - b.createdAt);
+      
+    const nPhone = normPhone(phone);
+    const byPhone = db.debtors
+  .filter(d => (d && pickShopId(d) === shopId))
+  .filter(d => {
+    const ph = normPhone(d.customerPhone || d.phone || (d.customer && d.customer.phone) || "");
+    return ph && nPhone && ph === nPhone;
+  })
+  .map(d => {
+    const total = pickDebtorTotal(d);
+    const paid = pickDebtorPaid(d);
+    const remaining = computeOpenRemaining(d);
+    const createdAt = asInt(d.createdAt, 0) || 0;
+    return { d, total, paid, remaining, createdAt };
+  })
+  .filter(x => x.remaining > 0.0001)
+  .filter(x => !isDebtorClosed(x.d))
+  .sort((a,b) => a.createdAt - b.createdAt);
 
       if (byPhone.length === 0) return res.status(404).json({ ok: false, error: "Debtor not found" });
       candidates.splice(0, candidates.length, ...byPhone);
@@ -854,7 +928,9 @@ r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
 
     if (!shopId || !shopId.trim()) return res.status(400).json({ ok: false, error: "Missing shopId" });
     if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "Invalid amount" });
-    if (!receiptNo && !phone) return res.status(400).json({ ok: false, error: "Provide receiptNo or phone" });
+    if (!receiptNo && !phone && !(body.debtorId||body.id||body.saleId||body.saleID||body.saleNo||body.saleNO||body.invoiceNo||body.transactionId||body.txnId||body.ref||body.reference)) {
+      return res.status(400).json({ ok: false, error: "Provide receiptNo, phone, or any debtor id (debtorId/saleId/saleNo/invoiceNo/ref)" });
+    }
 
     const db = readDB();
     if (!Array.isArray(db.debtors)) db.debtors = [];
@@ -862,26 +938,62 @@ r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
 
     // Candidates: either match by receiptNo OR by phone and open balance
     const now = Date.now();
-    const candidates = db.debtors
-      .filter(d => (d && pickShopId(d) === shopId))
-      .filter(d => {
-        const rn = (d.receiptNo || d.receipt || d.saleNo || d.id || "").toString();
-        const ph = (d.customerPhone || d.phone || d.customer && d.customer.phone || "").toString();
-        if (receiptNo) return rn === receiptNo;
-        return ph && phone && ph === phone;
-      })
-      .map(d => {
-        const total = pickDebtorTotal(d);
-        const paid = pickDebtorPaid(d);
-        const remaining = pickDebtorRemaining(d);
-        const createdAt = asInt(d.createdAt, 0) || 0;
-        return { d, total, paid, remaining, createdAt };
-      })
-      .filter(x => x.remaining > 0.0001)
-      .sort((a,b) => a.createdAt - b.createdAt);
+    
+const wantedIds = [
+  receiptNo,
+  body.debtorId, body.id,
+  body.saleId, body.saleID,
+  body.saleNo, body.saleNO,
+  body.receiptNo, body.receipt,
+  body.invoiceNo, body.invoice,
+  body.transactionId, body.transactionID,
+  body.txnId, body.ref, body.reference
+].map(normId).filter(Boolean);
+
+const nPhone = normPhone(phone);
+
+// Candidates: match by any provided id first, otherwise by phone (open balance)
+let candidates = db.debtors
+  .filter(d => (d && pickShopId(d) === shopId))
+  .filter(d => wantedIds.length ? matchDebtorByAnyId(d, wantedIds) : true)
+  .filter(d => {
+    if (wantedIds.length) return true;
+    const ph = normPhone(d.customerPhone || d.phone || (d.customer && d.customer.phone) || "");
+    return ph && nPhone && ph === nPhone;
+  })
+  .map(d => {
+    const total = pickDebtorTotal(d);
+    const paid = pickDebtorPaid(d);
+    const remaining = computeOpenRemaining(d);
+    const createdAt = asInt(d.createdAt, 0) || 0;
+    return { d, total, paid, remaining, createdAt };
+  })
+  .filter(x => x.remaining > 0.0001)
+  .filter(x => !isDebtorClosed(x.d))
+  .sort((a,b) => a.createdAt - b.createdAt);
+
+// If id search returned nothing but phone exists, try phone search as fallback
+if (candidates.length === 0 && nPhone) {
+  candidates = db.debtors
+    .filter(d => (d && pickShopId(d) === shopId))
+    .filter(d => {
+      const ph = normPhone(d.customerPhone || d.phone || (d.customer && d.customer.phone) || "");
+      return ph && nPhone && ph === nPhone;
+    })
+    .map(d => {
+      const total = pickDebtorTotal(d);
+      const paid = pickDebtorPaid(d);
+      const remaining = computeOpenRemaining(d);
+      const createdAt = asInt(d.createdAt, 0) || 0;
+      return { d, total, paid, remaining, createdAt };
+    })
+    .filter(x => x.remaining > 0.0001)
+    .filter(x => !isDebtorClosed(x.d))
+    .sort((a,b) => a.createdAt - b.createdAt);
+}
 
     if (candidates.length === 0) {
-      return res.status(404).json({ ok: false, error: "No open debtor found" });
+      return res.status(404).json({ ok: false, error: "No open debtor found (check id/receipt/phone match)" });
     }
 
     let left = amount;
