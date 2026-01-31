@@ -284,6 +284,43 @@
       <p class="hint">Tip: click an owner row to auto-fill Owner ID. Use Assign to update shop access.</p>
     </section>
 
+  
+    <section class="card">
+      <h2>Cashier Permissions</h2>
+      <p class="muted">Manage what each cashier can access on the Owner Portal (server-side enforced).</p>
+
+      <div class="grid2">
+        <div>
+          <label>Shop Code or Shop ID</label>
+          <input id="permShopCode" placeholder="SPNG-XXXX-XXXX or shopId" />
+        </div>
+        <div class="row">
+          <button id="btnLoadCashiers" class="btn">Load Cashiers</button>
+        </div>
+      </div>
+
+      <div id="cashierPermMsg" class="msg hidden"></div>
+
+      <div class="tableWrap">
+        <table class="table" id="tCashierPerms">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Sales</th>
+              <th>Products</th>
+              <th>Debtors</th>
+              <th>Expiry</th>
+              <th>Settings</th>
+              <th>Insights</th>
+              <th>Export</th>
+              <th>Save</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
   </main>
 
   <div id="toast" class="toast"></div>

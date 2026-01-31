@@ -19,6 +19,69 @@
     return (p && (p.role === "owner" || p.role === "admin")) ? true : false;
   }
 
+  function isCashierUser(){
+    const t = localStorage.getItem(LS_TOKEN) || "";
+    const p = jwtPayload(t);
+    return (p && p.role === "cashier") ? true : false;
+  }
+
+  function applyRoleUI(role, perms){
+    const isCashier = (role === "cashier") || isCashierUser();
+    const p = (perms && typeof perms === "object") ? perms : {};
+    const allowSales = (isCashier ? (p.sales !== false) : true);
+    const allowProducts = (isCashier ? (p.products === true) : true);
+    const allowDebtors = (isCashier ? (p.debtors === true) : true);
+    const allowExpiry = (isCashier ? (p.expiry === true) : true);
+    const allowSettings = (isCashier ? (p.settings === true) : true);
+    const allowInsights = (isCashier ? (p.insights === true) : true);
+    const allowExport = (isCashier ? (p.export === true) : true);
+
+    // Tabs
+    const tabProducts = document.querySelector('.tab[data-tab="products"]');
+    const tabDebtors = document.querySelector('.tab[data-tab="debtors"]');
+    const tabSales = document.querySelector('.tab[data-tab="sales"]');
+    const tabExpiry = document.querySelector('.tab[data-tab="expiry"]');
+    const tabInsights = document.querySelector('.tab[data-tab="insights"]');
+
+    // Hide/show tabs based on perms
+    if(tabSales) tabSales.classList.toggle("hidden", !allowSales);
+    if(tabProducts) tabProducts.classList.toggle("hidden", !allowProducts);
+    if(tabDebtors) tabDebtors.classList.toggle("hidden", !allowDebtors);
+    if(tabExpiry) tabExpiry.classList.toggle("hidden", !allowExpiry);
+    if(tabInsights) tabInsights.classList.toggle("hidden", !allowInsights);
+
+    // Panels
+    if(panels && panels.sales) panels.sales.classList.toggle("hidden", !allowSales);
+    if(panels && panels.products) panels.products.classList.toggle("hidden", !allowProducts);
+    if(panels && panels.debtors) panels.debtors.classList.toggle("hidden", !allowDebtors);
+    if(panels && panels.expiry) panels.expiry.classList.toggle("hidden", !allowExpiry);
+    if(panels && panels.insights) panels.insights.classList.toggle("hidden", !allowInsights);
+
+    // Controls (settings/export)
+    const expSettings = document.querySelector(".settingsRow");
+    const btnExport = document.getElementById("btnExportExpiryCsv");
+    if(expSettings) expSettings.classList.toggle("hidden", !allowSettings);
+    if(btnExport) btnExport.classList.toggle("hidden", !allowExport);
+
+    // Default active tab
+    if(isCashier){
+      if(allowSales){
+        activateTab("sales");
+      } else if(allowProducts){
+        activateTab("products");
+      } else if(allowDebtors){
+        activateTab("debtors");
+      } else if(allowExpiry){
+        activateTab("expiry");
+      } else if(allowInsights){
+        activateTab("insights");
+      } else {
+        activateTab("sales");
+      }
+    }
+  }
+
+
 
   const loginCard = $("loginCard");
   const meCard = $("meCard");
@@ -624,6 +687,8 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
         });
       }
 
+      applyRoleUI((data.role || "owner"), (data.role==="cashier"? (data.cashier?.permissions||{}): {}));
+
       showMe();
     } catch (e) {
       // token invalid/expired
@@ -766,7 +831,7 @@ function renderMiniLists(perf) {
 
 
     // Expiring-soon setting UI
-    try {
+    if (!isCashierUser()) try {
       // If we have a local override, always display/use it.
       const sd = localSoon || (Number(ov?.range?.soonDays || 90) || 90);
       ovLastSoonDays = sd;
@@ -791,7 +856,7 @@ function renderMiniLists(perf) {
     renderTopProducts(ov.productPerformance || {});
     renderMiniLists(ov.productPerformance || {});
     // Profit + daily table
-    try {
+    if (!isCashierUser()) try {
       const ins = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/insights?days=${encodeURIComponent(days)}`);
       if (ins && ins.ok !== false) {
         renderProfit(ins.profit || {});
@@ -1054,11 +1119,16 @@ async function loadOverview() {
       clearTable(debtorsBody, 9, "Loading...");
 
       await loadOverview();
-      await loadProducts();
-      await loadSales();
-      await loadDebtors();
-
-      setTab("products");
+      if (isCashierUser()) {
+        // Cashier: limited view (sales only)
+        await loadSales();
+        setTab("sales");
+      } else {
+        await loadProducts();
+        await loadSales();
+        await loadDebtors();
+        setTab("products");
+      }
     } catch (e) {
       console.error(e);
       showShopErr(e.message || String(e));

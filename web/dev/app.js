@@ -775,3 +775,116 @@ if ($("btnMergeShop")) {
   setTimeout(() => { loadShopOptions(); }, 300);
 }
 
+
+  // ----------------------------
+  // Cashier Permissions
+  // ----------------------------
+  const permShopCode = $("permShopCode");
+  const btnLoadCashiers = $("btnLoadCashiers");
+  const cashierPermMsg = $("cashierPermMsg");
+  const tCashierPerms = $("tCashierPerms");
+
+  function showPermMsg(msg, ok=true){
+    if(!cashierPermMsg) return;
+    cashierPermMsg.textContent = msg || "";
+    cashierPermMsg.classList.toggle("hidden", !msg);
+    cashierPermMsg.classList.toggle("ok", !!ok);
+    cashierPermMsg.classList.toggle("err", !ok);
+  }
+
+  function mkCheck(checked){
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!checked;
+    return input;
+  }
+
+  async function loadCashiers(){
+    showPermMsg("");
+    const code = (permShopCode?.value || "").trim();
+    if(!code) return showPermMsg("Enter Shop Code or Shop ID", false);
+
+    try{
+      const data = await devApi(`/api/dev/shops/${encodeURIComponent(code)}/cashiers`);
+      if(!data.ok) throw new Error(data.error || "Failed");
+
+      const tbody = tCashierPerms?.querySelector("tbody");
+      if(!tbody) return;
+      tbody.innerHTML = "";
+
+      const rows = Array.isArray(data.cashiers) ? data.cashiers : [];
+      if(!rows.length){
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 9;
+        td.className = "muted";
+        td.textContent = "No cashiers found for this shop.";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+        return;
+      }
+
+      rows.forEach((c) => {
+        const tr = document.createElement("tr");
+        const perms = c.permissions || {};
+        const tdUser = document.createElement("td");
+        tdUser.textContent = c.username || "";
+        tr.appendChild(tdUser);
+
+        const chkSales = mkCheck(perms.sales !== false);
+        const chkProd = mkCheck(!!perms.products);
+        const chkDebt = mkCheck(!!perms.debtors);
+        const chkExp = mkCheck(!!perms.expiry);
+        const chkSet = mkCheck(!!perms.settings);
+        const chkIns = mkCheck(!!perms.insights);
+        const chkEx = mkCheck(!!perms.export);
+
+        [chkSales, chkProd, chkDebt, chkExp, chkSet, chkIns, chkEx].forEach((ch) => {
+          const td = document.createElement("td");
+          td.appendChild(ch);
+          tr.appendChild(td);
+        });
+
+        const tdSave = document.createElement("td");
+        const btn = document.createElement("button");
+        btn.className = "btn small";
+        btn.textContent = "Save";
+        btn.addEventListener("click", async () => {
+          showPermMsg("");
+          const payload = {
+            permissions: {
+              sales: !!chkSales.checked,
+              products: !!chkProd.checked,
+              debtors: !!chkDebt.checked,
+              expiry: !!chkExp.checked,
+              settings: !!chkSet.checked,
+              insights: !!chkIns.checked,
+              export: !!chkEx.checked
+            }
+          };
+          try{
+            const resp = await devApi(`/api/dev/shops/${encodeURIComponent(code)}/cashiers/${encodeURIComponent(c.username)}/permissions`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+            if(!resp.ok) throw new Error(resp.error || "Save failed");
+            showPermMsg(`Saved permissions for ${c.username}`, true);
+          }catch(e){
+            showPermMsg(String(e.message || e), false);
+          }
+        });
+        tdSave.appendChild(btn);
+        tr.appendChild(tdSave);
+
+        tbody.appendChild(tr);
+      });
+
+      showPermMsg(`Loaded ${rows.length} cashier(s) for ${data.shop?.shopName || "shop"}`, true);
+    }catch(e){
+      showPermMsg(String(e.message || e), false);
+    }
+  }
+
+  if(btnLoadCashiers) btnLoadCashiers.addEventListener("click", loadCashiers);
+

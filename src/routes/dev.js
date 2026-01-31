@@ -774,4 +774,83 @@ r.get("/owners/list", requireDevKey, (req, res) => {
   return res.json({ ok: true, owners });
 });
 
+
+/**
+ * Cashier permissions management (DEV only)
+ *
+ * Permissions model:
+ *  { sales:true|false, products:true|false, debtors:true|false, expiry:true|false, settings:true|false, insights:true|false, export:true|false }
+ *
+ * GET /api/dev/shops/:shopCodeOrId/cashiers
+ * POST /api/dev/shops/:shopCodeOrId/cashiers/:username/permissions  body: { permissions:{...} }
+ */
+
+function normPermsDev(p) {
+  const o = (p && typeof p === "object") ? p : {};
+  return {
+    sales: o.sales !== false, // default true
+    products: o.products === true,
+    debtors: o.debtors === true,
+    expiry: o.expiry === true,
+    settings: o.settings === true,
+    insights: o.insights === true,
+    export: o.export === true,
+  };
+}
+
+function resolveShopByCodeOrId(db, shopCodeOrId) {
+  const key = trim(shopCodeOrId).toUpperCase();
+  if (!key) return null;
+  let shop = (db.shops || []).find(s => trim(s.shopId).toUpperCase() === key || trim(s.shopCode).toUpperCase() === key);
+  if (!shop) return null;
+  // resolve merged to canonical
+  if (shop.isMerged === true && shop.mergedInto) {
+    const c = (db.shops || []).find(x => x.shopId === shop.mergedInto);
+    if (c) shop = c;
+  }
+  return shop;
+}
+
+r.get("/shops/:shopCodeOrId/cashiers", requireDevKey, (req, res) => {
+  const db = readDB();
+  const shop = resolveShopByCodeOrId(db, req.params.shopCodeOrId);
+  if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+  const staffs = (db.staffs || []).filter(st => {
+    const sid = trim(st.shopId || st.shopID || st.shop_id || st.sid || "");
+    return sid === shop.shopId && st.active !== false;
+  }).map(st => ({
+    staffId: trim(st.staffId || st.id || ""),
+    username: trim(st.username || ""),
+    name: trim(st.name || st.fullName || ""),
+    role: trim(st.role || "cashier"),
+    active: st.active !== false,
+    permissions: normPermsDev(st.permissions || st.perms || {})
+  }));
+
+  return res.json({ ok: true, shop: { shopId: shop.shopId, shopName: shop.shopName || "", shopCode: shop.shopCode || "" }, cashiers: staffs });
+});
+
+r.post("/shops/:shopCodeOrId/cashiers/:username/permissions", requireDevKey, (req, res) => {
+  const shopCodeOrId = req.params.shopCodeOrId;
+  const username = trim(req.params.username).toLowerCase();
+  const perms = normPermsDev(req.body?.permissions || req.body?.perms || {});
+
+  const db = readDB();
+  const shop = resolveShopByCodeOrId(db, shopCodeOrId);
+  if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+  const staff = (db.staffs || []).find(st => {
+    const sid = trim(st.shopId || st.shopID || st.shop_id || st.sid || "");
+    return sid === shop.shopId && trim(st.username).toLowerCase() === username;
+  });
+  if (!staff) return res.status(404).json({ ok: false, error: "Cashier not found" });
+
+  staff.permissions = perms;
+  writeDB(db);
+
+  return res.json({ ok: true, shopId: shop.shopId, username: trim(staff.username), permissions: perms });
+});
+
+
 export default r;

@@ -147,6 +147,43 @@ function canAccessShop(req, shopId) {
   }
 }
 
+
+// Cashier permission model (owner always has all permissions)
+// Staff record can store: staff.permissions = { sales:true, products:false, debtors:false, expiry:false, settings:false, insights:false, export:false }
+// Token may include: perms:{...}
+function normPerms(p) {
+  const o = (p && typeof p === "object") ? p : {};
+  return {
+    sales: o.sales !== false, // default true
+    products: o.products === true,
+    debtors: o.debtors === true,
+    expiry: o.expiry === true,
+    settings: o.settings === true,
+    insights: o.insights === true,
+    export: o.export === true,
+  };
+}
+
+function getAuthPerms(req) {
+  const auth = req.auth || {};
+  if (auth.role === "owner") return { sales:true, products:true, debtors:true, expiry:true, settings:true, insights:true, export:true };
+  if (auth.role === "cashier") return normPerms(auth.perms || auth.permissions || {});
+  return { sales:false, products:false, debtors:false, expiry:false, settings:false, insights:false, export:false };
+}
+
+function requirePerm(req, res, permKey) {
+  const auth = req.auth || {};
+  if (auth.role === "owner") return true;
+  if (auth.role !== "cashier") {
+    res.status(403).json({ ok: false, error: "Authentication required" });
+    return false;
+  }
+  const perms = getAuthPerms(req);
+  if (perms && perms[permKey] === true) return true;
+  res.status(403).json({ ok: false, error: "Cashier permission denied" });
+  return false;
+}
+
 function hashPassword(password, salt) {
   // scrypt is strong and built-in
   const key = crypto.scryptSync(password, salt, 32);
@@ -329,6 +366,7 @@ r.post("/auth/cashier-login", (req, res) => {
     sub: `${canonicalShop.shopId}:${trim(staff.username)}`,
     role: "cashier",
     shopId: canonicalShop.shopId,
+    perms: normPerms(staff.permissions || staff.perms || {}),
     username: trim(staff.username),
     staffId: trim(staff.staffId || staff.id || ""),
   }, secret, "30d");
@@ -337,6 +375,7 @@ r.post("/auth/cashier-login", (req, res) => {
     ok: true,
     token,
     cashier: {
+      permissions: normPerms(staff.permissions || staff.perms || {}),
       username: trim(staff.username),
       role: trim(staff.role || "cashier"),
       shopId: canonicalShop.shopId,
@@ -371,7 +410,8 @@ r.get("/me", authMiddleware, (req, res) => {
       ok: true,
       role: "cashier",
       cashier: {
-        username: auth.username || "",
+      permissions: normPerms(staff.permissions || staff.perms || {}),
+      username: auth.username || "",
         shopId: auth.shopId || "",
         shopName: shop?.shopName || "",
         shopCode: shop?.shopCode || "",
@@ -638,11 +678,14 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
  * Owner: products table
  */
 r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   const auth = req.auth || {};
   if (!requireOwnerOrCashier(req, res)) return;
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
   if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!requirePerm(req, res, "products")) return;
 
   const db = readDB();
   const q = trim(req.query.q || "").toLowerCase();
@@ -668,6 +711,7 @@ r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
   if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!requirePerm(req, res, "sales")) return;
 
   const isCashier = auth.role === "cashier";
   const staffUserFilter = (auth.username || "").toString().trim().toLowerCase();
@@ -722,11 +766,14 @@ r.get("/shop/:shopId/sales", authMiddleware, (req, res) => {
  * Owner: debtors table
  */
 r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   const auth = req.auth || {};
   if (!requireOwnerOrCashier(req, res)) return;
   const shopId = trim(req.params.shopId);
   if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
   if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!requirePerm(req, res, "debtors")) return;
 
   const isCashier = auth.role === "cashier";
   const staffUserFilter = (auth.username || "").toString().trim().toLowerCase();
@@ -889,6 +936,8 @@ function matchDebtorByAnyId(d, wantedIds){
 
 // Pay a specific debtor by debtorId (id/receiptNo). Body: { amount, method?, note?, receiptNo?, phone? }
 r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   try {
     const { shopId, debtorId } = req.params;
     const body = req.body || {};
@@ -1012,6 +1061,8 @@ r.post("/shop/:shopId/debtors/:debtorId/pay", authMiddleware, (req, res) => {
 });
 
 r.post("/shop/:shopId/debtors/pay", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   try {
     const { shopId } = req.params;
     const body = req.body || {};
@@ -1146,6 +1197,8 @@ if (candidates.length === 0 && nPhone) {
 // Expiry lists + settings
 // -----------------------------
 r.get("/shop/:shopId/expiry", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   const auth = req.auth || {};
   if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
 
@@ -1245,6 +1298,8 @@ r.get("/shop/:shopId/expiry", authMiddleware, (req, res) => {
 });
 
 r.post("/shop/:shopId/settings/expirySoonDays", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   const auth = req.auth || {};
   if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
 
@@ -1341,6 +1396,8 @@ function findProduct(idx, it){
  * Insights: daily revenue + profit (requires costPrice)
  */
 r.get("/shop/:shopId/insights", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   const auth = req.auth || {};
   if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
 
@@ -1416,6 +1473,8 @@ r.get("/shop/:shopId/insights", authMiddleware, (req, res) => {
  * Export expiry list to CSV
  */
 r.get("/shop/:shopId/expiry/export", authMiddleware, (req, res) => {
+  if (!requireOwner(req, res)) return;
+
   const auth = req.auth || {};
   if (auth.role !== "owner") return res.status(403).json({ ok: false, error: "Forbidden" });
 
