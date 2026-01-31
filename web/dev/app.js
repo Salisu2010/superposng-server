@@ -253,8 +253,9 @@ async function doGenerateToken() {
     return;
   }
 
-  const fpHash = ($("genFpHash") ? $("genFpHash").value : "") || "";
-  const payload = fpHash.trim() ? { plan, deviceId, fpHash } : { plan, deviceId };
+  const useSpng2 = $("genUseSpng2") ? !!$("genUseSpng2").checked : false;
+  const fpHash = (useSpng2 && $("genFpHash")) ? ($("genFpHash").value || "") : "";
+  const payload = (useSpng2 && fpHash.trim()) ? { plan, deviceId, fpHash: fpHash.trim() } : { plan, deviceId };
 
   const out = await api("/api/dev/generate-token", {
     method: "POST",
@@ -429,6 +430,21 @@ $("btnSaveKey").addEventListener("click", () => {
 });
 
 // Generator
+function updateSpng2Ui() {
+  const use = $("genUseSpng2") ? !!$("genUseSpng2").checked : false;
+  if ($("genFpWrap")) {
+    $("genFpWrap").style.display = use ? "block" : "none";
+  }
+  if (!use && $("genFpHash")) {
+    $("genFpHash").value = "";
+  }
+}
+
+if ($("genUseSpng2")) {
+  $("genUseSpng2").addEventListener("change", updateSpng2Ui);
+}
+updateSpng2Ui();
+
 if ($("btnGenerate")) {
   $("btnGenerate").addEventListener("click", () => doGenerateToken().catch((e) => toast(e.message)));
 }

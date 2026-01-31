@@ -37,8 +37,21 @@
           <input id="genDeviceId" placeholder="e.g. D67D063816AB188B" />
         </div>
         <div>
-          <label>Device Code / FP Hash (optional, enables SPNG2 Anti-Clone)</label>
-          <input id="genFpHash" placeholder="paste device code from the app (recommended)" />
+          <label>Anti-Clone (Recommended)</label>
+          <div class="switchRow">
+            <label class="switch">
+              <input id="genUseSpng2" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+            <div class="switchText">
+              <div class="switchTitle">Use SPNG2 Device Code</div>
+              <div class="hint" style="margin:0">From app: <b>Activation</b> → <b>Copy Device Code</b></div>
+            </div>
+          </div>
+        </div>
+        <div id="genFpWrap">
+          <label>Device Code (SPNG2)</label>
+          <input id="genFpHash" placeholder="paste device code from the app" />
         </div>
         <div class="row">
           <button id="btnGenerate" class="btn primary">Generate Token</button>

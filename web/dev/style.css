@@ -71,6 +71,44 @@ input::placeholder{color:rgba(142,160,194,0.7)}
 }
 
 .row{display:flex; gap:10px; align-items:center; margin-top:10px}
+
+.switchRow{display:flex; gap:12px; align-items:center}
+.switchText{display:flex; flex-direction:column; gap:2px}
+.switchTitle{font-size:13px; font-weight:800}
+
+.switch{
+  position:relative;
+  display:inline-block;
+  width:48px;
+  height:28px;
+}
+.switch input{opacity:0; width:0; height:0}
+.slider{
+  position:absolute;
+  cursor:pointer;
+  top:0; left:0; right:0; bottom:0;
+  background:rgba(36,51,87,0.85);
+  transition:.2s;
+  border-radius:999px;
+  border:1px solid var(--line);
+}
+.slider:before{
+  position:absolute;
+  content:"";
+  height:22px;
+  width:22px;
+  left:3px;
+  bottom:2px;
+  background:rgba(255,255,255,0.92);
+  transition:.2s;
+  border-radius:999px;
+}
+.switch input:checked + .slider{
+  background:rgba(43,108,255,0.85);
+}
+.switch input:checked + .slider:before{
+  transform:translateX(20px);
+}
 .btn{
   padding:11px 14px;
   border-radius:12px;
