@@ -190,22 +190,6 @@ r.post("/generate-token", requireDevKey, (req, res) => {
 
   db.licenses.unshift(lic);
 
-
-// Merge log (for audit trail in Dev Portal)
-db.mergeLogs.unshift({
-  id: "ML_" + crypto.randomBytes(6).toString("hex"),
-  fromShopId,
-  toShopId,
-  fromShopName: fromShop.shopName || "",
-  toShopName: toShop.shopName || "",
-  fromShopCode: fromShop.shopCode || "",
-  toShopCode: toShop.shopCode || "",
-  moved: stats,
-  ownersUpdated,
-  mergedBy: "DEV",
-  createdAt: now(),
-});
-
   writeDB(db);
   res.json({ ok: true, license: lic, serverTime: createdAt });
 });

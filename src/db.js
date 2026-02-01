@@ -20,6 +20,8 @@ function initDB() {
       debtorPayments: [],
       licenses: [],
       pendingActivations: [],
+      rmpLicenses: [],
+      rmpPendingActivations: [],
       owners: [],
       shopAliases: []
     }
@@ -80,6 +82,8 @@ function readDB() {
     // Licensing / activation tables
     if (!Array.isArray(db.licenses)) db.licenses = []
     if (!Array.isArray(db.pendingActivations)) db.pendingActivations = []
+    if (!Array.isArray(db.rmpLicenses)) db.rmpLicenses = []
+    if (!Array.isArray(db.rmpPendingActivations)) db.rmpPendingActivations = []
     if (!Array.isArray(db.owners)) db.owners = []
     if (!Array.isArray(db.shopAliases)) db.shopAliases = []
     return db
@@ -97,6 +101,8 @@ function readDB() {
       debtorPayments: [],
       licenses: [],
       pendingActivations: [],
+      rmpLicenses: [],
+      rmpPendingActivations: [],
       owners: [],
       shopAliases: []
     }
