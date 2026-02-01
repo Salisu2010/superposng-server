@@ -314,6 +314,25 @@ async function doGenerateRmpToken() {
   return out;
 }
 
+async function doActivateRmpOnline() {
+  const plan = ($("rmpPlan")?.value || "MONTHLY").trim();
+  const androidId = ($("rmpDeviceId")?.value || "").trim();
+  if (!androidId) {
+    toast("ANDROID_ID is required");
+    return;
+  }
+
+  const out = await api("/api/rmp/dev/activate-online", {
+    method: "POST",
+    body: JSON.stringify({ plan, androidId })
+  });
+
+  const token = out?.token || out?.license?.token || "";
+  if ($("rmpToken")) $("rmpToken").value = token;
+  toast("RMP activated online ✅");
+  return out;
+}
+
 function copyText(v) {
   const s = String(v || "");
   if (!s) return;
@@ -490,6 +509,9 @@ if ($("btnCopyId")) {
 // RMP Generator
 if ($("btnRmpGenerate")) {
   $("btnRmpGenerate").addEventListener("click", () => doGenerateRmpToken().catch((e) => toast(e.message)));
+}
+if ($("btnRmpActivateOnline")) {
+  $("btnRmpActivateOnline").addEventListener("click", () => doActivateRmpOnline().catch((e) => toast(e.message)));
 }
 if ($("btnRmpCopy")) {
   $("btnRmpCopy").addEventListener("click", () => {

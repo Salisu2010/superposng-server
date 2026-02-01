@@ -150,6 +150,107 @@ r.post("/license/check", (req, res) => {
 });
 
 // ------------------------------------------------------------
+// Pull active license by device (ONLINE activation from Dev Portal)
+// POST /api/rmp/license/pull-by-device
+// body: { androidId }
+// returns: ok, message, plan, expiryYmd, daysLeft, token
+// ------------------------------------------------------------
+r.post("/license/pull-by-device", (req, res) => {
+  const db = readDB();
+  const androidId = trim(req.body?.androidId || req.body?.deviceId);
+  if (!androidId) return res.status(400).json({ ok: false, message: "androidId required" });
+
+  let dh = "";
+  try { dh = normalizeDevhash(androidId); } catch (e) { /* ignore */ }
+  if (!dh) return res.status(400).json({ ok: false, message: "androidId required" });
+
+  db.rmpLicenses = Array.isArray(db.rmpLicenses) ? db.rmpLicenses : [];
+  const candidates = db.rmpLicenses
+    .filter((x) => trim(x.devHash).toLowerCase() === dh && trim(x.status).toUpperCase() !== "REVOKED")
+    .sort((a, b) => Number(b.expiresAt || 0) - Number(a.expiresAt || 0));
+
+  const lic = candidates.length ? candidates[0] : null;
+  if (!lic) return res.status(404).json({ ok: false, message: "No active license found" });
+
+  const pv = parseAndVerifyRmp1(lic.token);
+  if (!pv.ok) return res.status(400).json({ ok: false, message: "Stored token invalid" });
+
+  const daysLeft = daysLeftFromYmd(pv.expiryYmd);
+  if (daysLeft <= 0) return res.status(403).json({ ok: false, message: "Token expired", plan: pv.plan, expiryYmd: pv.expiryYmd, daysLeft: 0 });
+
+  // Bind if not bound
+  if (!trim(lic.boundDeviceId)) lic.boundDeviceId = androidId;
+  if (trim(lic.boundDeviceId) !== androidId) {
+    return res.status(409).json({ ok: false, message: "token bound to another device", boundDeviceId: lic.boundDeviceId });
+  }
+  lic.status = "ACTIVE";
+  if (!lic.activatedAt) lic.activatedAt = Date.now();
+  writeDB(db);
+
+  return res.json({ ok: true, message: "OK", plan: pv.plan, expiryYmd: pv.expiryYmd, daysLeft, token: pv.token });
+});
+
+// ------------------------------------------------------------
+// DEV: Activate online (generate + store + bind)
+// POST /api/rmp/dev/activate-online
+// headers: X-DEV-KEY
+// body: { plan, androidId }
+// ------------------------------------------------------------
+r.post("/dev/activate-online", requireDevKey, (req, res) => {
+  const db = readDB();
+  const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
+  const androidId = trim(req.body?.androidId || req.body?.deviceId);
+  if (!androidId) return res.status(400).json({ ok: false, error: "androidId required" });
+
+  let token = "";
+  try {
+    token = genRmp1Token(plan, androidId);
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: e?.message || "Bad request" });
+  }
+
+  const pv = parseAndVerifyRmp1(token);
+  if (!pv.ok) return res.status(400).json({ ok: false, error: pv.error || "Token error" });
+
+  db.rmpLicenses = Array.isArray(db.rmpLicenses) ? db.rmpLicenses : [];
+  // Upsert by token
+  let lic = db.rmpLicenses.find((x) => trim(x.token) === pv.token) || null;
+  if (!lic) {
+    const licenseId = `RMP-LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+    lic = {
+      licenseId,
+      token: pv.token,
+      tokenVersion: "RMP1",
+      plan: pv.plan,
+      status: "ACTIVE",
+      createdAt: Date.now(),
+      expiresAt: pv.expiresAt,
+      expiryYmd: pv.expiryYmd,
+      devHash: pv.devHash,
+      boundDeviceId: androidId,
+      activatedAt: Date.now(),
+      notes: "DEV ONLINE ACTIVATE"
+    };
+    db.rmpLicenses.unshift(lic);
+  } else {
+    lic.plan = pv.plan;
+    lic.expiresAt = pv.expiresAt;
+    lic.expiryYmd = pv.expiryYmd;
+    lic.devHash = pv.devHash;
+    lic.status = "ACTIVE";
+    if (!trim(lic.boundDeviceId)) lic.boundDeviceId = androidId;
+    if (trim(lic.boundDeviceId) !== androidId) {
+      return res.status(409).json({ ok: false, error: "token bound to another device", boundDeviceId: lic.boundDeviceId });
+    }
+    lic.activatedAt = Date.now();
+  }
+
+  writeDB(db);
+  const daysLeft = daysLeftFromYmd(pv.expiryYmd);
+  return res.json({ ok: true, license: lic, plan: pv.plan, expiryYmd: pv.expiryYmd, daysLeft, token: pv.token, serverTime: Date.now() });
+});
+
+// ------------------------------------------------------------
 // DEV: Revoke token
 // POST /api/rmp/dev/revoke { token }
 // ------------------------------------------------------------
