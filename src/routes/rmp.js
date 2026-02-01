@@ -6,6 +6,7 @@ import {
   genRmp1Token,
   parseAndVerifyRmp1,
   devhash16,
+  normalizeDevhash,
   daysLeftFromYmd,
 } from "../rmp1.js";
 
@@ -104,7 +105,7 @@ r.post("/license/check", (req, res) => {
   if (!pv.ok) return res.status(400).json({ ok: false, message: pv.error || "Token not valid" });
 
   let want = "";
-  try { want = devhash16(androidId); } catch (e) {}
+  try { want = normalizeDevhash(androidId); } catch (e) {}
   if (!want || want !== pv.devHash) return res.status(400).json({ ok: false, message: "Token not for this device" });
 
   // DB check for revoke/bind

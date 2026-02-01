@@ -35,6 +35,15 @@ export function devhash16(androidId) {
   return sha256Hex(a).slice(0, 16);
 }
 
+// Accept either raw ANDROID_ID (common) or already-derived DEVHASH16 (as shown in app).
+export function normalizeDevhash(input) {
+  const v = trim(input).toLowerCase();
+  if (!v) throw new Error("androidId is required");
+  if (/^[0-9a-f]{16}$/.test(v)) return v; // already DEVHASH16
+  return devhash16(v);
+}
+
+
 export function hmacSha256Hex(key, payload) {
   return crypto.createHmac("sha256", key).update(payload, "utf8").digest("hex");
 }
