@@ -158,10 +158,21 @@ r.post("/license/check", (req, res) => {
 r.post("/license/pull-by-device", (req, res) => {
   const db = readDB();
   const androidId = trim(req.body?.androidId || req.body?.deviceId);
+  const requestedDevHash = trim(req.body?.devHash || req.body?.devHash16);
   if (!androidId) return res.status(400).json({ ok: false, message: "androidId required" });
 
+  // Compute the expected DEVHASH from androidId, but also accept a DEVHASH sent by the app.
+  // This makes online activation robust even if different devices/reporting formats exist.
   let dh = "";
-  try { dh = normalizeDevhash(androidId); } catch (e) { /* ignore */ }
+  try {
+    if (requestedDevHash && /^[0-9a-fA-F]{16}$/.test(requestedDevHash)) {
+      dh = trim(requestedDevHash).toLowerCase();
+    } else {
+      dh = normalizeDevhash(androidId);
+    }
+  } catch (e) {
+    /* ignore */
+  }
   if (!dh) return res.status(400).json({ ok: false, message: "androidId required" });
 
   db.rmpLicenses = Array.isArray(db.rmpLicenses) ? db.rmpLicenses : [];
@@ -178,8 +189,23 @@ r.post("/license/pull-by-device", (req, res) => {
   const lic = candidates.length ? candidates[0] : null;
   if (!lic) return res.status(404).json({ ok: false, message: "No active license found" });
 
-  const pv = parseAndVerifyRmp1(lic.token);
+  // Ensure the stored token matches the requested/current device hash.
+  // If not, re-issue a new token with the SAME plan + expiry but bound to this device hash.
+  let pv = parseAndVerifyRmp1(lic.token);
   if (!pv.ok) return res.status(400).json({ ok: false, message: "Stored token invalid" });
+  if (trim(pv.devHash).toLowerCase() !== dh) {
+    try {
+      const newToken = genRmp1Token(pv.plan, dh, pv.expiryYmd);
+      const pv2 = parseAndVerifyRmp1(newToken);
+      if (pv2.ok) {
+        lic.token = pv2.token;
+        lic.devHash = dh;
+        pv = pv2;
+      }
+    } catch (e) {
+      // keep old token if regeneration fails
+    }
+  }
 
   const daysLeft = daysLeftFromYmd(pv.expiryYmd);
   if (daysLeft <= 0) return res.status(403).json({ ok: false, message: "Token expired", plan: pv.plan, expiryYmd: pv.expiryYmd, daysLeft: 0 });
