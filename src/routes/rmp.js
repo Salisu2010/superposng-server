@@ -166,7 +166,13 @@ r.post("/license/pull-by-device", (req, res) => {
 
   db.rmpLicenses = Array.isArray(db.rmpLicenses) ? db.rmpLicenses : [];
   const candidates = db.rmpLicenses
-    .filter((x) => trim(x.devHash).toLowerCase() === dh && trim(x.status).toUpperCase() !== "REVOKED")
+    .filter((x) => {
+      const st = trim(x.status).toUpperCase();
+      if (st === "REVOKED") return false;
+      const byHash = trim(x.devHash).toLowerCase() === dh;
+      const byBind = trim(x.boundDeviceId) === androidId;
+      return byHash || byBind;
+    })
     .sort((a, b) => Number(b.expiresAt || 0) - Number(a.expiresAt || 0));
 
   const lic = candidates.length ? candidates[0] : null;

@@ -102,7 +102,8 @@ export function genRmp1Token(plan, androidId, ymdOverride = "") {
     return addMonthsYmd(today, p === "MONTHLY" ? 1 : 12).ymd;
   })();
 
-  const dh = devhash16(androidId);
+  // Accept raw ANDROID_ID or already-derived DEVHASH16
+  const dh = normalizeDevhash(androidId);
   const payload = `${PREFIX}|${p}|${expYmd}|${dh}`;
   const sig = hmacSha256Hex(rmpSecret(), payload);
   return `${payload}|${sig}`;
