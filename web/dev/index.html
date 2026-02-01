@@ -71,6 +71,37 @@
       <p class="hint">Formats: <code>SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (legacy) or <code>SPNG2|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (Anti-Clone with Device Code).</p>
     </section>
 
+    <section class="card">
+      <h2>RepairMasterPro Token Generator (RMP)</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="rmpPlan">
+            <option value="MONTHLY" selected>MONTHLY (₦1500)</option>
+            <option value="YEARLY">YEARLY (₦15000)</option>
+            <option value="TRIAL">TRIAL (7 days)</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID / Device ID (required)</label>
+          <input id="rmpDeviceId" placeholder="paste ANDROID_ID from RepairMasterPro" />
+        </div>
+        <div class="row">
+          <button id="btnRmpGenerate" class="btn primary">Generate RMP Token</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>RMP Token</label>
+          <input id="rmpToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnRmpCopy" class="btn">Copy RMP Token</button>
+        </div>
+      </div>
+      <p class="hint">Format: <code>RMP1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code>. In the app: <b>Activation</b> → set <b>Cloud URL</b> → paste token → <b>Check Online Activation</b> or <b>Activate</b>.</p>
+    </section>
+
 
     <section class="card">
       <h2>Activate Device</h2>

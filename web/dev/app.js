@@ -24,6 +24,7 @@ function setKey(v) {
 }
 
 let _lastGenerated = null; // { licenseId, token }
+let _lastRmpGenerated = null; // { licenseId, token }
 let _tblOffset = 0;
 const _tblLimit = 50;
 
@@ -291,6 +292,28 @@ async function doRegisterExistingToken() {
   return out;
 }
 
+// ------------------------------
+// RepairMasterPro token generator
+// ------------------------------
+async function doGenerateRmpToken() {
+  const plan = ($("rmpPlan")?.value || "MONTHLY").trim();
+  const deviceId = ($("rmpDeviceId")?.value || "").trim();
+  if (!deviceId) {
+    toast("ANDROID_ID/Device ID is required");
+    return;
+  }
+
+  const out = await api("/api/rmp/dev/generate-token", {
+    method: "POST",
+    body: JSON.stringify({ plan, deviceId })
+  });
+
+  _lastRmpGenerated = out?.license ? { licenseId: out.license.licenseId, token: out.license.token } : null;
+  if ($("rmpToken")) $("rmpToken").value = _lastRmpGenerated?.token || "";
+  toast("RMP token generated");
+  return out;
+}
+
 function copyText(v) {
   const s = String(v || "");
   if (!s) return;
@@ -461,6 +484,17 @@ if ($("btnCopyId")) {
   $("btnCopyId").addEventListener("click", () => {
     copyText(_lastGenerated?.licenseId || "");
     toast("Copied license ID");
+  });
+}
+
+// RMP Generator
+if ($("btnRmpGenerate")) {
+  $("btnRmpGenerate").addEventListener("click", () => doGenerateRmpToken().catch((e) => toast(e.message)));
+}
+if ($("btnRmpCopy")) {
+  $("btnRmpCopy").addEventListener("click", () => {
+    copyText($("rmpToken")?.value || "");
+    toast("Copied RMP token");
   });
 }
 
