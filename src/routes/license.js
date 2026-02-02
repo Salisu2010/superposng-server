@@ -28,6 +28,76 @@ function parseAnyToken(tokenRaw) {
   return { version: "SPNG1", parsed: parseAndVerifySpng1(tokenRaw) };
 }
 
+
+function now() { return Date.now(); }
+function ensureSecurity(db) {
+  db.security = db.security && typeof db.security === "object" ? db.security : {};
+  db.security.blacklist = Array.isArray(db.security.blacklist) ? db.security.blacklist : [];
+  db.security.rate = db.security.rate && typeof db.security.rate === "object" ? db.security.rate : {};
+  return db.security;
+}
+function isBlacklisted(sec, devHash) {
+  const dh = trim(devHash);
+  if (!dh) return null;
+  const hit = sec.blacklist.find(x => trim(x.devHash) === dh) || null;
+  if (!hit) return null;
+  const until = Number(hit.until || 0);
+  if (until > 0 && now() > until) return null;
+  return hit;
+}
+function applyRateLimit(sec, devHash) {
+  const dh = trim(devHash);
+  if (!dh) return { ok: true };
+  const key = dh;
+  const rec = sec.rate[key] && typeof sec.rate[key] === "object" ? sec.rate[key] : { winStart: 0, count: 0, blockedUntil: 0 };
+  const t = now();
+
+  // If currently blocked
+  if (rec.blockedUntil && t < rec.blockedUntil) {
+    sec.rate[key] = rec;
+    return { ok: false, retryAfterSec: Math.ceil((rec.blockedUntil - t) / 1000) };
+  }
+
+  const WIN_MS = 5 * 60 * 1000;      // 5 minutes
+  const MAX = 25;                    // max checks per window
+  const BLOCK_MS = 10 * 60 * 1000;   // 10 minutes block
+
+  if (!rec.winStart || (t - rec.winStart) > WIN_MS) {
+    rec.winStart = t;
+    rec.count = 0;
+  }
+  rec.count = (rec.count || 0) + 1;
+
+  if (rec.count > MAX) {
+    rec.blockedUntil = t + BLOCK_MS;
+    sec.rate[key] = rec;
+    return { ok: false, retryAfterSec: Math.ceil(BLOCK_MS / 1000) };
+  }
+
+  sec.rate[key] = rec;
+  return { ok: true };
+}
+function ymdFromDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${dd}`;
+}
+function addDaysYmd(days) {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + Number(days || 0));
+  return ymdFromDate(d);
+}
+function planDays(plan) {
+  const p = trim(plan).toUpperCase();
+  if (p.includes("TRIAL")) return 7;
+  if (p.includes("WEEK")) return 7;
+  if (p.includes("MONTH")) return 30;
+  if (p.includes("YEAR")) return 365;
+  return 30;
+}
+
 // ------------------------------------------------------------
 // Android Online Activation Check (SPNG1/SPNG2)
 // POST /api/license/check
@@ -63,58 +133,114 @@ r.post("/check", (req, res) => {
     return res.status(400).json({ ok: false, message: "Token not for this device" });
   }
 
-  // Look up in DB (for revoke/extend)
-  const lic = Array.isArray(db.licenses)
-    ? db.licenses.find((x) => trim(x.token) === pv.token)
-    : null;
+  // Security: blacklist + rate limit
+  const sec = ensureSecurity(db);
+  const bl = isBlacklisted(sec, pv.devHash);
+  if (bl) {
+    writeDB(db);
+    return res.status(403).json({ ok: false, message: "Device blocked", reason: s(bl.reason || "blocked") });
+  }
+  const rl = applyRateLimit(sec, pv.devHash);
+  if (!rl.ok) {
+    writeDB(db);
+    return res.status(429).json({ ok: false, message: "Too many requests. Try again later.", retryAfterSec: rl.retryAfterSec || 60 });
+  }
 
-  if (lic && trim(lic.status).toUpperCase() === "REVOKED") {
+  // Normalize DB
+  db.licenses = Array.isArray(db.licenses) ? db.licenses : [];
+
+  // Device-lock: Only one ACTIVE license per devHash+version
+  let licByDev = db.licenses.find((x) =>
+    trim(x.devHash) === pv.devHash &&
+    trim(x.tokenVersion || "SPNG1").toUpperCase() === any.version.toUpperCase() &&
+    trim(x.status).toUpperCase() !== "REVOKED"
+  ) || null;
+
+  // Token-specific record (if exists)
+  let licByToken = db.licenses.find((x) => trim(x.token) === pv.token) || null;
+
+  // If token record is revoked, reject
+  if (licByToken && trim(licByToken.status).toUpperCase() === "REVOKED") {
+    writeDB(db);
     return res.status(403).json({ ok: false, message: "Token revoked" });
   }
 
-  // Auto-register if not found (keep existing behavior)
-  if (!lic) {
-    const licenseId = `LIC-${Math.random().toString(16).slice(2, 10).toUpperCase()}`;
-    const rec = {
-      licenseId,
-      token: pv.token,
-      tokenVersion: any.version,
-      plan: pv.plan,
-      status: "ACTIVE",
-      createdAt: Date.now(),
-      expiresAt: pv.expiresAt,
-      expiryYmd: pv.expiryYmd,
-      devHash: pv.devHash,
-      fpHash: any.version === "SPNG2" ? fpHash : "",
-      boundDeviceId: androidId,
-      boundShopId: "",
-      activatedAt: Date.now(),
-      notes: "AUTO-REGISTERED BY /license/check"
-    };
-    db.licenses = Array.isArray(db.licenses) ? db.licenses : [];
-    db.licenses.unshift(rec);
-    writeDB(db);
-  }
+  // If there is already an ACTIVE license for this device, NEVER reset/extend by re-install / re-token.
+  if (licByDev) {
+    // bind device id once
+    if (!trim(licByDev.boundDeviceId)) licByDev.boundDeviceId = androidId;
+    if (trim(licByDev.boundDeviceId) && trim(licByDev.boundDeviceId) !== androidId) {
+      // If someone tries to reuse same devHash with different androidId (rare), block for safety.
+      licByDev.status = "ACTIVE";
+      licByDev.lastSeenAt = now();
+      writeDB(db);
+      return res.status(409).json({ ok: false, message: "License already active for this device", boundDeviceId: licByDev.boundDeviceId });
+    }
 
-  const daysLeft = daysLeftFromYmd(pv.expiryYmd);
-  if (daysLeft <= 0) {
-    return res.status(403).json({
-      ok: false,
-      message: "Token expired",
-      plan: pv.plan,
-      expiryYmd: parseInt(pv.expiryYmd, 10) || 0,
-      daysLeft: 0
+    // keep original expiry (anti-cheat)
+    const storedYmd = String(licByDev.expiryYmd || "");
+    const daysLeft = daysLeftFromYmd(storedYmd);
+    licByDev.lastSeenAt = now();
+    licByDev.lastTokenSeen = pv.token;
+    if (any.version === "SPNG2") licByDev.fpHash = fpHash || licByDev.fpHash || "";
+    if (!licByDev.activatedAt) licByDev.activatedAt = now();
+    writeDB(db);
+
+    if (daysLeft <= 0) {
+      return res.status(403).json({
+        ok: false,
+        message: "Token expired",
+        plan: licByDev.plan || pv.plan,
+        expiryYmd: parseInt(storedYmd, 10) || 0,
+        daysLeft: 0
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "OK",
+      plan: licByDev.plan || pv.plan,
+      expiryYmd: parseInt(storedYmd, 10) || 0,
+      daysLeft,
+      token: licByDev.token || pv.token // server-side canonical token for this device
     });
   }
 
+  // No device license yet → create first activation record, expiry starts NOW (prevents losing days before install)
+  const licenseId = `LIC-${Math.random().toString(16).slice(2, 10).toUpperCase()}`;
+  const expYmd = addDaysYmd(planDays(pv.plan));
+  const rec = {
+    licenseId,
+    token: pv.token,
+    tokenVersion: any.version,
+    plan: pv.plan,
+    status: "ACTIVE",
+    createdAt: now(),
+    expiresAt: 0,
+    expiryYmd: expYmd,
+    devHash: pv.devHash,
+    fpHash: any.version === "SPNG2" ? fpHash : "",
+    boundDeviceId: androidId,
+    boundShopId: "",
+    activatedAt: now(),
+    lastSeenAt: now(),
+    notes: "HARDENED: ACTIVATION STARTS ON FIRST CHECK"
+  };
+  db.licenses.unshift(rec);
+  writeDB(db);
+
+  const daysLeft = daysLeftFromYmd(expYmd);
   return res.json({
     ok: true,
     message: "OK",
     plan: pv.plan,
-    expiryYmd: parseInt(pv.expiryYmd, 10) || 0,
-    daysLeft
+    expiryYmd: parseInt(expYmd, 10) || 0,
+    daysLeft,
+    token: pv.token
   });
 });
+
+
 
 function licensePayload(lic) {
   return {

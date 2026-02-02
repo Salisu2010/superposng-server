@@ -28,6 +28,9 @@ let _lastRmpGenerated = null; // { licenseId, token }
 let _tblOffset = 0;
 const _tblLimit = 50;
 
+let _rmpTblOffset = 0;
+const _rmpTblLimit = 50;
+
 async function api(path, opts = {}) {
   const key = getKey() || $("devKey").value.trim();
   const headers = Object.assign(
@@ -462,6 +465,107 @@ function renderTokenTable(out) {
   });
 }
 
+// ------------------------------
+// RepairMasterPro license table (listing)
+// ------------------------------
+function rmpTableParams() {
+  const q = ($("rmpTblQ")?.value || "").trim();
+  const status = ($("rmpTblStatus")?.value || "").trim();
+  const plan = ($("rmpTblPlan")?.value || "").trim();
+  return { q, status, plan };
+}
+
+async function refreshRmpTokenTable(resetOffset) {
+  if (resetOffset) _rmpTblOffset = 0;
+  const { q, status, plan } = rmpTableParams();
+  const qs = new URLSearchParams();
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  if (plan) qs.set("plan", plan);
+  qs.set("limit", String(_rmpTblLimit));
+  qs.set("offset", String(_rmpTblOffset));
+
+  const out = await api(`/api/rmp/dev/licenses?${qs.toString()}`, { method: "GET" });
+  renderRmpTokenTable(out);
+  return out;
+}
+
+function renderRmpTokenTable(out) {
+  const box = $("rmpTokenTable");
+  const meta = $("rmpTblMeta");
+  if (!box) return;
+
+  const items = Array.isArray(out?.items) ? out.items : [];
+  const total = Number(out?.total || 0);
+  const start = total === 0 ? 0 : (_rmpTblOffset + 1);
+  const end = Math.min(_rmpTblOffset + _rmpTblLimit, total);
+  if (meta) meta.textContent = `Showing ${start}-${end} of ${total}`;
+
+  const rows = items.map((m) => {
+    const id = m.licenseId || "";
+    const token = m.token || "";
+    const status = m.status || "";
+    const plan = m.plan || "";
+    const exp = fmtTs(m.expiresAt);
+    const dev = m.boundDeviceId || "-";
+    const hash = m.devHash || "-";
+    return `
+      <tr>
+        <td><code>${id}</code></td>
+        <td><code>${token}</code></td>
+        <td>${status}</td>
+        <td>${plan}</td>
+        <td>${exp}</td>
+        <td><code>${dev}</code></td>
+        <td><code>${hash}</code></td>
+        <td style="white-space:nowrap">
+          ${actionBtn("Copy", "", { act: "rmp_copy", token })}
+          ${actionBtn("Revoke", "danger", { act: "rmp_revoke", token })}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>License ID</th>
+          <th>Token</th>
+          <th>Status</th>
+          <th>Plan</th>
+          <th>Expiry</th>
+          <th>Device</th>
+          <th>DevHash</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td colspan="8" style="color:var(--muted)">No RMP licenses found</td></tr>`}
+      </tbody>
+    </table>
+  `;
+
+  box.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const act = btn.getAttribute("data-act");
+      const token = btn.getAttribute("data-token") || "";
+      if (act === "rmp_copy") {
+        copyText(token);
+        toast("Copied RMP token");
+        return;
+      }
+      if (act === "rmp_revoke") {
+        if (!token) return;
+        await api("/api/rmp/dev/revoke", { method: "POST", body: JSON.stringify({ token }) });
+        toast("RMP token revoked");
+        await refreshRmpTokenTable(false).catch(() => {});
+        return;
+      }
+    });
+  });
+}
+
 // Init
 $("devKey").value = getKey();
 
@@ -570,6 +674,41 @@ if ($("btnTblNext")) {
   });
 }
 
+// RMP token table controls
+if ($("btnRmpTblRefresh")) {
+  $("btnRmpTblRefresh").addEventListener("click", () => refreshRmpTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("rmpTblQ")) {
+  $("rmpTblQ").addEventListener("input", () => {
+    clearTimeout(refreshRmpTokenTable._t);
+    refreshRmpTokenTable._t = setTimeout(() => refreshRmpTokenTable(true).catch(() => {}), 300);
+  });
+}
+if ($("rmpTblStatus")) {
+  $("rmpTblStatus").addEventListener("change", () => refreshRmpTokenTable(true).catch(() => {}));
+}
+if ($("rmpTblPlan")) {
+  $("rmpTblPlan").addEventListener("change", () => refreshRmpTokenTable(true).catch(() => {}));
+}
+if ($("btnRmpTblPrev")) {
+  $("btnRmpTblPrev").addEventListener("click", () => {
+    _rmpTblOffset = Math.max(0, _rmpTblOffset - _rmpTblLimit);
+    refreshRmpTokenTable(false).catch((e) => toast(e.message));
+  });
+}
+if ($("btnRmpTblNext")) {
+  $("btnRmpTblNext").addEventListener("click", async () => {
+    const out = await refreshRmpTokenTable(false).catch((e) => { toast(e.message); return null; });
+    const total = Number(out?.total || 0);
+    if (_rmpTblOffset + _rmpTblLimit < total) {
+      _rmpTblOffset += _rmpTblLimit;
+      refreshRmpTokenTable(false).catch((e) => toast(e.message));
+    } else {
+      toast("No more pages");
+    }
+  });
+}
+
 $("btnAssign").addEventListener("click", () => doAssign().catch((e) => toast(e.message)));
 $("btnSearchFromActivate").addEventListener("click", () => {
   $("searchDevice").value = $("deviceId").value.trim();
@@ -592,6 +731,9 @@ $("btnExtend").addEventListener("click", () => doExtend().catch((e) => toast(e.m
 
 // Load token table on open
 refreshTokenTable(true).catch(() => {});
+
+// Load RMP license table on open
+refreshRmpTokenTable(true).catch(() => {});
 
 
 // ------------------------------

@@ -33,6 +33,16 @@ function requireDevKey(req, res, next) {
   return res.status(403).json({ ok: false, error: "Forbidden" });
 }
 
+
+function ensureSecurity(db) {
+  db.security = db.security && typeof db.security === "object" ? db.security : {};
+  db.security.blacklist = Array.isArray(db.security.blacklist) ? db.security.blacklist : [];
+  db.security.rate = db.security.rate && typeof db.security.rate === "object" ? db.security.rate : {};
+  return db.security;
+}
+function normalizeDh(v) { return trim(v).toUpperCase(); }
+
+
 function genToken(prefix = "SPNG") {
   // Human-friendly: SPNG-XXXX-XXXX
   const part = () => crypto.randomBytes(2).toString("hex").toUpperCase();
@@ -879,6 +889,51 @@ r.post("/shops/:shopCodeOrId/cashiers/apply-template", requireDevKey, (req, res)
 
   writeDB(db);
   return res.json({ ok: true, shopId: shop.shopId, templateId: tpl.id, updated });
+});
+
+
+
+// ------------------------------------------------------------
+// BLACKLIST / DEVICE BLOCK (DEV KEY)
+// POST /api/dev/blacklist/add    { devHash, reason?, days? }
+// POST /api/dev/blacklist/remove { devHash }
+// GET  /api/dev/blacklist/list
+// ------------------------------------------------------------
+r.post("/blacklist/add", requireDevKey, (req, res) => {
+  const db = readDB();
+  const sec = ensureSecurity(db);
+  const devHash = normalizeDh(req.body?.devHash);
+  const reason = trim(req.body?.reason) || "blocked";
+  const days = Number(req.body?.days || 0);
+  if (!devHash) return res.status(400).json({ ok: false, error: "devHash required" });
+
+  const until = days > 0 ? (now() + Math.floor(days * 86400000)) : 0;
+  const existing = sec.blacklist.find(x => normalizeDh(x.devHash) === devHash) || null;
+  if (existing) {
+    existing.reason = reason;
+    existing.until = until;
+    existing.updatedAt = now();
+  } else {
+    sec.blacklist.unshift({ devHash, reason, until, createdAt: now(), updatedAt: now() });
+  }
+  writeDB(db);
+  return res.json({ ok: true, devHash, reason, until });
+});
+
+r.post("/blacklist/remove", requireDevKey, (req, res) => {
+  const db = readDB();
+  const sec = ensureSecurity(db);
+  const devHash = normalizeDh(req.body?.devHash);
+  if (!devHash) return res.status(400).json({ ok: false, error: "devHash required" });
+  sec.blacklist = sec.blacklist.filter(x => normalizeDh(x.devHash) !== devHash);
+  writeDB(db);
+  return res.json({ ok: true, devHash });
+});
+
+r.get("/blacklist/list", requireDevKey, (req, res) => {
+  const db = readDB();
+  const sec = ensureSecurity(db);
+  return res.json({ ok: true, blacklist: sec.blacklist });
 });
 
 

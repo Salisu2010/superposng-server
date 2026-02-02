@@ -230,6 +230,42 @@
       <p class="hint">Tip: Click a row action to auto-fill <b>Target</b> for Extend/Revoke/Reset.</p>
     </section>
 
+    <section class="card">
+      <h2>RepairMasterPro License Table</h2>
+      <div class="grid3">
+        <div>
+          <label>Search (token/license/device/devHash)</label>
+          <input id="rmpTblQ" placeholder="type to filter" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="rmpTblStatus">
+            <option value="">All</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="REVOKED">REVOKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="rmpTblPlan">
+            <option value="">All</option>
+            <option value="TRIAL">TRIAL</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnRmpTblRefresh" class="btn primary">Refresh</button>
+        <button id="btnRmpTblPrev" class="btn">Prev</button>
+        <button id="btnRmpTblNext" class="btn">Next</button>
+        <span id="rmpTblMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+      <div id="rmpTokenTable" class="results"></div>
+      <p class="hint">Tip: Click <b>Copy</b> to copy token, or <b>Revoke</b> to deactivate. (RMP revoke uses token).</p>
+    </section>
+
     
     <section class="card">
       <h2>Merge Shops</h2>
