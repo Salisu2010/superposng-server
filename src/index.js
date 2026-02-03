@@ -15,6 +15,7 @@ import devRoutes from "./routes/dev.js";
 import licenseRoutes from "./routes/license.js";
 import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
+import trialRoutes from "./routes/trial.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -88,6 +89,9 @@ app.use("/api/owner", ownerRoutes);
 
 // Public license claim endpoint for device activation
 app.use("/api/license", licenseRoutes);
+
+// Server-backed Trial (SPNG + RMP)
+app.use("/api/trial", trialRoutes);
 
 // RepairMasterPro Online Licensing (RMP)
 app.use("/api/rmp", rmpRoutes);

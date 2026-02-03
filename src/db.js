@@ -23,7 +23,10 @@ function initDB() {
       rmpLicenses: [],
       rmpPendingActivations: [],
       owners: [],
-      shopAliases: []
+      shopAliases: [],
+
+      // Trial (server-backed) for SPNG + RMP
+      trials: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -86,6 +89,7 @@ function readDB() {
     if (!Array.isArray(db.rmpPendingActivations)) db.rmpPendingActivations = []
     if (!Array.isArray(db.owners)) db.owners = []
     if (!Array.isArray(db.shopAliases)) db.shopAliases = []
+    if (!Array.isArray(db.trials)) db.trials = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -104,7 +108,10 @@ function readDB() {
       rmpLicenses: [],
       rmpPendingActivations: [],
       owners: [],
-      shopAliases: []
+      shopAliases: [],
+
+      // Trial (server-backed) for SPNG + RMP
+      trials: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData
