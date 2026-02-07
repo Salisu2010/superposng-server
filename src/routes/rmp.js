@@ -157,6 +157,73 @@ r.post("/dev/generate-token", requireDevKey, (req, res) => {
   return res.json({ ok: true, license: rec, serverTime: Date.now() });
 });
 
+// -------------------------
+// RMP DEV: Bulk generate tokens (RMP1)
+// body: { plan, lines }
+// each line: ANDROID_ID
+// Max batch size: 200
+// returns: { ok, licenses:[...], errors:[...], serverTime }
+// -------------------------
+r.post("/dev/bulk-generate-tokens", requireDevKey, (req, res) => {
+  const db = readDB();
+  const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
+
+  const rawLines = trim(req.body?.lines || "");
+  const lines = rawLines
+    ? rawLines.split(/\r?\n/).map((x) => trim(x)).filter((x) => !!x)
+    : [];
+
+  if (!lines.length) return res.status(400).json({ ok: false, error: "lines required (paste AndroidIDs: one per line)" });
+
+  const MAX = 200;
+  if (lines.length > MAX) return res.status(400).json({ ok: false, error: `Too many rows. Max ${MAX} per batch.` });
+
+  const out = [];
+  const errors = [];
+  const serverTime = Date.now();
+
+  db.rmpLicenses = Array.isArray(db.rmpLicenses) ? db.rmpLicenses : [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const androidId = trim(lines[i]);
+    if (!androidId) { errors.push({ row: i + 1, input: lines[i], error: "Missing AndroidID" }); continue; }
+
+    let token = "";
+    try {
+      token = genRmp1Token(plan, androidId);
+    } catch (e) {
+      errors.push({ row: i + 1, input: androidId, error: e?.message || "Bad row" });
+      continue;
+    }
+
+    const pv = parseAndVerifyRmp1(token);
+    if (!pv.ok) { errors.push({ row: i + 1, input: androidId, error: pv.error || "Token error" }); continue; }
+
+    const licenseId = `RMP-LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+    const rec = {
+      licenseId,
+      token: pv.token,
+      tokenVersion: "RMP1",
+      plan: pv.plan,
+      status: "ISSUED",
+      createdAt: serverTime,
+      expiresAt: pv.expiresAt,
+      expiryYmd: pv.expiryYmd,
+      devHash: pv.devHash,
+      boundDeviceId: "",
+      activatedAt: 0,
+      notes: ""
+    };
+
+    db.rmpLicenses.unshift(rec);
+    out.push(rec);
+  }
+
+  writeDB(db);
+  return res.json({ ok: true, licenses: out, errors, serverTime });
+});
+
+
 // ------------------------------------------------------------
 // Android Online Activation Check
 // POST /api/rmp/license/check

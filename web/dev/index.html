@@ -396,7 +396,122 @@
       </div>
     </section>
 
-  </main>
+  
+    <!-- ===================== -->
+    <!-- Bulk Token Generator -->
+    <!-- ===================== -->
+    <section class="grid2" style="margin-top:16px">
+      <div class="card">
+        <div class="cardHead">
+          <div>
+            <h3>Bulk Generate • SuperPOSNG</h3>
+            <p class="muted">Paste AndroidIDs (one per line). Optional: add fpHash after comma for SPNG2.</p>
+          </div>
+          <span class="pill">Admin</span>
+        </div>
+
+        <div class="row2">
+          <label class="field">
+            <span>Plan</span>
+            <select id="bulkPlan" class="input">
+              <option value="MONTHLY">MONTHLY</option>
+              <option value="YEARLY">YEARLY</option>
+              <option value="LIFETIME">LIFETIME</option>
+              <option value="TRIAL">TRIAL</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Token Type</span>
+            <div class="toggleRow">
+              <label class="toggle">
+                <input type="checkbox" id="bulkUseSpng2" />
+                <span>Use SPNG2 (Anti‑Clone)</span>
+              </label>
+            </div>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>AndroidIDs list</span>
+          <textarea id="bulkLines" class="input mono" rows="8" placeholder="androidId1&#10;androidId2&#10;androidId3,fpHash3"></textarea>
+        </label>
+
+        <div class="btnRow">
+          <button id="btnBulkGenerate" class="btn primary">Generate Bulk</button>
+          <button id="btnBulkCsv" class="btn">Download CSV</button>
+        </div>
+
+        <div id="bulkMsg" class="muted"></div>
+        <div class="tableWrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>License ID</th>
+                <th>Plan</th>
+                <th>Expiry</th>
+                <th>Token</th>
+              </tr>
+            </thead>
+            <tbody id="bulkTable"></tbody>
+          </table>
+        </div>
+        <div id="bulkErr" class="muted" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="cardHead">
+          <div>
+            <h3>Bulk Generate • RepairMasterPro</h3>
+            <p class="muted">Paste AndroidIDs (one per line). Tokens will be bound to each AndroidID.</p>
+          </div>
+          <span class="pill">Admin</span>
+        </div>
+
+        <div class="row2">
+          <label class="field">
+            <span>Plan</span>
+            <select id="bulkRmpPlan" class="input">
+              <option value="MONTHLY">MONTHLY</option>
+              <option value="YEARLY">YEARLY</option>
+              <option value="LIFETIME">LIFETIME</option>
+              <option value="TRIAL">TRIAL</option>
+            </select>
+          </label>
+          <div></div>
+        </div>
+
+        <label class="field">
+          <span>AndroidIDs list</span>
+          <textarea id="bulkRmpLines" class="input mono" rows="8" placeholder="androidId1&#10;androidId2&#10;androidId3"></textarea>
+        </label>
+
+        <div class="btnRow">
+          <button id="btnBulkRmpGenerate" class="btn primary">Generate Bulk</button>
+          <button id="btnBulkRmpCsv" class="btn">Download CSV</button>
+        </div>
+
+        <div id="bulkRmpMsg" class="muted"></div>
+        <div class="tableWrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>License ID</th>
+                <th>Plan</th>
+                <th>Expiry</th>
+                <th>Token</th>
+              </tr>
+            </thead>
+            <tbody id="bulkRmpTable"></tbody>
+          </table>
+        </div>
+        <div id="bulkRmpErr" class="muted" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+</main>
 
   <div id="toast" class="toast"></div>
 

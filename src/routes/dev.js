@@ -203,6 +203,113 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   writeDB(db);
   res.json({ ok: true, license: lic, serverTime: createdAt });
 });
+
+// -------------------------
+// DEV: Bulk generate tokens (SPNG1/SPNG2)
+// body: { plan, useSpng2, quantity, lines }
+// - Professional mode: prefer 'lines' (list of AndroidIDs) to generate many at once
+// - Each line can be: ANDROID_ID   OR   ANDROID_ID,FP_HASH
+// - Max batch size: 200 (to protect server)
+// returns: { ok, licenses: [...], errors: [...], serverTime }
+// -------------------------
+r.post("/bulk-generate-tokens", requireDevKey, (req, res) => {
+  const db = readDB();
+
+  const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
+  const useSpng2 = !!req.body?.useSpng2;
+
+  const rawLines = trim(req.body?.lines || "");
+  let lines = rawLines
+    ? rawLines.split(/\r?\n/).map((x) => trim(x)).filter((x) => !!x)
+    : [];
+
+  // Optional: quantity mode (only if lines not provided) - will require deviceIds in future,
+  // so we keep it disabled to avoid generating unbound tokens accidentally.
+  const quantity = parseInt(req.body?.quantity || String(lines.length || 0), 10) || 0;
+
+  if (!lines.length) {
+    return res.status(400).json({ ok: false, error: "lines required (paste AndroidIDs: one per line)" });
+  }
+
+  const MAX = 200;
+  if (lines.length > MAX) {
+    return res.status(400).json({ ok: false, error: `Too many rows. Max ${MAX} per batch.` });
+  }
+
+  const createdAt = now();
+  const out = [];
+  const errors = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const row = lines[i];
+    // line formats:
+    // 1) androidId
+    // 2) androidId,fpHash
+    // 3) androidId|fpHash (allow)
+    let androidId = "";
+    let fpHash = "";
+
+    const parts = row.split(/[,|\t;]/).map((x) => trim(x)).filter((x) => !!x);
+    androidId = trim(parts[0] || "");
+    fpHash = trim(parts[1] || "");
+
+    if (!androidId) {
+      errors.push({ row: i + 1, input: row, error: "Missing AndroidID" });
+      continue;
+    }
+
+    let token = "";
+    let tokenVersion = "SPNG1";
+
+    try {
+      if (useSpng2) {
+        tokenVersion = "SPNG2";
+        if (!fpHash) {
+          // If fpHash not provided, we still allow SPNG2 by using a stable empty marker
+          // to keep user flow simple. (Android app should provide fpHash for strongest anti-clone)
+          fpHash = "";
+        }
+        token = genSpng2Token(plan, androidId, fpHash);
+      } else {
+        token = genSpng1Token(plan, androidId);
+      }
+    } catch (e) {
+      errors.push({ row: i + 1, input: row, error: e?.message || "Bad row" });
+      continue;
+    }
+
+    const parsed = tokenVersion === "SPNG2" ? parseAndVerifySpng2(token) : parseAndVerifySpng1(token);
+    if (!parsed.ok) {
+      errors.push({ row: i + 1, input: row, error: parsed.error || "Token parse failed" });
+      continue;
+    }
+
+    const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+    const lic = {
+      licenseId,
+      token,
+      tokenVersion,
+      plan,
+      status: "ISSUED",
+      createdAt,
+      expiresAt: parsed.expiresAt,
+      expiryYmd: parsed.expiryYmd || "",
+      devHash: parsed.devHash || "",
+      fpHash: tokenVersion === "SPNG2" ? (fpHash || "") : "",
+      boundDeviceId: "",
+      boundShopId: "",
+      activatedAt: 0,
+      notes: ""
+    };
+
+    db.licenses.unshift(lic);
+    out.push(lic);
+  }
+
+  writeDB(db);
+  return res.json({ ok: true, licenses: out, errors, serverTime: createdAt });
+});
+
 // -------------------------
 // DEV: Register/import token (e.g. created externally via Python)
 // Accepts pipe tokens like: SPNG1|MONTHLY|YYYYMMDD|XXXX

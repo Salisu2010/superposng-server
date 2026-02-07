@@ -1132,3 +1132,167 @@ if ($("btnMergeShop")) {
   // load templates on page init
   loadPermTemplates();
 
+
+
+// ================================
+// Bulk Token Generator (SPNG + RMP)
+// ================================
+let _bulkSpng = [];
+let _bulkRmp = [];
+
+function escHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function toCsv(rows, headers) {
+  const esc = (v) => {
+    const s = String(v ?? "");
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+    return s;
+  };
+  const head = headers.map(esc).join(",");
+  const body = rows.map((r) => headers.map((h) => esc(r[h])).join(",")).join("\n");
+  return head + "\n" + body + "\n";
+}
+
+function downloadText(filename, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }, 250);
+}
+
+async function bulkGenerateSpng() {
+  const plan = String($("bulkPlan")?.value || "MONTHLY").trim().toUpperCase();
+  const useSpng2 = !!$("bulkUseSpng2")?.checked;
+  const lines = String($("bulkLines")?.value || "").trim();
+
+  $("bulkMsg").textContent = "Generating...";
+  $("bulkErr").textContent = "";
+  $("bulkTable").innerHTML = "";
+
+  try {
+    const res = await api("/api/dev/bulk-generate-tokens", {
+      method: "POST",
+      body: JSON.stringify({ plan, useSpng2, lines }),
+    });
+
+    _bulkSpng = Array.isArray(res.licenses) ? res.licenses : [];
+    const errs = Array.isArray(res.errors) ? res.errors : [];
+
+    $("bulkMsg").textContent = `Done: ${_bulkSpng.length} tokens • Errors: ${errs.length}`;
+    $("bulkTable").innerHTML = _bulkSpng
+      .map((x, i) => `<tr>
+        <td>${i + 1}</td>
+        <td class="mono">${escHtml(x.licenseId || "")}</td>
+        <td>${escHtml(x.plan || "")}</td>
+        <td class="mono">${escHtml(x.expiryYmd || "")}</td>
+        <td class="mono">${escHtml(x.token || "")}</td>
+      </tr>`)
+      .join("");
+
+    if (errs.length) {
+      $("bulkErr").innerHTML =
+        `<b>Errors</b><br>` +
+        errs
+          .slice(0, 30)
+          .map((e) => `Row ${escHtml(e.row)}: ${escHtml(e.error)} (${escHtml(e.input)})`)
+          .join("<br>") +
+        (errs.length > 30 ? `<br>...and ${errs.length - 30} more` : "");
+    }
+  } catch (e) {
+    $("bulkMsg").textContent = "";
+    toast(e?.message || "Bulk generate failed");
+  }
+}
+
+function bulkCsvSpng() {
+  if (!_bulkSpng.length) return toast("Nothing to export yet");
+  const rows = _bulkSpng.map((x) => ({
+    licenseId: x.licenseId || "",
+    app: "SuperPOSNG",
+    plan: x.plan || "",
+    expiryYmd: x.expiryYmd || "",
+    tokenVersion: x.tokenVersion || "",
+    token: x.token || "",
+    devHash: x.devHash || "",
+  }));
+  const csv = toCsv(rows, ["licenseId", "app", "plan", "expiryYmd", "tokenVersion", "token", "devHash"]);
+  downloadText(`superposng_bulk_tokens_${Date.now()}.csv`, csv);
+}
+
+async function bulkGenerateRmp() {
+  const plan = String($("bulkRmpPlan")?.value || "MONTHLY").trim().toUpperCase();
+  const lines = String($("bulkRmpLines")?.value || "").trim();
+
+  $("bulkRmpMsg").textContent = "Generating...";
+  $("bulkRmpErr").textContent = "";
+  $("bulkRmpTable").innerHTML = "";
+
+  try {
+    const res = await api("/api/rmp/dev/bulk-generate-tokens", {
+      method: "POST",
+      body: JSON.stringify({ plan, lines }),
+    });
+
+    _bulkRmp = Array.isArray(res.licenses) ? res.licenses : [];
+    const errs = Array.isArray(res.errors) ? res.errors : [];
+
+    $("bulkRmpMsg").textContent = `Done: ${_bulkRmp.length} tokens • Errors: ${errs.length}`;
+    $("bulkRmpTable").innerHTML = _bulkRmp
+      .map((x, i) => `<tr>
+        <td>${i + 1}</td>
+        <td class="mono">${escHtml(x.licenseId || "")}</td>
+        <td>${escHtml(x.plan || "")}</td>
+        <td class="mono">${escHtml(x.expiryYmd || "")}</td>
+        <td class="mono">${escHtml(x.token || "")}</td>
+      </tr>`)
+      .join("");
+
+    if (errs.length) {
+      $("bulkRmpErr").innerHTML =
+        `<b>Errors</b><br>` +
+        errs
+          .slice(0, 30)
+          .map((e) => `Row ${escHtml(e.row)}: ${escHtml(e.error)} (${escHtml(e.input)})`)
+          .join("<br>") +
+        (errs.length > 30 ? `<br>...and ${errs.length - 30} more` : "");
+    }
+  } catch (e) {
+    $("bulkRmpMsg").textContent = "";
+    toast(e?.message || "Bulk generate failed");
+  }
+}
+
+function bulkCsvRmp() {
+  if (!_bulkRmp.length) return toast("Nothing to export yet");
+  const rows = _bulkRmp.map((x) => ({
+    licenseId: x.licenseId || "",
+    app: "RepairMasterPro",
+    plan: x.plan || "",
+    expiryYmd: x.expiryYmd || "",
+    tokenVersion: x.tokenVersion || "",
+    token: x.token || "",
+    devHash: x.devHash || "",
+  }));
+  const csv = toCsv(rows, ["licenseId", "app", "plan", "expiryYmd", "tokenVersion", "token", "devHash"]);
+  downloadText(`repairmasterpro_bulk_tokens_${Date.now()}.csv`, csv);
+}
+
+window.addEventListener("load", () => {
+  const b1 = $("btnBulkGenerate"); if (b1) b1.onclick = bulkGenerateSpng;
+  const b2 = $("btnBulkCsv"); if (b2) b2.onclick = bulkCsvSpng;
+  const b3 = $("btnBulkRmpGenerate"); if (b3) b3.onclick = bulkGenerateRmp;
+  const b4 = $("btnBulkRmpCsv"); if (b4) b4.onclick = bulkCsvRmp;
+});
