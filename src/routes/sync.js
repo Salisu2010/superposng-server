@@ -210,69 +210,84 @@ function itemLabel(it) {
 ========================= */
 
 r.get("/products", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const since = toInt(req.query.since || "0", 0);
-  const db = readDB();
-  ensureDbArrays(db);
+    const since = toInt(req.query.since || "0", 0);
+    const db = readDB();
+    ensureDbArrays(db);
 
-  const list = db.products.filter((p) => {
-    if (p.shopId !== shopId) return false;
-    if (since <= 0) return true;
-    return (p.updatedAt || p.createdAt || 0) > since;
-  });
+    const list = db.products.filter((p) => {
+      if (p.shopId !== shopId) return false;
+      if (since <= 0) return true;
+      return (p.updatedAt || p.createdAt || 0) > since;
+    });
 
-  return res.json({ ok: true, items: list, serverTime: Date.now() });
+    return res.json({ ok: true, items: list, serverTime: Date.now() });
+  } catch (e) {
+    console.error("GET /products error", e);
+    return res.status(500).json({ ok: false, error: "products_fetch_failed" });
+  }
 });
 
 r.post("/products", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const items = req.body?.items;
-  if (!Array.isArray(items)) {
-    return res.status(400).json({ ok: false, error: "items[] required" });
-  }
-
-  const db = readDB();
-  ensureDbArrays(db);
-
-  const now = Date.now();
-  let upserts = 0;
-
-  for (const it of items) {
-    const productId = trim(it?.productId || it?.id);
-    if (!productId) continue;
-
-    const idx = db.products.findIndex(
-      (p) => p.shopId === shopId && trim(p.productId) === productId
-    );
-
-    const row = { ...it, shopId, productId, updatedAt: now };
-
-    if (idx >= 0) {
-      const prev = db.products[idx] || {};
-
-      // Conflict guard for stock: prevent older snapshot from restoring stock upward
-      const prevUpd = toInt(prev.updatedAt || prev.createdAt || 0, 0);
-      const incUpd = toInt(it?.updatedAt || it?.createdAt || 0, 0);
-      const prevStock = toInt(prev.stock, 0);
-      const incStock = toInt(it?.stock, prevStock);
-      const shouldProtectStock = prevUpd > incUpd && incStock > prevStock;
-
-      const merged = { ...prev, ...row };
-      if (shouldProtectStock) merged.stock = prev.stock;
-      db.products[idx] = merged;
-    } else {
-      db.products.push(row);
+    const items = req.body?.items;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ ok: false, error: "items[] required" });
     }
 
-    upserts++;
-  }
+    const db = readDB();
+    ensureDbArrays(db);
 
-  writeDB(db);
-  return res.json({ ok: true, upserts, serverTime: now });
+    const now = Date.now();
+    let upserts = 0;
+
+    for (const it of items) {
+      const productId = trim(it?.productId || it?.id);
+      if (!productId) continue;
+
+      const idx = db.products.findIndex(
+        (p) =>
+          p.shopId === shopId &&
+          (trim(p.productId) === productId || trim(p.id) === productId)
+      );
+
+      const row = { ...it, shopId, productId, updatedAt: now };
+
+      if (idx >= 0) {
+        const prev = db.products[idx] || {};
+
+        // Conflict guard for stock: prevent older snapshot from restoring stock upward
+        const prevUpd = toInt(prev.updatedAt || prev.createdAt || 0, 0);
+        const incUpd = toInt(it?.updatedAt || it?.createdAt || 0, 0);
+        const prevStock = toInt(prev.stock, 0);
+        const incStock = toInt(it?.stock, prevStock);
+        const shouldProtectStock = prevUpd > incUpd && incStock > prevStock;
+
+        const merged = { ...prev, ...row };
+        if (shouldProtectStock) merged.stock = prev.stock;
+        if (!merged.createdAt) merged.createdAt = prev.createdAt || now;
+
+        db.products[idx] = merged;
+      } else {
+        if (!row.createdAt) row.createdAt = toInt(it?.createdAt, now);
+        db.products.push(row);
+      }
+
+      upserts++;
+    }
+
+    writeDB(db);
+    return res.json({ ok: true, upserts, serverTime: now });
+  } catch (e) {
+    console.error("POST /products error", e);
+    return res.status(500).json({ ok: false, error: "products_push_failed" });
+  }
 });
 
 /* =========================
@@ -280,58 +295,69 @@ r.post("/products", (req, res) => {
 ========================= */
 
 r.get("/staffs", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const since = toInt(req.query.since || "0", 0);
-  const db = readDB();
-  ensureDbArrays(db);
+    const since = toInt(req.query.since || "0", 0);
+    const db = readDB();
+    ensureDbArrays(db);
 
-  const list = db.staffs.filter((s) => {
-    if (s.shopId !== shopId) return false;
-    if (since <= 0) return true;
-    return (s.updatedAt || s.createdAt || 0) > since;
-  });
+    const list = db.staffs.filter((s) => {
+      if (s.shopId !== shopId) return false;
+      if (since <= 0) return true;
+      return (s.updatedAt || s.createdAt || 0) > since;
+    });
 
-  return res.json({ ok: true, items: list, serverTime: Date.now() });
+    return res.json({ ok: true, items: list, serverTime: Date.now() });
+  } catch (e) {
+    console.error("GET /staffs error", e);
+    return res.status(500).json({ ok: false, error: "staffs_fetch_failed" });
+  }
 });
 
 r.post("/staffs", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const items = req.body?.items;
-  if (!Array.isArray(items)) {
-    return res.status(400).json({ ok: false, error: "items[] required" });
+    const items = req.body?.items;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ ok: false, error: "items[] required" });
+    }
+
+    const db = readDB();
+    ensureDbArrays(db);
+
+    const now = Date.now();
+    let upserts = 0;
+
+    for (const it of items) {
+      const staffId = trim(it?.staffId || it?.id || it?.username);
+      if (!staffId) continue;
+
+      const u = trim(it?.username);
+      const idx = db.staffs.findIndex(
+        (s) =>
+          s.shopId === shopId &&
+          (trim(s.staffId) === staffId ||
+            trim(s.id) === staffId ||
+            (u && trim(s.username) === u))
+      );
+
+      const row = { ...it, shopId, staffId, updatedAt: now };
+      if (idx >= 0) db.staffs[idx] = { ...db.staffs[idx], ...row };
+      else db.staffs.push({ ...row, createdAt: toInt(it?.createdAt, now) });
+
+      upserts++;
+    }
+
+    writeDB(db);
+    return res.json({ ok: true, upserts, serverTime: now });
+  } catch (e) {
+    console.error("POST /staffs error", e);
+    return res.status(500).json({ ok: false, error: "staffs_push_failed" });
   }
-
-  const db = readDB();
-  ensureDbArrays(db);
-
-  const now = Date.now();
-  let upserts = 0;
-
-  for (const it of items) {
-    const staffId = trim(it?.staffId || it?.id || it?.username);
-    if (!staffId) continue;
-
-    const u = trim(it?.username);
-    const idx = db.staffs.findIndex(
-      (s) =>
-        s.shopId === shopId &&
-        (trim(s.staffId) === staffId ||
-          trim(s.id) === staffId ||
-          (u && trim(s.username) === u))
-    );
-
-    const row = { ...it, shopId, staffId, updatedAt: now };
-    if (idx >= 0) db.staffs[idx] = { ...db.staffs[idx], ...row };
-    else db.staffs.push(row);
-    upserts++;
-  }
-
-  writeDB(db);
-  return res.json({ ok: true, upserts, serverTime: now });
 });
 
 /* =========================
@@ -339,17 +365,69 @@ r.post("/staffs", (req, res) => {
 ========================= */
 
 r.get("/shop/profile", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const db = readDB();
-  ensureDbArrays(db);
+    const db = readDB();
+    ensureDbArrays(db);
 
-  const shop = db.shops.find((s) => s.shopId === shopId);
-  if (!shop) {
+    const shop = db.shops.find((s) => s.shopId === shopId);
+    if (!shop) {
+      return res.json({
+        ok: true,
+        shop: {
+          shopId,
+          shopName: "",
+          address: "",
+          phone: "",
+          whatsapp: "",
+          tagline: "",
+          currency: "",
+          footer: "",
+          expirySoonDays: 90,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        serverTime: Date.now(),
+        canonicalShopId: req.canonicalShopId || shopId,
+        mergedFromShopId:
+          req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)
+            ? req.originalShopId
+            : "",
+      });
+    }
+
     return res.json({
       ok: true,
-      shop: {
+      shop,
+      serverTime: Date.now(),
+      canonicalShopId: req.canonicalShopId || shopId,
+      mergedFromShopId:
+        req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)
+          ? req.originalShopId
+          : "",
+    });
+  } catch (e) {
+    console.error("GET /shop/profile error", e);
+    return res.status(500).json({ ok: false, error: "shop_profile_fetch_failed" });
+  }
+});
+
+r.post("/shop/profile", (req, res) => {
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
+
+    const shopPatch = req.body?.shop || req.body || {};
+    const db = readDB();
+    ensureDbArrays(db);
+
+    const now = Date.now();
+    let idx = db.shops.findIndex((s) => s.shopId === shopId);
+
+    if (idx < 0) {
+      db.shops.push({
         shopId,
         shopName: "",
         address: "",
@@ -358,82 +436,42 @@ r.get("/shop/profile", (req, res) => {
         tagline: "",
         currency: "",
         footer: "",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-      serverTime: Date.now(),
+        expirySoonDays: 90,
+        createdAt: now,
+        updatedAt: now,
+      });
+      idx = db.shops.length - 1;
+    }
+
+    db.shops[idx] = {
+      ...db.shops[idx],
+      shopName: shopPatch.shopName ?? db.shops[idx].shopName,
+      address: shopPatch.address ?? db.shops[idx].address,
+      phone: shopPatch.phone ?? db.shops[idx].phone,
+      whatsapp: shopPatch.whatsapp ?? db.shops[idx].whatsapp,
+      tagline: shopPatch.tagline ?? db.shops[idx].tagline,
+      currency: shopPatch.currency ?? db.shops[idx].currency,
+      footer: shopPatch.footer ?? db.shops[idx].footer,
+      expirySoonDays: shopPatch.expirySoonDays ?? db.shops[idx].expirySoonDays,
+      updatedAt: now,
+    };
+
+    writeDB(db);
+    return res.json({
+      ok: true,
+      saved: true,
+      shop: db.shops[idx],
+      serverTime: now,
       canonicalShopId: req.canonicalShopId || shopId,
       mergedFromShopId:
         req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)
           ? req.originalShopId
           : "",
     });
+  } catch (e) {
+    console.error("POST /shop/profile error", e);
+    return res.status(500).json({ ok: false, error: "shop_profile_save_failed" });
   }
-
-  return res.json({
-    ok: true,
-    shop,
-    serverTime: Date.now(),
-    canonicalShopId: req.canonicalShopId || shopId,
-    mergedFromShopId:
-      req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)
-        ? req.originalShopId
-        : "",
-  });
-});
-
-r.post("/shop/profile", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
-
-  const shopPatch = req.body?.shop || req.body || {};
-  const db = readDB();
-  ensureDbArrays(db);
-
-  const now = Date.now();
-  let idx = db.shops.findIndex((s) => s.shopId === shopId);
-
-  if (idx < 0) {
-    db.shops.push({
-      shopId,
-      shopName: "",
-      address: "",
-      phone: "",
-      whatsapp: "",
-      tagline: "",
-      currency: "",
-      footer: "",
-      createdAt: now,
-      updatedAt: now,
-    });
-    idx = db.shops.length - 1;
-  }
-
-  db.shops[idx] = {
-    ...db.shops[idx],
-    shopName: shopPatch.shopName ?? db.shops[idx].shopName,
-    address: shopPatch.address ?? db.shops[idx].address,
-    phone: shopPatch.phone ?? db.shops[idx].phone,
-    whatsapp: shopPatch.whatsapp ?? db.shops[idx].whatsapp,
-    tagline: shopPatch.tagline ?? db.shops[idx].tagline,
-    currency: shopPatch.currency ?? db.shops[idx].currency,
-    footer: shopPatch.footer ?? db.shops[idx].footer,
-    expirySoonDays: shopPatch.expirySoonDays ?? db.shops[idx].expirySoonDays,
-    updatedAt: now,
-  };
-
-  writeDB(db);
-  return res.json({
-    ok: true,
-    saved: true,
-    shop: db.shops[idx],
-    serverTime: now,
-    canonicalShopId: req.canonicalShopId || shopId,
-    mergedFromShopId:
-      req.originalShopId && req.originalShopId !== (req.canonicalShopId || shopId)
-        ? req.originalShopId
-        : "",
-  });
 });
 
 /* =========================
@@ -467,194 +505,224 @@ function extractSaleFromBody(body) {
 const SALE_PATHS = ["/sale", "/sale/create", "/saleCreate", "/sales", "/sales/create", "/sales/push"];
 
 r.post(SALE_PATHS, (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
-
-  const sale = extractSaleFromBody(req.body);
-  if (!sale) return res.status(400).json({ ok: false, error: "sale required" });
-
-  const db = readDB();
-  ensureDbArrays(db);
-
-  const now = Date.now();
-
-  // Expiry protection should be evaluated at checkout (sale push)
-  const today0 = new Date();
-  today0.setHours(0, 0, 0, 0);
-
-  const soonDaysSetting = getExpirySoonDays(db, shopId);
-  const soonMs = soonDaysSetting * 24 * 60 * 60 * 1000;
-
-  const expiredItems = [];
-  const expiringSoonItems = [];
-
   try {
-    const items = Array.isArray(sale.items)
-      ? sale.items
-      : Array.isArray(sale.cartItems)
-      ? sale.cartItems
-      : [];
-    for (const it of items) {
-      const p = findProductForSaleItem(db, shopId, it);
-      if (!p) continue;
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-      const d = expiryDateFromProduct(p);
-      if (!d) continue;
+    const sale = extractSaleFromBody(req.body);
+    if (!sale) return res.status(400).json({ ok: false, error: "sale required" });
 
-      const t = d.getTime();
-      if (t < today0.getTime()) {
-        expiredItems.push({
-          name: trim(p.name) || itemLabel(it) || "Item",
-          code:
-            trim(p.barcode) ||
-            trim(p.sku) ||
-            trim(p.plu) ||
-            trim(p.productId || p.id) ||
-            itemLabel(it),
-          expiryDate: ymdFromDate(d),
-        });
-      } else if (t <= today0.getTime() + soonMs) {
-        expiringSoonItems.push({
-          name: trim(p.name) || itemLabel(it) || "Item",
-          code:
-            trim(p.barcode) ||
-            trim(p.sku) ||
-            trim(p.plu) ||
-            trim(p.productId || p.id) ||
-            itemLabel(it),
-          expiryDate: ymdFromDate(d),
-        });
-      }
+    const db = readDB();
+    ensureDbArrays(db);
+
+    const now = Date.now();
+
+    // Expiry protection should be evaluated at checkout (sale push)
+    const today0 = new Date();
+    today0.setHours(0, 0, 0, 0);
+
+    const soonDaysSetting = getExpirySoonDays(db, shopId);
+    const soonMs = soonDaysSetting * 24 * 60 * 60 * 1000;
+
+    const expiredItems = [];
+    const expiringSoonItems = [];
+
+    // de-duplicate by receiptNo if provided (IDEMPOTENT: no double stock deduction)
+    const receiptNo = trim(sale.receiptNo || sale.receipt || sale.invoiceNo || sale.billNo);
+    const exists = receiptNo
+      ? db.sales.some((s) => s.shopId === shopId && trim(s.receiptNo) === receiptNo)
+      : false;
+
+    // Only evaluate expiry on first-time push (optional, keeps behaviour consistent)
+    if (!exists) {
+      try {
+        const items = Array.isArray(sale.items)
+          ? sale.items
+          : Array.isArray(sale.cartItems)
+          ? sale.cartItems
+          : [];
+        for (const it of items) {
+          const p = findProductForSaleItem(db, shopId, it);
+          if (!p) continue;
+
+          const d = expiryDateFromProduct(p);
+          if (!d) continue;
+
+          const t = d.getTime();
+          if (t < today0.getTime()) {
+            expiredItems.push({
+              name: trim(p.name) || itemLabel(it) || "Item",
+              code:
+                trim(p.barcode) ||
+                trim(p.sku) ||
+                trim(p.plu) ||
+                trim(p.productId || p.id) ||
+                itemLabel(it),
+              expiryDate: ymdFromDate(d),
+            });
+          } else if (t <= today0.getTime() + soonMs) {
+            expiringSoonItems.push({
+              name: trim(p.name) || itemLabel(it) || "Item",
+              code:
+                trim(p.barcode) ||
+                trim(p.sku) ||
+                trim(p.plu) ||
+                trim(p.productId || p.id) ||
+                itemLabel(it),
+              expiryDate: ymdFromDate(d),
+            });
+          }
+        }
+      } catch (_e) {}
     }
-  } catch (_e) {}
 
-  if (expiredItems.length > 0) {
-    return res.status(409).json({
-      ok: false,
-      code: "EXPIRED_BLOCK",
-      messageEn:
-        "Sale blocked: expired product(s) found. Please remove expired items before checkout.",
-      messageHa:
-        "An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.",
-      items: expiredItems,
-      serverTime: now,
-    });
-  }
+    if (expiredItems.length > 0) {
+      return res.status(409).json({
+        ok: false,
+        code: "EXPIRED_BLOCK",
+        messageEn:
+          "Sale blocked: expired product(s) found. Please remove expired items before checkout.",
+        messageHa:
+          "An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.",
+        items: expiredItems,
+        serverTime: now,
+      });
+    }
 
-  // de-duplicate by receiptNo if provided
-  const receiptNo = trim(sale.receiptNo || sale.receipt || sale.invoiceNo || sale.billNo);
-  const exists = receiptNo
-    ? db.sales.some((s) => s.shopId === shopId && trim(s.receiptNo) === receiptNo)
-    : false;
+    // If duplicate sale: do NOT deduct stock or add debtor again
+    if (exists) {
+      return res.json({
+        ok: true,
+        saved: false,
+        duplicate: true,
+        receiptNo,
+        serverTime: now,
+        warnings: {
+          expiringSoonDays: soonDaysSetting,
+          expiringSoon: expiringSoonItems,
+        },
+      });
+    }
 
-  if (!exists) {
+    // Save sale
     const createdAt = toInt(sale.createdAt || sale.time || sale.timestamp || 0, 0) || now;
     db.sales.push({ ...sale, shopId, receiptNo, createdAt });
+
+    // Deduct stock
+    let deductedItems = 0;
+    let notFoundItems = 0;
+    let touchedQty = 0;
+
+    try {
+      const items = Array.isArray(sale.items)
+        ? sale.items
+        : Array.isArray(sale.cartItems)
+        ? sale.cartItems
+        : [];
+      for (const it of items) {
+        const qty = Math.max(1, toInt(it?.qty || it?.quantity || 1, 1));
+        const p = findProductForSaleItem(db, shopId, it);
+        if (!p) {
+          notFoundItems++;
+          continue;
+        }
+        const cur = toInt(p.stock, 0);
+        p.stock = Math.max(0, cur - qty);
+        p.updatedAt = now;
+        deductedItems++;
+        touchedQty += qty;
+      }
+    } catch (_e) {}
+
+    // Debtors upsert (supports partial)
+    try {
+      const total = toNum(sale.total, 0);
+      const paid = toNum(sale.paid, 0);
+      const remaining = toNum(sale.remaining, Math.max(0, total - paid));
+      const phone = trim(sale.customerPhone);
+      const name = trim(sale.customerName);
+
+      if (remaining > 0.0001) {
+        const key = receiptNo || `SYNC-${Date.now()}`;
+        const dIdx = db.debtors.findIndex(
+          (d) => d.shopId === shopId && trim(d.receiptNo) === key
+        );
+
+        if (dIdx >= 0) {
+          const d = db.debtors[dIdx];
+          const baseTotal = toNum(d.total ?? d.totalOwed, 0);
+          const basePaid = toNum(d.paid ?? d.totalPaid, 0);
+
+          const newTotal = baseTotal + remaining;
+          const newPaid = basePaid;
+          const newBalance = Math.max(0, newTotal - newPaid);
+
+          db.debtors[dIdx] = {
+            ...d,
+            receiptNo: key,
+            customerName: name || d.customerName,
+            customerPhone: phone || d.customerPhone,
+            total: round2(newTotal),
+            paid: round2(newPaid),
+            balance: round2(newBalance),
+            status: newBalance <= 0.0001 ? "PAID" : "PARTIAL",
+            updatedAt: now,
+          };
+        } else {
+          db.debtors.push({
+            shopId,
+            receiptNo: key,
+            customerName: name,
+            customerPhone: phone,
+            total: round2(remaining),
+            paid: 0,
+            balance: round2(remaining),
+            status: "PARTIAL",
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+    } catch (_e) {}
+
+    writeDB(db);
+    return res.json({
+      ok: true,
+      saved: true,
+      receiptNo,
+      stock: { deductedItems, notFoundItems, qtyTotal: touchedQty },
+      serverTime: now,
+      warnings: {
+        expiringSoonDays: soonDaysSetting,
+        expiringSoon: expiringSoonItems,
+      },
+    });
+  } catch (e) {
+    console.error("POST /sales error", e);
+    return res.status(500).json({ ok: false, error: "sale_push_failed" });
   }
-
-  // Deduct stock
-  let deductedItems = 0;
-  let notFoundItems = 0;
-  let touchedQty = 0;
-
-  try {
-    const items = Array.isArray(sale.items)
-      ? sale.items
-      : Array.isArray(sale.cartItems)
-      ? sale.cartItems
-      : [];
-    for (const it of items) {
-      const qty = Math.max(1, toInt(it?.qty || it?.quantity || 1, 1));
-      const p = findProductForSaleItem(db, shopId, it);
-      if (!p) {
-        notFoundItems++;
-        continue;
-      }
-      const cur = toInt(p.stock, 0);
-      p.stock = Math.max(0, cur - qty);
-      p.updatedAt = now;
-      deductedItems++;
-      touchedQty += qty;
-    }
-  } catch (_e) {}
-
-  // Debtors upsert (supports partial)
-  try {
-    const total = toNum(sale.total, 0);
-    const paid = toNum(sale.paid, 0);
-    const remaining = toNum(sale.remaining, Math.max(0, total - paid));
-    const phone = trim(sale.customerPhone);
-    const name = trim(sale.customerName);
-
-    if (remaining > 0.0001) {
-      const key = receiptNo || `SYNC-${Date.now()}`;
-      const dIdx = db.debtors.findIndex((d) => d.shopId === shopId && trim(d.receiptNo) === key);
-
-      if (dIdx >= 0) {
-        const d = db.debtors[dIdx];
-        const baseTotal = toNum(d.total ?? d.totalOwed, 0);
-        const basePaid = toNum(d.paid ?? d.totalPaid, 0);
-
-        const newTotal = baseTotal + remaining;
-        const newPaid = basePaid;
-        const newBalance = Math.max(0, newTotal - newPaid);
-
-        db.debtors[dIdx] = {
-          ...d,
-          receiptNo: key,
-          customerName: name || d.customerName,
-          customerPhone: phone || d.customerPhone,
-          total: round2(newTotal),
-          paid: round2(newPaid),
-          balance: round2(newBalance),
-          status: newBalance <= 0.0001 ? "PAID" : "PARTIAL",
-          updatedAt: now,
-        };
-      } else {
-        db.debtors.push({
-          shopId,
-          receiptNo: key,
-          customerName: name,
-          customerPhone: phone,
-          total: round2(remaining),
-          paid: 0,
-          balance: round2(remaining),
-          status: "PARTIAL",
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    }
-  } catch (_e) {}
-
-  writeDB(db);
-  return res.json({
-    ok: true,
-    saved: true,
-    stock: { deductedItems, notFoundItems, qtyTotal: touchedQty },
-    serverTime: now,
-    warnings: {
-      expiringSoonDays: soonDaysSetting,
-      expiringSoon: expiringSoonItems,
-    },
-  });
 });
 
 r.get("/sales", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const since = toInt(req.query.since || "0", 0);
-  const db = readDB();
-  ensureDbArrays(db);
+    const since = toInt(req.query.since || "0", 0);
+    const db = readDB();
+    ensureDbArrays(db);
 
-  const list = db.sales.filter((s) => {
-    if (s.shopId !== shopId) return false;
-    if (since <= 0) return true;
-    return (s.createdAt || 0) > since;
-  });
+    const list = db.sales.filter((s) => {
+      if (s.shopId !== shopId) return false;
+      if (since <= 0) return true;
+      return (s.createdAt || 0) > since;
+    });
 
-  return res.json({ ok: true, items: list, serverTime: Date.now() });
+    return res.json({ ok: true, items: list, serverTime: Date.now() });
+  } catch (e) {
+    console.error("GET /sales error", e);
+    return res.status(500).json({ ok: false, error: "sales_fetch_failed" });
+  }
 });
 
 /* =========================
@@ -662,30 +730,35 @@ r.get("/sales", (req, res) => {
 ========================= */
 
 r.get("/debtors", (req, res) => {
-  const shopId = requireShop(req, res);
-  if (!shopId) return;
+  try {
+    const shopId = requireShop(req, res);
+    if (!shopId) return;
 
-  const since = toInt(req.query.since || "0", 0);
-  const db = readDB();
-  ensureDbArrays(db);
+    const since = toInt(req.query.since || "0", 0);
+    const db = readDB();
+    ensureDbArrays(db);
 
-  const list = db.debtors.filter((d) => {
-    if (d.shopId !== shopId) return false;
-    if (since <= 0) return true;
-    return (d.updatedAt || d.createdAt || 0) > since;
-  });
+    const list = db.debtors.filter((d) => {
+      if (d.shopId !== shopId) return false;
+      if (since <= 0) return true;
+      return (d.updatedAt || d.createdAt || 0) > since;
+    });
 
-  const items = list
-    .map((d) => {
-      const total = toNum(d.total ?? d.totalOwed, 0);
-      const paid = toNum(d.paid ?? d.totalPaid, 0);
-      const balance = toNum(d.balance ?? d.remainingOwed, Math.max(0, total - paid));
-      const status = balance <= 0.0001 ? "PAID" : "PARTIAL";
-      return { ...d, total, paid, balance, status };
-    })
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const items = list
+      .map((d) => {
+        const total = toNum(d.total ?? d.totalOwed, 0);
+        const paid = toNum(d.paid ?? d.totalPaid, 0);
+        const balance = toNum(d.balance ?? d.remainingOwed, Math.max(0, total - paid));
+        const status = balance <= 0.0001 ? "PAID" : "PARTIAL";
+        return { ...d, total, paid, balance, status };
+      })
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
-  return res.json({ ok: true, items, serverTime: Date.now() });
+    return res.json({ ok: true, items, serverTime: Date.now() });
+  } catch (e) {
+    console.error("GET /debtors error", e);
+    return res.status(500).json({ ok: false, error: "debtors_fetch_failed" });
+  }
 });
 
 r.post("/debtorsFull", (req, res) => {
