@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SuperPOSNG Developer Portal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">SP</div>
+      <div>
+        <div class="title">SuperPOSNG</div>
+        <div class="subtitle">Developer Portal (Token & Device Activation)</div>
+      </div>
+    </div>
+    <div class="right">
+      <input id="devKey" type="password" placeholder="DEV KEY" />
+      <button id="btnSaveKey" class="btn">Save</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+        <section class="card">
+      <h2>Token Generator</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="genPlan">
+            <option value="MONTHLY" selected>MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID / Device ID (required)</label>
+          <input id="genDeviceId" placeholder="e.g. D67D063816AB188B" />
+        </div>
+        <div>
+          <label>Anti-Clone (Recommended)</label>
+          <div class="switchRow">
+            <label class="switch">
+              <input id="genUseSpng2" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+            <div class="switchText">
+              <div class="switchTitle">Use SPNG2 Device Code</div>
+              <div class="hint" style="margin:0">From app: <b>Activation</b> → <b>Copy Device Code</b></div>
+            </div>
+          </div>
+        </div>
+        <div id="genFpWrap">
+          <label>Device Code (SPNG2)</label>
+          <input id="genFpHash" placeholder="paste device code from the app" />
+        </div>
+        <div class="row">
+          <button id="btnGenerate" class="btn primary">Generate Token</button>
+          <button id="btnRegister" class="btn">Register Existing Token</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>Token</label>
+          <input id="genToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnCopyToken" class="btn">Copy Token</button>
+          <button id="btnCopyId" class="btn">Copy License ID</button>
+        </div>
+      </div>
+      <p class="hint">Formats: <code>SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (legacy) or <code>SPNG2|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (Anti-Clone with Device Code).</p>
+    </section>
+
+    <section class="card">
+      <h2>RepairMasterPro Token Generator (RMP)</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="rmpPlan">
+            <option value="MONTHLY" selected>MONTHLY (₦1500)</option>
+            <option value="YEARLY">YEARLY (₦15000)</option>
+            <option value="TRIAL">TRIAL (7 days)</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID / Device ID (required)</label>
+          <input id="rmpDeviceId" placeholder="paste ANDROID_ID from RepairMasterPro" />
+        </div>
+        <div class="row">
+          <button id="btnRmpGenerate" class="btn primary">Generate RMP Token</button>
+          <button id="btnRmpActivateOnline" class="btn">Activate Online (No Paste)</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>RMP Token</label>
+          <input id="rmpToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnRmpCopy" class="btn">Copy RMP Token</button>
+        </div>
+      </div>
+      <p class="hint">Format: <code>RMP1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code>. <b>Activate Online</b> will save/bind the device on the server (no token paste needed). In the app: <b>Activation</b> → set <b>Cloud URL</b> → tap <b>Check Online Activation</b> (you can leave token empty) or paste token and activate.</p>
+      <p class="hint"><b>Online Activate:</b> Use <b>ANDROID_ID</b> then click <b>Activate Online</b>. In the app, you can press <b>Check Online Activation</b> even with empty token to auto-activate.</p>
+    </section>
+
+
+    <section class="card">
+      <h2>Activate Device</h2>
+      <div class="grid2">
+        <div>
+          <label>Device ID</label>
+          <input id="deviceId" placeholder="e.g. HUB-ABC123" />
+        </div>
+        <div>
+          <label>Shop ID (optional)</label>
+          <input id="shopId" placeholder="e.g. JEc5aEowezKj" />
+        </div>
+        <div>
+          <label>Token</label>
+          <input id="token" placeholder="SPNG-XXXX-XXXX" />
+        </div>
+        <div class="row">
+          <button id="btnAssign" class="btn primary">Activate Device</button>
+          <button id="btnSearchFromActivate" class="btn">Search</button>
+        </div>
+      </div>
+      <p class="hint">Workflow: customer sends you Device ID → you paste token + deviceId → Activate. Customer app clicks “Check Online Activation”.</p>
+    </section>
+
+    <section class="card">
+      <h2>Search Device / Token / Shop</h2>
+      <div class="grid3">
+        <div>
+          <label>Device ID</label>
+          <input id="searchDevice" placeholder="deviceId" />
+        </div>
+        <div>
+          <label>Token</label>
+          <input id="searchToken" placeholder="token" />
+        </div>
+        <div>
+          <label>Shop ID</label>
+          <input id="searchShop" placeholder="shopId" />
+        </div>
+      </div>
+      <div class="row">
+        <button id="btnSearch" class="btn primary">Search</button>
+        <button id="btnClear" class="btn">Clear</button>
+      </div>
+
+      <div id="results" class="results"></div>
+    </section>
+
+    <section class="card">
+      <h2>Quick Actions</h2>
+      <div class="grid2">
+        <div>
+          <label>Target (License ID / Token / Device ID)</label>
+          <input id="target" placeholder="LIC-...  OR  SPNG-...  OR  DEVICEID" />
+        </div>
+        <div>
+          <label>Reason (optional)</label>
+          <input id="reason" placeholder="e.g. Customer changed phone" />
+        </div>
+        <div class="row">
+          <button id="btnReset" class="btn warn">Reset Activation</button>
+          <button id="btnRevoke" class="btn danger">Revoke Token</button>
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:14px;">
+        <div>
+          <label>Extend (Months)</label>
+          <input id="addMonths" type="number" min="0" step="1" placeholder="e.g. 1" />
+        </div>
+        <div>
+          <label>Upgrade Plan (optional)</label>
+          <select id="plan">
+            <option value="">(no change)</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID (only needed if Target is token w/out bound device)</label>
+          <input id="extendAndroidId" placeholder="paste device id if needed" />
+        </div>
+        <div class="row">
+          <button id="btnExtend" class="btn primary">Extend / Upgrade</button>
+        </div>
+      </div>
+      <p class="hint">Tip: Use Search first, then paste the License ID into Target.</p>
+    </section>
+
+    <section class="card">
+      <h2>Token Table</h2>
+      <div class="grid3">
+        <div>
+          <label>Search (token/license/device/shop)</label>
+          <input id="tblQ" placeholder="type to filter" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="tblStatus">
+            <option value="">All</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="REVOKED">REVOKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="tblPlan">
+            <option value="">All</option>
+            <option value="TRIAL">TRIAL</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+            <option value="LEGACY">LEGACY</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnTblRefresh" class="btn primary">Refresh</button>
+        <button id="btnTblPrev" class="btn">Prev</button>
+        <button id="btnTblNext" class="btn">Next</button>
+        <span id="tblMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+      <div id="tokenTable" class="results"></div>
+      <p class="hint">Tip: Click a row action to auto-fill <b>Target</b> for Extend/Revoke/Reset.</p>
+    </section>
+
+    <section class="card">
+      <h2>RepairMasterPro License Table</h2>
+      <div class="grid3">
+        <div>
+          <label>Search (token/license/device/devHash)</label>
+          <input id="rmpTblQ" placeholder="type to filter" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="rmpTblStatus">
+            <option value="">All</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="REVOKED">REVOKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="rmpTblPlan">
+            <option value="">All</option>
+            <option value="TRIAL">TRIAL</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnRmpTblRefresh" class="btn primary">Refresh</button>
+        <button id="btnRmpTblPrev" class="btn">Prev</button>
+        <button id="btnRmpTblNext" class="btn">Next</button>
+        <span id="rmpTblMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+      <div id="rmpTokenTable" class="results"></div>
+      <p class="hint">Tip: Click <b>Copy</b> to copy token, or <b>Revoke</b> to deactivate. (RMP revoke uses token).</p>
+    </section>
+
+    
+    <section class="card">
+      <h2>Merge Shops</h2>
+      <p class="hint">
+        Use this when a user mistakenly created a new shop or changed phone/device.
+        Select the <b>From</b> shop (data will be moved) and the <b>To</b> shop (kept).
+      </p>
+
+      <div class="grid2">
+        <div>
+          <label>From Shop (move data)</label>
+          <select id="mergeFromShop"></select>
+        </div>
+        <div>
+          <label>To Shop (keep)</label>
+          <select id="mergeToShop"></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="btnMergeShop" class="btn danger">Merge Now</button>
+        <span id="mergeMsg" class="hint"></span>
+      </div>
+
+      <p class="hint small">
+        Notes: This will move products, staff, sales, debtors, payments, devices, licenses, and pair codes
+        from <b>From</b> into <b>To</b>. The old shop remains in the database but is marked as merged.
+      </p>
+    </section>
+
+
+<section class="card">
+  <h2>Merge History</h2>
+  <p class="hint">Audit trail of all merge operations done in this Dev Portal.</p>
+  <div class="row">
+    <button id="btnMergeHistory" class="btn btn2">Reload History</button>
+  </div>
+  <div id="mergeHistoryTable"></div>
+</section>
+
+
+<section class="card">
+      <h2>Owner Accounts (Shop Users)</h2>
+      <p class="hint">Option 1: Owners are created here (Dev Portal) and can then login at <code>/owner</code>.</p>
+
+      <div class="grid2">
+        <div>
+          <label>Owner Email</label>
+          <input id="ownEmail" placeholder="owner@shop.com" />
+        </div>
+        <div>
+          <label>Temp Password</label>
+          <input id="ownPass" placeholder="e.g. 12345678" />
+        </div>
+        <div>
+          <label>Assign Shop(s)</label>
+          <select id="ownShops" multiple size="4"></select>
+          <div class="hint">Hold Ctrl (Windows) to select multiple shops.</div>
+        </div>
+        <div class="row" style="align-items:flex-end;">
+          <button id="btnOwnCreate" class="btn">Create Owner</button>
+          <button id="btnOwnReload" class="btn">Reload Owners</button>
+        </div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.08);margin:14px 0"/>
+
+      <div class="grid2">
+        <div>
+          <label>Selected Owner ID</label>
+          <input id="ownOwnerId" placeholder="Click an owner below to select" />
+        </div>
+        <div>
+          <label>Reset Password (new)</label>
+          <input id="ownNewPass" placeholder="New password" />
+        </div>
+        <div class="row">
+          <button id="btnOwnAssign" class="btn">Assign Shops</button>
+          <button id="btnOwnReset" class="btn warn">Reset Password</button>
+        </div>
+      </div>
+
+      <div style="height:10px"></div>
+      <div id="ownersTable" class="results"></div>
+      <p class="hint">Tip: click an owner row to auto-fill Owner ID. Use Assign to update shop access.</p>
+    </section>
+
+  
+    <section class="card">
+      <h2>Cashier Permissions</h2>
+      <p class="muted">Manage what each cashier can access on the Owner Portal (server-side enforced).</p>
+
+      <div class="grid2">
+        <div>
+          <label>Shop Code or Shop ID</label>
+          <input id="permShopCode" placeholder="SPNG-XXXX-XXXX or shopId" />
+        </div>
+        <div class="row">
+          <button id="btnLoadCashiers" class="btn">Load Cashiers</button>
+          <div class="row" style="gap:8px; margin-left:10px;">
+            <select id="permTemplate" class="input" style="min-width:220px;">
+              <option value="">Permission Template…</option>
+            </select>
+            <button id="btnApplyTemplateAll" class="btn">Apply to All</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cashierPermMsg" class="msg hidden"></div>
+
+      <div class="tableWrap">
+        <table class="table" id="tCashierPerms">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Sales</th>
+              <th>Products</th>
+              <th>Debtors</th>
+              <th>Expiry</th>
+              <th>Settings</th>
+              <th>Insights</th>
+              <th>Export</th>
+              <th>Save</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  
+    <!-- ===================== -->
+    <!-- Bulk Token Generator -->
+    <!-- ===================== -->
+    <section class="grid2" style="margin-top:16px">
+      <div class="card">
+        <div class="cardHead">
+          <div>
+            <h3>Bulk Generate • SuperPOSNG</h3>
+            <p class="muted">Paste AndroidIDs (one per line). Optional: add fpHash after comma for SPNG2.</p>
+          </div>
+          <span class="pill">Admin</span>
+        </div>
+
+        <div class="row2">
+          <label class="field">
+            <span>Plan</span>
+            <select id="bulkPlan" class="input">
+              <option value="MONTHLY">MONTHLY</option>
+              <option value="YEARLY">YEARLY</option>
+              <option value="LIFETIME">LIFETIME</option>
+              <option value="TRIAL">TRIAL</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Token Type</span>
+            <div class="toggleRow">
+              <label class="toggle">
+                <input type="checkbox" id="bulkUseSpng2" />
+                <span>Use SPNG2 (Anti‑Clone)</span>
+              </label>
+            </div>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>AndroidIDs list</span>
+          <textarea id="bulkLines" class="input mono" rows="8" placeholder="androidId1&#10;androidId2&#10;androidId3,fpHash3"></textarea>
+        </label>
+
+        <div class="btnRow">
+          <button id="btnBulkGenerate" class="btn primary">Generate Bulk</button>
+          <button id="btnBulkCsv" class="btn">Download CSV</button>
+        </div>
+
+        <div id="bulkMsg" class="muted"></div>
+        <div class="tableWrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>License ID</th>
+                <th>Plan</th>
+                <th>Expiry</th>
+                <th>Token</th>
+              </tr>
+            </thead>
+            <tbody id="bulkTable"></tbody>
+          </table>
+        </div>
+        <div id="bulkErr" class="muted" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="cardHead">
+          <div>
+            <h3>Bulk Generate • RepairMasterPro</h3>
+            <p class="muted">Paste AndroidIDs (one per line). Tokens will be bound to each AndroidID.</p>
+          </div>
+          <span class="pill">Admin</span>
+        </div>
+
+        <div class="row2">
+          <label class="field">
+            <span>Plan</span>
+            <select id="bulkRmpPlan" class="input">
+              <option value="MONTHLY">MONTHLY</option>
+              <option value="YEARLY">YEARLY</option>
+              <option value="LIFETIME">LIFETIME</option>
+              <option value="TRIAL">TRIAL</option>
+            </select>
+          </label>
+          <div></div>
+        </div>
+
+        <label class="field">
+          <span>AndroidIDs list</span>
+          <textarea id="bulkRmpLines" class="input mono" rows="8" placeholder="androidId1&#10;androidId2&#10;androidId3"></textarea>
+        </label>
+
+        <div class="btnRow">
+          <button id="btnBulkRmpGenerate" class="btn primary">Generate Bulk</button>
+          <button id="btnBulkRmpCsv" class="btn">Download CSV</button>
+        </div>
+
+        <div id="bulkRmpMsg" class="muted"></div>
+        <div class="tableWrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>License ID</th>
+                <th>Plan</th>
+                <th>Expiry</th>
+                <th>Token</th>
+              </tr>
+            </thead>
+            <tbody id="bulkRmpTable"></tbody>
+          </table>
+        </div>
+        <div id="bulkRmpErr" class="muted" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+</main>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
