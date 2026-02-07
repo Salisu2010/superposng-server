@@ -20,6 +20,7 @@ function requireShop(req, res) {
     if (!Array.isArray(db.shops)) db.shops = [];
     let cur = raw;
     let hops = 0;
+
     while (hops < 5) {
       const s = db.shops.find((x) => String(x.shopId) === String(cur));
       if (s && s.isMerged === true && s.mergedInto) {
@@ -29,6 +30,7 @@ function requireShop(req, res) {
       }
       break;
     }
+
     req.originalShopId = raw;
     req.canonicalShopId = cur;
     return cur;
@@ -64,7 +66,6 @@ function ensureDbArrays(db) {
   if (!Array.isArray(db.debtors)) db.debtors = [];
   if (!Array.isArray(db.shops)) db.shops = [];
 }
-
 function normName(v) {
   return trim(v).toLowerCase().replace(/\s+/g, " ");
 }
@@ -86,6 +87,7 @@ function parseExpiryAny(v) {
     const d = new Date(v);
     return Number.isNaN(d.getTime()) ? null : d;
   }
+
   const s = trim(v);
   if (!s) return null;
 
@@ -153,7 +155,7 @@ function findProductForSaleItem(db, shopId, it) {
     p = db.products.find((x) => x.shopId === shopId && trim(x.sku) === sku);
   }
 
-  // 2) Then try code against sku/barcode
+  // 2) Then try code against sku/barcode or ID:xxxx
   if (!p && code) {
     if (code.toUpperCase().startsWith("ID:")) {
       const pid = trim(code.substring(3));
@@ -209,10 +211,6 @@ function itemLabel(it) {
    PRODUCTS
 ========================= */
 
-/**
- * Pull products updated since timestamp (ms)
- * GET /api/sync/products?since=0
- */
 r.get("/products", (req, res) => {
   const shopId = requireShop(req, res);
   if (!shopId) return;
@@ -230,10 +228,6 @@ r.get("/products", (req, res) => {
   return res.json({ ok: true, items: list, serverTime: Date.now() });
 });
 
-/**
- * Push products (upsert)
- * body: { items: [...] }
- */
 r.post("/products", (req, res) => {
   const shopId = requireShop(req, res);
   if (!shopId) return;
@@ -489,7 +483,7 @@ r.post(SALE_PATHS, (req, res) => {
 
   const now = Date.now();
 
-  // ✅ EXPIRED BLOCK (server-level protection) — proper place is SALE push
+  // ✅ Expired block + expiring soon warnings
   const today0 = new Date();
   today0.setHours(0, 0, 0, 0);
 
@@ -500,7 +494,12 @@ r.post(SALE_PATHS, (req, res) => {
   const expiringSoonItems = [];
 
   try {
-    const items = Array.isArray(sale.items) ? sale.items : (Array.isArray(sale.cartItems) ? sale.cartItems : []);
+    const items = Array.isArray(sale.items)
+      ? sale.items
+      : Array.isArray(sale.cartItems)
+      ? sale.cartItems
+      : [];
+
     for (const it of items) {
       const p = findProductForSaleItem(db, shopId, it);
       if (!p) continue;
@@ -539,16 +538,14 @@ r.post(SALE_PATHS, (req, res) => {
     return res.status(409).json({
       ok: false,
       code: "EXPIRED_BLOCK",
-      messageEn:
-        "Sale blocked: expired product(s) found. Please remove expired items before checkout.",
-      messageHa:
-        "An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.",
+      messageEn: "Sale blocked: expired product(s) found. Please remove expired items before checkout.",
+      messageHa: "An hana sayarwa: an samu kayayyakin da suka wuce ranar karewa. Ka cire expired items kafin checkout.",
       items: expiredItems,
       serverTime: now,
     });
   }
 
-  // de-duplicate by receiptNo if provided
+  // De-duplicate by receiptNo if provided
   const receiptNo = trim(sale.receiptNo || sale.receipt || sale.invoiceNo || sale.billNo);
   const exists = receiptNo
     ? db.sales.some((s) => s.shopId === shopId && trim(s.receiptNo) === receiptNo)
@@ -559,13 +556,18 @@ r.post(SALE_PATHS, (req, res) => {
     db.sales.push({ ...sale, shopId, receiptNo, createdAt });
   }
 
-  // ✅ DEDUCT STOCK (robust matching)
+  // ✅ Deduct stock (robust matching)
   let deductedItems = 0;
   let notFoundItems = 0;
   let touchedQty = 0;
 
   try {
-    const items = Array.isArray(sale.items) ? sale.items : (Array.isArray(sale.cartItems) ? sale.cartItems : []);
+    const items = Array.isArray(sale.items)
+      ? sale.items
+      : Array.isArray(sale.cartItems)
+      ? sale.cartItems
+      : [];
+
     for (const it of items) {
       const qty = Math.max(1, toInt(it?.qty || it?.quantity || 1, 1));
       const p = findProductForSaleItem(db, shopId, it);
@@ -581,7 +583,7 @@ r.post(SALE_PATHS, (req, res) => {
     }
   } catch (_e) {}
 
-  // ✅ AUTO-UPSERT DEBTOR (per-receipt, supports partial payments)
+  // ✅ Auto-upsert debtor (per receipt; supports partial payments)
   try {
     const total = toNum(sale.total, 0);
     const paid = toNum(sale.paid, 0);
@@ -719,9 +721,7 @@ r.post("/debtorsFull", (req, res) => {
 
       const totalOwed = toNum(d.totalOwed ?? d.total, 0);
 
-      let existing = db.debtors.find(
-        (x) => x && x.shopId === shopId && trim(x.receiptNo) === receiptNo
-      );
+      let existing = db.debtors.find((x) => x && x.shopId === shopId && trim(x.receiptNo) === receiptNo);
       if (!existing) {
         existing = { shopId, receiptNo, createdAt: now };
         db.debtors.push(existing);
