@@ -804,6 +804,55 @@ r.post("/shop/:shopId/sellouts", authMiddleware, (req, res) => {
     applied++;
   }
 
+  // Also record as a SALE (so Android can sync Sales History + cloud reports)
+  if (!Array.isArray(db.sales)) db.sales = [];
+
+  // Build sale items from applied sellouts (use product selling price when available)
+  const saleItems = logs.map((x) => {
+    const p = db.products.find(pp => pickShopId(pp) === shopId && (trim(pp.productId) === x.productId || trim(pp.id) === x.productId)) || {};
+    const unitPrice = asNum(p.sellingPrice ?? p.salePrice ?? p.price ?? p.unitPrice ?? p.retailPrice ?? 0, 0);
+    return {
+      productId: x.productId,
+      name: x.productName,
+      qty: asNum(x.qty, 0),
+      unitPrice,
+      lineTotal: unitPrice * asNum(x.qty, 0)
+    };
+  });
+
+  const saleTotal = saleItems.reduce((a, b) => a + asNum(b.lineTotal, 0), 0);
+
+  const sale = {
+    // Try to be compatible with older Android expectations (id, saleId, createdAt, total, items)
+    id: now, // numeric id for older clients
+    saleId: (crypto.randomUUID ? crypto.randomUUID() : String(now) + "-S-" + Math.random().toString(16).slice(2)),
+    shopId,
+    kind: "cloud_checkout",
+    source: "cloud",
+    staffUser,
+    staffRole,
+    createdAt: now,
+    updatedAt: now,
+
+    // Totals (multiple aliases)
+    total: saleTotal,
+    grandTotal: saleTotal,
+    totalAmount: saleTotal,
+    amountPaid: saleTotal,
+    paid: saleTotal,
+    balance: 0,
+
+    paymentMethod: "CASH",
+    status: "PAID",
+    note: "Recorded from cloud dashboard Checkout/Sellout",
+
+    // Line items (multiple aliases)
+    items: saleItems,
+    saleItems: saleItems
+  };
+
+  if (saleItems.length > 0) db.sales.push(sale);
+
   writeDB(db);
   return res.json({ ok: true, applied, items: logs, serverTime: now });
 });
