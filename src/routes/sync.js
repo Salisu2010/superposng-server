@@ -230,7 +230,7 @@ r.get("/products", (req, res) => {
     ensureDbArrays(db);
 
     const list = db.products.filter((p) => {
-      if (p.shopId !== shopId) return false;
+      if (String(p.shopId||"") !== String(shopId)) return false;
       if (since <= 0) return true;
       return (p.updatedAt || p.createdAt || 0) > since;
     });
@@ -315,7 +315,7 @@ r.get("/staffs", (req, res) => {
     ensureDbArrays(db);
 
     const list = db.staffs.filter((s) => {
-      if (s.shopId !== shopId) return false;
+      if (String(s.shopId||"") !== String(shopId)) return false;
       if (since <= 0) return true;
       return (s.updatedAt || s.createdAt || 0) > since;
     });
@@ -735,7 +735,7 @@ r.get("/sales", (req, res) => {
     const meUser = (actor.username || "").toString().trim().toLowerCase();
 
     const list = db.sales.filter((s) => {
-      if (s.shopId !== shopId) return false;
+      if (String(s.shopId||"") !== String(shopId)) return false;
       if (isCashier) {
         const su = (s.staffUser || s.staff || s.user || "").toString().trim().toLowerCase();
         if (!su || su !== meUser) return false;
@@ -768,7 +768,7 @@ r.get("/debtors", (req, res) => {
     const meUser = (actor.username || "").toString().trim().toLowerCase();
 
     const list = db.debtors.filter((d) => {
-      if (d.shopId !== shopId) return false;
+      if (String(d.shopId||"") !== String(shopId)) return false;
       if (isCashier) {
         const su = (d.staffUser || d.createdBy || d.staff || d.user || "").toString().trim().toLowerCase();
         if (!su || su !== meUser) return false;
