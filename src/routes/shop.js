@@ -36,13 +36,18 @@ r.post("/create", (req, res) => {
   if (!Array.isArray(db.devices)) db.devices = [];
   if (!Array.isArray(db.shopAliases)) db.shopAliases = [];
 
-  // ✅ Reuse by phone+pin (preferred)
+  // ✅ Reuse ONLY if same owner + same shopName (prevents duplicate-tap), otherwise allow multiple shops per owner
   let reused = false;
   let shop = null;
 
+  const sameOwner = (s) => phone && pin && normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin;
+  const sameName = (s) => (s?.shopName || "").toString().trim().toLowerCase() === (shopName || "").toString().trim().toLowerCase();
+
+  // If ownerPhone+ownerPin provided, we allow multiple shops. We only reuse when shopName matches.
   if (phone && pin) {
-    shop = db.shops.find((s) => normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin);
-    if (shop) {
+    const candidate = db.shops.find((s) => sameOwner(s) && sameName(s));
+    if (candidate) {
+      shop = candidate;
       // If this shop was merged, return the canonical shop
       if (shop.isMerged === true && shop.mergedInto) {
         const canonical = db.shops.find(x => x.shopId === shop.mergedInto);
@@ -190,6 +195,131 @@ r.get("/by-code/:shopCode", (req, res) => {
     ok: true,
     shop: { shopId: shop.shopId, shopCode: shop.shopCode, shopName: shop.shopName },
   });
+});
+
+
+
+/**
+ * List all shops for the current OWNER account (ADMIN token required)
+ * - Derives ownerPhone+ownerPin from the current shop record (professional + no extra client params)
+ * - Resolves merged shops to canonical targets
+ */
+r.get("/list", (req, res) => {
+  const h = req.headers.authorization || "";
+  const token = h.startsWith("Bearer ") ? h.substring(7) : "";
+  if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
+
+  try {
+    const secret = process.env.JWT_SECRET || "dev_secret_change_me";
+    const decoded = jwt.verify(token, secret);
+    const { shopId, role } = decoded || {};
+    if (!shopId) return res.status(401).json({ ok: false, error: "Invalid token" });
+    if ((role || "").toUpperCase() !== "ADMIN") return res.status(403).json({ ok: false, error: "Admins only" });
+
+    const db = readDB();
+    if (!Array.isArray(db.shops)) db.shops = [];
+
+    const cur = db.shops.find((s) => String(s.shopId) === String(shopId));
+    if (!cur) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+    const phone = normPhone(cur.ownerPhone);
+    const pin = (cur.ownerPin || "").toString().trim();
+    if (!phone || !pin) {
+      return res.json({ ok: true, shops: [{ shopId: cur.shopId, shopCode: cur.shopCode, shopName: cur.shopName }], note: "Owner phone/PIN not set for this shop" });
+    }
+
+    const canonicalOf = (s) => {
+      if (!s) return null;
+      if (s.isMerged === true && s.mergedInto) {
+        const canonical = db.shops.find(x => String(x.shopId) === String(s.mergedInto));
+        if (canonical) return canonical;
+      }
+      return s;
+    };
+
+    const matches = db.shops.filter((s) => normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin);
+    const canonicalMap = new Map();
+    for (const s of matches) {
+      const c = canonicalOf(s);
+      if (c) canonicalMap.set(c.shopId, c);
+    }
+    const canonicalList = Array.from(canonicalMap.values());
+    const shops = canonicalList.map((s) => ({ shopId: s.shopId, shopCode: s.shopCode, shopName: s.shopName }));
+
+    return res.json({ ok: true, shops, count: shops.length });
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: "Invalid token" });
+  }
+});
+
+/**
+ * Switch current shop for this ADMIN device (ADMIN token required)
+ * body: { targetShopId }
+ * returns: { ok:true, token, shopId, shopCode, shopName }
+ */
+r.post("/switch", (req, res) => {
+  const h = req.headers.authorization || "";
+  const token = h.startsWith("Bearer ") ? h.substring(7) : "";
+  if (!token) return res.status(401).json({ ok: false, error: "Missing token" });
+
+  const targetShopIdRaw = (req.body?.targetShopId || "").toString().trim();
+  if (!targetShopIdRaw) return res.status(400).json({ ok: false, error: "targetShopId is required" });
+
+  try {
+    const secret = process.env.JWT_SECRET || "dev_secret_change_me";
+    const decoded = jwt.verify(token, secret);
+    const deviceId = (decoded?.deviceId || "").toString().trim();
+    const curShopId = (decoded?.shopId || "").toString().trim();
+    const role = (decoded?.role || "").toString().trim().toUpperCase();
+
+    if (!deviceId || !curShopId) return res.status(401).json({ ok: false, error: "Invalid token" });
+    if (role !== "ADMIN") return res.status(403).json({ ok: false, error: "Admins only" });
+
+    const db = readDB();
+    if (!Array.isArray(db.shops)) db.shops = [];
+    if (!Array.isArray(db.devices)) db.devices = [];
+
+    const cur = db.shops.find((s) => String(s.shopId) === String(curShopId));
+    if (!cur) return res.status(404).json({ ok: false, error: "Current shop not found" });
+
+    const phone = normPhone(cur.ownerPhone);
+    const pin = (cur.ownerPin || "").toString().trim();
+
+    // Resolve target to canonical if merged
+    let target = db.shops.find((s) => String(s.shopId) === String(targetShopIdRaw));
+    if (!target) return res.status(404).json({ ok: false, error: "Target shop not found" });
+    if (target.isMerged === true && target.mergedInto) {
+      const canonical = db.shops.find(x => String(x.shopId) === String(target.mergedInto));
+      if (canonical) target = canonical;
+    }
+
+    // Verify same owner
+    if (phone && pin) {
+      const okOwner = normPhone(target.ownerPhone) === phone && (target.ownerPin || "") === pin;
+      if (!okOwner) return res.status(403).json({ ok: false, error: "Target shop does not belong to this owner" });
+    } else {
+      // Legacy shop without ownerPhone/PIN: only allow switching if current and target share same ownerDeviceId
+      const okLegacy = String(target.ownerDeviceId || "") === String(cur.ownerDeviceId || "");
+      if (!okLegacy) return res.status(403).json({ ok: false, error: "Target shop not allowed (legacy owner binding)" });
+    }
+
+    // Bind device to target shop as ADMIN
+    const existing = db.devices.find((d) => String(d.deviceId) === String(deviceId));
+    if (existing) {
+      existing.shopId = target.shopId;
+      existing.role = "ADMIN";
+      existing.pairedAt = Date.now();
+      existing.isActive = true;
+    } else {
+      db.devices.push({ deviceId, shopId: target.shopId, role: "ADMIN", pairedAt: Date.now(), isActive: true });
+    }
+    writeDB(db);
+
+    const newToken = signToken({ deviceId, shopId: target.shopId, role: "ADMIN" });
+    return res.json({ ok: true, token: newToken, shopId: target.shopId, shopCode: target.shopCode, shopName: target.shopName });
+  } catch (e) {
+    return res.status(401).json({ ok: false, error: "Invalid token" });
+  }
 });
 
 export default r;
