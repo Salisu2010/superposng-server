@@ -832,6 +832,19 @@ r.get("/shop/:shopId/debtors", authMiddleware, (req, res) => {
     // ignore
   }
 
+  // Cashier should only see their own debtors (professional: server-side enforcement).
+  if (isCashier && staffUserFilter) {
+    items = items.filter((d) => {
+      const su = (d.staffUser || d.createdBy || d.staff || d.user || "").toString().trim().toLowerCase();
+      if (su) return su === staffUserFilter;
+      const rno = (d.receiptNo || d.saleNo || d.receipt || "").toString().trim();
+      if (!rno) return false;
+      const s = salesByReceipt.get(rno);
+      const su2 = (s && (s.staffUser || s.staff || s.user || "")).toString().trim().toLowerCase();
+      return !!su2 && su2 === staffUserFilter;
+    });
+  }
+
   const norm = items.map((d) => {
     const receiptNo = (d.receiptNo || d.saleNo || d.receipt || "").toString();
     let customerName = (d.customerName || d.name || "").toString();

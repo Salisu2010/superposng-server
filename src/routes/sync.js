@@ -65,6 +65,17 @@ function ensureDbArrays(db) {
   if (!Array.isArray(db.shops)) db.shops = [];
 }
 
+// Identify acting cashier (if this request is made with a cashier token)
+function getActor(req){
+  const a = req && req.auth ? req.auth : {};
+  const role = (a.role || '').toString();
+  const username = (a.username || '').toString().trim();
+  const staffId = (a.staffId || '').toString().trim();
+  const actorId = staffId || username;
+  return { role, username, staffId, actorId };
+}
+
+
 function normName(v) {
   return trim(v).toLowerCase().replace(/\s+/g, " ");
 }
@@ -606,7 +617,14 @@ r.post(SALE_PATHS, (req, res) => {
 
     // Save sale
     const createdAt = toInt(sale.createdAt || sale.time || sale.timestamp || 0, 0) || now;
-    db.sales.push({ ...sale, shopId, receiptNo, createdAt });
+
+    // Attach cashier identity for audit & permissions (professional approach)
+    const actor = getActor(req);
+    const staffUser = (actor.role === "cashier" && actor.username) ? actor.username : (sale.staffUser || sale.staff || sale.user || "");
+    const staffId = (actor.role === "cashier" && actor.staffId) ? actor.staffId : (sale.staffId || "");
+    const staffActorId = (actor.role === "cashier" && actor.actorId) ? actor.actorId : (sale.staffActorId || staffId || staffUser || "");
+
+    db.sales.push({ ...sale, shopId, receiptNo, createdAt, staffUser, staffId, staffActorId });
 
     // Deduct stock
     let deductedItems = 0;
@@ -712,12 +730,19 @@ r.get("/sales", (req, res) => {
     const db = readDB();
     ensureDbArrays(db);
 
+    const actor = getActor(req);
+    const isCashier = actor.role === "cashier" && !!actor.username;
+    const meUser = (actor.username || "").toString().trim().toLowerCase();
+
     const list = db.sales.filter((s) => {
       if (s.shopId !== shopId) return false;
+      if (isCashier) {
+        const su = (s.staffUser || s.staff || s.user || "").toString().trim().toLowerCase();
+        if (!su || su !== meUser) return false;
+      }
       if (since <= 0) return true;
       return (s.createdAt || 0) > since;
     });
-
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /sales error", e);
@@ -738,8 +763,16 @@ r.get("/debtors", (req, res) => {
     const db = readDB();
     ensureDbArrays(db);
 
+    const actor = getActor(req);
+    const isCashier = actor.role === "cashier" && !!actor.username;
+    const meUser = (actor.username || "").toString().trim().toLowerCase();
+
     const list = db.debtors.filter((d) => {
       if (d.shopId !== shopId) return false;
+      if (isCashier) {
+        const su = (d.staffUser || d.createdBy || d.staff || d.user || "").toString().trim().toLowerCase();
+        if (!su || su !== meUser) return false;
+      }
       if (since <= 0) return true;
       return (d.updatedAt || d.createdAt || 0) > since;
     });
@@ -784,6 +817,11 @@ r.post("/debtorsFull", (req, res) => {
 
       const totalOwed = toNum(d.totalOwed ?? d.total, 0);
 
+      // Attach cashier identity when debtors are pushed by a cashier token
+      const actor = getActor(req);
+      const isCashier = actor.role === "cashier" && !!actor.username;
+
+
       let existing = db.debtors.find(
         (x) => x && x.shopId === shopId && trim(x.receiptNo) === receiptNo
       );
@@ -795,6 +833,11 @@ r.post("/debtorsFull", (req, res) => {
       if (customerName) existing.customerName = customerName;
       if (customerPhone) existing.customerPhone = customerPhone;
       if (Number.isFinite(totalOwed) && totalOwed > 0) existing.totalOwed = totalOwed;
+
+      if (isCashier) {
+        existing.staffUser = actor.username;
+        if (!existing.createdBy) existing.createdBy = actor.username;
+      }
 
       existing.updatedAt = now;
       existing.serverUpdatedAt = now;

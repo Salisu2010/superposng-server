@@ -232,6 +232,31 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
     debtors: $("tab_debtors"),
   };
 
+  // ===== Tabs (safe for both Owner & Cashier) =====
+  let activeTab = null;
+  function activateTab(tab){
+    try{
+      const t = String(tab || '').trim();
+      if(!t) return;
+      activeTab = t;
+      // highlight tabs
+      try{
+        tabBtns.forEach(btn => {
+          const isOn = (btn && btn.dataset && btn.dataset.tab === t);
+          btn.classList.toggle('active', !!isOn);
+          btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+        });
+      }catch(_e){}
+      // show panel
+      Object.keys(panels || {}).forEach((k) => {
+        const el = panels[k];
+        if(!el) return;
+        el.classList.toggle('hidden', k !== t);
+      });
+    }catch(_e){}
+  }
+
+
   let selectedShopId = "";
   let currentExpiryType = "expired";
   let salesCache = [];
