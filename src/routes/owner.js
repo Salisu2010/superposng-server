@@ -179,6 +179,9 @@ function requirePerm(req, res, permKey) {
     return false;
   }
   const perms = getAuthPerms(req);
+  // Professional: cashiers must be able to VIEW products if they are allowed to sell.
+  // This prevents 'no products' in cashier UI while still keeping admin-only features locked.
+  if (permKey === "products" && perms && perms.sales === true) return true;
   if (perms && perms[permKey] === true) return true;
   res.status(403).json({ ok: false, error: "Cashier permission denied" });
   return false;
@@ -688,7 +691,6 @@ r.get("/shop/:shopId/overview", authMiddleware, (req, res) => {
  * Owner: products table
  */
 r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
-  if (!requireOwner(req, res)) return;
 
   const auth = req.auth || {};
   if (!requireOwnerOrCashier(req, res)) return;
@@ -711,6 +713,101 @@ r.get("/shop/:shopId/products", authMiddleware, (req, res) => {
   items.sort((a, b) => trim(a.name).localeCompare(trim(b.name)));
   return res.json({ ok: true, items });
 });
+
+
+/**
+ * Sellout (Stock Out) - Owner & Cashier
+ * - Allows logging stock-out for damaged/expired/adjustments
+ * - Cashier allowed if they have sales permission (and thus products view is allowed)
+ *
+ * GET  /api/owner/shop/:shopId/sellouts
+ * POST /api/owner/shop/:shopId/sellouts  body: { items:[{productId, qty, reason, note}] }
+ */
+r.get("/shop/:shopId/sellouts", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (!requireOwnerOrCashier(req, res)) return;
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  // Sellout is part of stock control; allow if cashier can sell
+  if (!requirePerm(req, res, "sales")) return;
+
+  const db = readDB();
+  if (!Array.isArray(db.sellouts)) db.sellouts = [];
+  const list = db.sellouts.filter(x => pickShopId(x) === shopId);
+  // For cashier, restrict to own records
+  if (auth.role === "cashier") {
+    const u = trim(auth.username).toLowerCase();
+    return res.json({ ok: true, items: list.filter(x => trim(x.staffUser).toLowerCase() === u) });
+  }
+  return res.json({ ok: true, items: list });
+});
+
+r.post("/shop/:shopId/sellouts", authMiddleware, (req, res) => {
+  const auth = req.auth || {};
+  if (!requireOwnerOrCashier(req, res)) return;
+  const shopId = trim(req.params.shopId);
+  if (!shopId) return res.status(400).json({ ok: false, error: "shopId required" });
+  if (!canAccessShop(req, shopId)) return res.status(403).json({ ok: false, error: "No access to this shop" });
+  if (!requirePerm(req, res, "sales")) return;
+
+  const items = req.body?.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ ok: false, error: "items[] required" });
+  }
+
+  const db = readDB();
+  if (!Array.isArray(db.products)) db.products = [];
+  if (!Array.isArray(db.sellouts)) db.sellouts = [];
+
+  const now = Date.now();
+  const staffUser = auth.role === "cashier" ? trim(auth.username) : "OWNER";
+  const staffRole = auth.role;
+
+  let applied = 0;
+  const logs = [];
+
+  for (const it of items) {
+    const productId = trim(it?.productId || it?.id);
+    const qty = Math.max(0, Number(it?.qty || it?.quantity || 0));
+    if (!productId || qty <= 0) continue;
+
+    const idx = db.products.findIndex(p => pickShopId(p) === shopId && (trim(p.productId) === productId || trim(p.id) === productId));
+    if (idx < 0) continue;
+
+    const p = db.products[idx];
+    const prevStock = Number(p.stock || p.qty || p.quantity || 0) || 0;
+    const newStock = Math.max(0, prevStock - qty);
+
+    // Write back using common field "stock" (keep others for compatibility)
+    p.stock = newStock;
+    if (p.qty !== undefined) p.qty = newStock;
+    if (p.quantity !== undefined) p.quantity = newStock;
+    p.updatedAt = now;
+
+    const entry = {
+      selloutId: crypto.randomUUID ? crypto.randomUUID() : String(now) + "-" + Math.random().toString(16).slice(2),
+      shopId,
+      productId: trim(p.productId || p.id || productId),
+      productName: trim(p.name),
+      qty: qty,
+      prevStock: prevStock,
+      newStock: newStock,
+      reason: trim(it?.reason || "SELL_OUT"),
+      note: trim(it?.note || ""),
+      staffUser,
+      staffRole,
+      createdAt: now
+    };
+    db.sellouts.push(entry);
+    logs.push(entry);
+    applied++;
+  }
+
+  writeDB(db);
+  return res.json({ ok: true, applied, items: logs, serverTime: now });
+});
+
 
 /**
  * Owner: sales table

@@ -29,7 +29,8 @@
     const isCashier = (role === "cashier") || isCashierUser();
     const p = (perms && typeof perms === "object") ? perms : {};
     const allowSales = (isCashier ? (p.sales !== false) : true);
-    const allowProducts = (isCashier ? (p.products === true) : true);
+    const allowProducts = (isCashier ? (p.products === true || p.sales === true) : true);
+    const allowSellout = (isCashier ? (p.sales === true) : true);
     const allowDebtors = (isCashier ? (p.debtors === true) : true);
     const allowExpiry = (isCashier ? (p.expiry === true) : true);
     const allowSettings = (isCashier ? (p.settings === true) : true);
@@ -38,6 +39,7 @@
 
     // Tabs
     const tabProducts = document.querySelector('.tab[data-tab="products"]');
+    const tabSellout = document.querySelector('.tab[data-tab="sellout"]');
     const tabDebtors = document.querySelector('.tab[data-tab="debtors"]');
     const tabSales = document.querySelector('.tab[data-tab="sales"]');
     const tabExpiry = document.querySelector('.tab[data-tab="expiry"]');
@@ -46,6 +48,7 @@
     // Hide/show tabs based on perms
     if(tabSales) tabSales.classList.toggle("hidden", !allowSales);
     if(tabProducts) tabProducts.classList.toggle("hidden", !allowProducts);
+    if(tabSellout) tabSellout.classList.toggle("hidden", !allowSellout);
     if(tabDebtors) tabDebtors.classList.toggle("hidden", !allowDebtors);
     if(tabExpiry) tabExpiry.classList.toggle("hidden", !allowExpiry);
     if(tabInsights) tabInsights.classList.toggle("hidden", !allowInsights);
@@ -215,6 +218,17 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
 
 
   const qProducts = $("qProducts");
+const selloutProduct = $("selloutProduct");
+  const selloutQty = $("selloutQty");
+  const selloutReason = $("selloutReason");
+  const selloutNote = $("selloutNote");
+  const btnApplySellout = $("btnApplySellout");
+  const btnRefreshSellout = $("btnRefreshSellout");
+  const selloutRows = $("selloutRows");
+  const selloutErr = $("selloutErr");
+  const selloutHint = $("selloutHint");
+
+  let lastProductsForSellout = [];
   const qSales = $("qSales");
   const qDebtors = $("qDebtors");
   const productsBody = $("productsBody");
@@ -228,6 +242,7 @@ const btnCloseExpiryModal = $("btnCloseExpiryModal");
   const tabBtns = Array.from(document.querySelectorAll(".tab[data-tab]"));
   const panels = {
     products: $("tab_products"),
+    sellout: $("tab_sellout"),
     sales: $("tab_sales"),
     debtors: $("tab_debtors"),
   };
@@ -915,6 +930,102 @@ async function loadOverview() {
     });
   }
 
+  // =========================
+  // Sellout (Stock Out)
+  // =========================
+  function showSelloutErr(msg){
+    if(!selloutErr) return;
+    selloutErr.textContent = msg || '';
+    selloutErr.classList.toggle('hidden', !msg);
+  }
+
+  async function initSellout(){
+    const shopId = selectedShopId;
+    if(!shopId) return;
+    showSelloutErr('');
+    try { await loadSelloutProducts(); } catch(e) { showSelloutErr(e.message || String(e)); }
+    try { await loadSelloutLogs(); } catch(e) { showSelloutErr(e.message || String(e)); }
+  }
+
+  async function loadSelloutProducts(){
+    const shopId = selectedShopId;
+    if(!shopId || !selloutProduct) return;
+    const pr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/products`);
+    const items = Array.isArray(pr.items) ? pr.items : [];
+    lastProductsForSellout = items;
+    selloutProduct.innerHTML = '';
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = '-- Select Product --';
+    selloutProduct.appendChild(opt0);
+    items.forEach(p => {
+      const id = (p.productId || p.id || '').toString();
+      if(!id) return;
+      const name = (p.name || '').toString();
+      const stock = (p.stock ?? p.qty ?? p.quantity ?? 0);
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = `${name}  (Stock: ${stock})`;
+      selloutProduct.appendChild(o);
+    });
+  }
+
+  async function loadSelloutLogs(){
+    const shopId = selectedShopId;
+    if(!shopId || !selloutRows) return;
+    const rr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/sellouts`);
+    const items = Array.isArray(rr.items) ? rr.items : [];
+    selloutRows.innerHTML = '';
+    if(!items.length){
+      const tr=document.createElement('tr');
+      const td=document.createElement('td');
+      td.colSpan=7; td.className='muted'; td.textContent='No sellouts yet';
+      tr.appendChild(td); selloutRows.appendChild(tr);
+      return;
+    }
+    items.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    items.slice(0,200).forEach(it=>{
+      const tr=document.createElement('tr');
+      const dt=new Date(it.createdAt||0);
+      tr.innerHTML = `
+        <td class="muted">${isNaN(dt.getTime())?'':dt.toLocaleString()}</td>
+        <td>${escapeHtml(it.productName||'')}</td>
+        <td>${Number(it.qty||0)}</td>
+        <td class="muted">${Number(it.prevStock||0)}</td>
+        <td class="muted">${Number(it.newStock||0)}</td>
+        <td class="muted">${escapeHtml(it.reason||'')}</td>
+        <td class="muted">${escapeHtml(it.staffUser||'')}</td>
+      `;
+      selloutRows.appendChild(tr);
+    });
+  }
+
+  async function applySellout(){
+    const shopId = selectedShopId;
+    if(!shopId) return;
+    showSelloutErr('');
+    const pid = (selloutProduct?.value || '').trim();
+    const qty = Number(selloutQty?.value || 0);
+    const reason = (selloutReason?.value || 'SELL_OUT').trim();
+    const note = (selloutNote?.value || '').trim();
+    if(!pid){ return showSelloutErr('Select a product'); }
+    if(!qty || qty <= 0){ return showSelloutErr('Enter quantity'); }
+
+    if(selloutHint) selloutHint.textContent = 'Applying...';
+    const rr = await api(`/api/owner/shop/${encodeURIComponent(shopId)}/sellouts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ productId: pid, qty, reason, note }] })
+    });
+    if(selloutHint) selloutHint.textContent = rr && rr.ok ? `Applied: ${rr.applied||0}` : '';
+    try { await loadProducts(); } catch(_e){}
+    try { await loadSelloutProducts(); } catch(_e){}
+    try { await loadSelloutLogs(); } catch(_e){}
+    if(selloutQty) selloutQty.value='';
+    if(selloutNote) selloutNote.value='';
+  }
+
+
   async function loadSales() {
     const shopId = selectedShopId;
     if (!shopId) return;
@@ -1239,6 +1350,9 @@ async function loadOverview() {
   btnBack?.addEventListener("click", () => {
     selectedShopId = "";
     showMe();
+
+  btnRefreshSellout?.addEventListener("click", () => initSellout().catch(()=>{}));
+  btnApplySellout?.addEventListener("click", () => applySellout().catch((e)=>showSelloutErr(e.message||String(e))));
   });
   btnSaveSoonDays?.addEventListener("click", saveSoonDaysSetting);
   soonDaysSelect?.addEventListener("change", () => {
@@ -1246,7 +1360,13 @@ async function loadOverview() {
     if (soonDaysCustom) soonDaysCustom.classList.toggle("hidden", v !== "custom");
   });
 
-  tabBtns.forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+  tabBtns.forEach((b) => b.addEventListener("click", async () => {
+    const tab = b.dataset.tab;
+    setTab(tab);
+    if (tab === "sellout") {
+      try { await initSellout(); } catch (e) {}
+    }
+  }));
   btnBack?.addEventListener("click", () => {
     selectedShopId = "";
     showMe();
