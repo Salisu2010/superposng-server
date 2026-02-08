@@ -811,22 +811,34 @@ r.post("/shop/:shopId/sellouts", authMiddleware, (req, res) => {
   const saleItems = logs.map((x) => {
     const p = db.products.find(pp => pickShopId(pp) === shopId && (trim(pp.productId) === x.productId || trim(pp.id) === x.productId)) || {};
     const unitPrice = asNum(p.sellingPrice ?? p.salePrice ?? p.price ?? p.unitPrice ?? p.retailPrice ?? 0, 0);
+    const qty = asNum(x.qty, 0);
+    const lineTotal = unitPrice * qty;
     return {
       productId: x.productId,
+      // Android expects either productName or name
+      productName: x.productName,
       name: x.productName,
-      qty: asNum(x.qty, 0),
+      qty,
+      quantity: qty,
+      // Android expects price + total
+      price: unitPrice,
       unitPrice,
-      lineTotal: unitPrice * asNum(x.qty, 0)
+      total: lineTotal,
+      lineTotal
     };
   });
 
   const saleTotal = saleItems.reduce((a, b) => a + asNum(b.lineTotal, 0), 0);
+
+  // Android cloud import requires receiptNo (used as dedupe key)
+  const receiptNo = `CLOUD-${new Date(now).toISOString().slice(0,10).replace(/-/g,'')}-${String(now).slice(-6)}`;
 
   const sale = {
     // Try to be compatible with older Android expectations (id, saleId, createdAt, total, items)
     id: now, // numeric id for older clients
     saleId: (crypto.randomUUID ? crypto.randomUUID() : String(now) + "-S-" + Math.random().toString(16).slice(2)),
     shopId,
+    receiptNo,
     kind: "cloud_checkout",
     source: "cloud",
     staffUser,
