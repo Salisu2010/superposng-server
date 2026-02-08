@@ -1350,10 +1350,11 @@ async function loadOverview() {
   btnBack?.addEventListener("click", () => {
     selectedShopId = "";
     showMe();
+  });
 
+  // Sellout actions
   btnRefreshSellout?.addEventListener("click", () => initSellout().catch(()=>{}));
   btnApplySellout?.addEventListener("click", () => applySellout().catch((e)=>showSelloutErr(e.message||String(e))));
-  });
   btnSaveSoonDays?.addEventListener("click", saveSoonDaysSetting);
   soonDaysSelect?.addEventListener("change", () => {
     const v = ((soonDaysSelect && soonDaysSelect.value) ? String(soonDaysSelect.value) : "").trim();
