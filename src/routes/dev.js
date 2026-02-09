@@ -607,14 +607,104 @@ function sanitizeEmail(v) {
 }
 
 // List shops (for Dev Portal owner assignment UI)
+
+function resolveShopByIdOrCode(db, shopIdOrCode) {
+  const q = trim(shopIdOrCode);
+  if (!q) return null;
+  if (!Array.isArray(db.shops)) db.shops = [];
+  // Exact match by shopId or shopCode (case-insensitive for shopCode)
+  let shop = db.shops.find(s => String(s.shopId) === q) ||
+             db.shops.find(s => String(s.shopCode || "").toUpperCase() === q.toUpperCase());
+  return shop || null;
+}
+
+function purgeShopData(db, shopId) {
+  const sid = String(shopId || "");
+  const dropByShopId = (arr, key = "shopId") => Array.isArray(arr) ? arr.filter(x => String(x?.[key] || "") !== sid) : [];
+  // Core
+  db.shops = Array.isArray(db.shops) ? db.shops.filter(s => String(s.shopId) !== sid) : [];
+  // Related collections
+  db.devices = dropByShopId(db.devices, "shopId");
+  db.products = dropByShopId(db.products, "shopId");
+  db.staffs = dropByShopId(db.staffs, "shopId");
+  db.sales = dropByShopId(db.sales, "shopId");
+  db.debtors = dropByShopId(db.debtors, "shopId");
+  db.debtorPayments = dropByShopId(db.debtorPayments, "shopId");
+  db.licenses = dropByShopId(db.licenses, "shopId");
+  db.pendingActivations = dropByShopId(db.pendingActivations, "shopId");
+  db.pairCodes = dropByShopId(db.pairCodes, "shopId");
+  db.shopAliases = dropByShopId(db.shopAliases, "shopId");
+  db.trials = dropByShopId(db.trials, "shopId");
+
+  // RMP collections
+  db.rmpLicenses = dropByShopId(db.rmpLicenses, "shopId");
+  db.rmpPendingActivations = dropByShopId(db.rmpPendingActivations, "shopId");
+}
+
 r.get("/shops/list", requireDevKey, (req, res) => {
   const db = readDB();
   const shops = (db.shops || []).map(s => ({
     shopId: s.shopId,
     shopName: s.shopName,
-    shopCode: s.shopCode
+    shopCode: s.shopCode,
+    createdAt: s.createdAt,
+    isMerged: s.isMerged === true,
+    mergedInto: s.mergedInto || "",
+    isDeleted: s.isDeleted === true
   }));
   return res.json({ ok: true, shops });
+});
+
+/**
+ * Delete a Shop (Dev Portal)
+ * body: { shopIdOrCode, hard?: true }
+ *
+ * ⚠️ HARD delete removes the shop and all related records (devices, products, staffs, sales, debtors, licenses, trials, etc).
+ * This is intended for duplicate / mistaken shop creation or when a customer wants the shop wiped.
+ */
+r.post("/shops/delete", requireDevKey, (req, res) => {
+  const { shopIdOrCode, hard } = req.body || {};
+  const q = trim(shopIdOrCode);
+  if (!q) return res.status(400).json({ ok: false, error: "shopIdOrCode is required" });
+
+  const db = readDB();
+  if (!Array.isArray(db.shops)) db.shops = [];
+
+  const shop = resolveShopByIdOrCode(db, q);
+  if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+  // Safety: don't allow deleting a canonical shop that others are merged into unless hard=true
+  const sid = String(shop.shopId);
+  const mergedChildren = db.shops.filter(s => s && s.isMerged === true && String(s.mergedInto || "") === sid);
+  if (mergedChildren.length && hard !== true) {
+    return res.status(400).json({
+      ok: false,
+      error: "This shop has merged shops pointing to it. Pass {hard:true} to force delete.",
+      mergedChildren: mergedChildren.map(s => ({ shopId: s.shopId, shopCode: s.shopCode, shopName: s.shopName }))
+    });
+  }
+
+  if (hard === true) {
+    // Remove merged children first (so pointers don't dangle)
+    mergedChildren.forEach(ch => purgeShopData(db, ch.shopId));
+    purgeShopData(db, sid);
+  } else {
+    // Soft delete: mark as deleted (keeps history)
+    shop.isDeleted = true;
+    shop.deletedAt = Date.now();
+    shop.updatedAt = Date.now();
+  }
+
+  writeDB(db);
+  return res.json({
+    ok: true,
+    deleted: hard === true,
+    softDeleted: hard !== true,
+    shop: { shopId: shop.shopId, shopCode: shop.shopCode, shopName: shop.shopName }
+  });
+});
+
+
 });
 
 

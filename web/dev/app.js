@@ -7,6 +7,16 @@
 
 const $ = (id) => document.getElementById(id);
 
+
+function escapeHtml(str) {
+  return (str === null || str === undefined) ? "" : String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function toast(msg) {
   const t = $("toast");
   t.textContent = msg;
@@ -1290,9 +1300,90 @@ function bulkCsvRmp() {
   downloadText(`repairmasterpro_bulk_tokens_${Date.now()}.csv`, csv);
 }
 
+
+/* =========================
+   Shops Manager
+========================= */
+
+function fmtDate(ts) {
+  if (!ts) return "";
+  try {
+    const d = new Date(Number(ts));
+    return d.toLocaleString();
+  } catch {
+    return String(ts);
+  }
+}
+
+async function loadShops() {
+  const body = $("shopsTableBody");
+  if (body) body.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+  const res = await api("/api/dev/shops/list", { method: "GET" });
+  if (!res.ok) {
+    if (body) body.innerHTML = `<tr><td colspan="6" class="muted">Failed: ${escapeHtml(res.error || "Error")}</td></tr>`;
+    return;
+  }
+  const shops = Array.isArray(res.shops) ? res.shops : [];
+  if (!shops.length) {
+    if (body) body.innerHTML = `<tr><td colspan="6" class="muted">No shops found.</td></tr>`;
+    return;
+  }
+  const rows = shops.map(s => {
+    const status = s.isDeleted ? "Deleted" : (s.isMerged ? ("Merged → " + (s.mergedInto || "")) : "Active");
+    const actionBtn = `<button class="btn sm danger" data-del="${escapeHtml(s.shopId || "")}" data-code="${escapeHtml(s.shopCode || "")}">Delete</button>`;
+    return `<tr>
+      <td>${escapeHtml(s.shopName || "")}</td>
+      <td><span class="pill">${escapeHtml(s.shopCode || "")}</span></td>
+      <td class="mono">${escapeHtml(s.shopId || "")}</td>
+      <td class="muted">${escapeHtml(fmtDate(s.createdAt))}</td>
+      <td>${escapeHtml(status)}</td>
+      <td>${actionBtn}</td>
+    </tr>`;
+  }).join("");
+  if (body) body.innerHTML = rows;
+
+  // Bind delete buttons
+  body.querySelectorAll("button[data-del]").forEach(btn => {
+    btn.onclick = () => {
+      const sid = btn.getAttribute("data-del") || "";
+      const sc = btn.getAttribute("data-code") || "";
+      if ($("deleteShopIdOrCode")) $("deleteShopIdOrCode").value = sid || sc;
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    };
+  });
+}
+
+async function deleteShop() {
+  const idOrCode = ($("deleteShopIdOrCode")?.value || "").trim();
+  if (!idOrCode) return toast("Enter Shop ID or Shop Code");
+
+  const mode = ($("deleteMode")?.value || "soft").toLowerCase();
+  const isHard = mode === "hard";
+
+  const msg = isHard
+    ? `HARD DELETE will WIPE this shop and ALL related records.\n\nType OK to continue.`
+    : `Soft delete will mark the shop as deleted (history remains).\n\nProceed?`;
+
+  const ok = isHard ? (prompt(msg) === "OK") : confirm(msg);
+  if (!ok) return;
+
+  const res = await api("/api/dev/shops/delete", {
+    method: "POST",
+    body: JSON.stringify({ shopIdOrCode: idOrCode, hard: isHard })
+  });
+
+  if (!res.ok) return toast(res.error || "Delete failed");
+  toast(isHard ? "Shop deleted (hard) ✅" : "Shop marked deleted ✅");
+  await loadShops();
+}
+
 window.addEventListener("load", () => {
   const b1 = $("btnBulkGenerate"); if (b1) b1.onclick = bulkGenerateSpng;
   const b2 = $("btnBulkCsv"); if (b2) b2.onclick = bulkCsvSpng;
   const b3 = $("btnBulkRmpGenerate"); if (b3) b3.onclick = bulkGenerateRmp;
   const b4 = $("btnBulkRmpCsv"); if (b4) b4.onclick = bulkCsvRmp;
+  const br = $("btnRefreshShops"); if (br) br.onclick = loadShops;
+  const bd = $("btnDeleteShop"); if (bd) bd.onclick = deleteShop;
+  // Auto-load shops once
+  try { loadShops(); } catch {}
 });
