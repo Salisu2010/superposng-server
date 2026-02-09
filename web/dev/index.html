@@ -511,55 +511,6 @@
       </div>
     </section>
 
-
-    <section class="card">
-      <div class="cardhead">
-        <h2>Shop Manager</h2>
-        <div class="actions">
-          <button id="btnRefreshShops" class="btn">Refresh</button>
-        </div>
-      </div>
-
-      <div class="grid3">
-        <div>
-          <label>Shop ID or Shop Code</label>
-          <input id="deleteShopIdOrCode" placeholder="e.g. JEc5aEowezKj or SPNG-ABC123" />
-        </div>
-        <div>
-          <label>Delete Mode</label>
-          <select id="deleteMode">
-            <option value="soft">Soft delete (recommended)</option>
-            <option value="hard">Hard delete (wipe all data)</option>
-          </select>
-        </div>
-        <div class="row" style="align-items:flex-end;">
-          <button id="btnDeleteShop" class="btn danger">Delete Shop</button>
-        </div>
-      </div>
-
-      <div class="tablewrap">
-        <table class="tbl">
-          <thead>
-            <tr>
-              <th>Shop Name</th>
-              <th>Shop Code</th>
-              <th>Shop ID</th>
-              <th>Created</th>
-              <th>Status</th>
-              <th style="width:120px;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="shopsTableBody">
-            <tr><td colspan="6" class="muted">Click Refresh to load shops…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p class="hint">
-        <b>Soft delete</b> marks a shop as deleted (keeps history). <b>Hard delete</b> permanently wipes the shop and related records.
-      </p>
-    </section>
-
 </main>
 
   <div id="toast" class="toast"></div>
