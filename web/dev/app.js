@@ -1301,14 +1301,6 @@ let _smTotal = 0;
 let _smSelectedShop = null; // {shopId, shopCode, shopName}
 let _smLastQuerySig = "";   // helps avoid redundant fetches
 
-function escJs(v) {
-  // escape for single-quoted inline onclick
-  return String(v == null ? "" : v)
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r");
-}
 
 function smSetMsg(kind, text) {
   const box = $("smMsg");
@@ -1364,9 +1356,9 @@ function smRender() {
         <td><span class="pill">${escHtml(status)}</span></td>
         <td>${escHtml(created)}</td>
         <td>
-          <button class="btn" onclick="smSelect('${escJs(s.shopId)}')">Select</button>
-          <button class="btn warn" onclick="smDeleteOne('${escJs(s.shopId)}','soft')">Soft</button>
-          <button class="btn danger" onclick="smDeleteOne('${escJs(s.shopId)}','hard')">Hard</button>
+          <button class="btn sm-act" data-act="select" data-shopid="${safeId}">Select</button>
+          <button class="btn warn sm-act" data-act="soft" data-shopid="${safeId}">Soft</button>
+          <button class="btn danger sm-act" data-act="hard" data-shopid="${safeId}">Hard</button>
         </td>
       </tr>
     `;
@@ -1376,6 +1368,31 @@ function smRender() {
 
   if (prev) prev.disabled = (_smPage <= 1);
   if (next) next.disabled = (_smPage >= _smPages);
+}
+
+// CSP-safe: handle row action buttons via event delegation (no inline onclick)
+function smBindTableActions() {
+  const tbody = $("smTbody");
+  if (!tbody || tbody._smBound) return;
+  tbody._smBound = true;
+  tbody.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button.sm-act");
+    if (!btn) return;
+    ev.preventDefault();
+    const act = String(btn.getAttribute("data-act") || "");
+    const shopId = String(btn.getAttribute("data-shopid") || "");
+    if (!shopId) return;
+
+    if (act === "select") {
+      smSelect(shopId);
+      return;
+    }
+    if (act === "soft" || act === "hard") {
+      const reason = String($("smReason")?.value || "").trim();
+      await smDeleteOne(shopId, act, reason);
+      return;
+    }
+  });
 }
 
 async function smFetch(page = 1, { force = false } = {}) {
@@ -1411,7 +1428,9 @@ async function smFetch(page = 1, { force = false } = {}) {
 
     _smLastQuerySig = sig;
 
-    // if selected shop is not on this page, keep selection but don't highlight
+    smBindTableActions();
+
+    // if selected shop is not on this page, keep selection but don\'t highlight
     smRender();
 
     const msg = `Loaded ${_smAll.length} shops (page ${_smPage}/${_smPages}).`;
@@ -1475,20 +1494,23 @@ function smDebouncedFetch() {
   _smDebT = setTimeout(() => smFetch(1, { force: true }), 250);
 }
 window.addEventListener("load", () => {
-  const b1 = $("btnBulkGenerate"); if (b1) b1.onclick = bulkGenerateSpng;
-  const b2 = $("btnBulkCsv"); if (b2) b2.onclick = bulkCsvSpng;
-  const b3 = $("btnBulkRmpGenerate"); if (b3) b3.onclick = bulkGenerateRmp;
-  const b4 = $("btnBulkRmpCsv"); if (b4) b4.onclick = bulkCsvRmp;
+const b1 = $("btnBulkGenerate"); if (b1) b1.addEventListener("click", bulkGenerateSpng);
+const b2 = $("btnBulkCsv"); if (b2) b2.addEventListener("click", bulkCsvSpng);
+const b3 = $("btnBulkRmpGenerate"); if (b3) b3.addEventListener("click", bulkGenerateRmp);
+const b4 = $("btnBulkRmpCsv"); if (b4) b4.addEventListener("click", bulkCsvRmp);
 
-  // Shop Manager
-  const smRef = $("btnSmRefresh"); if (smRef) smRef.onclick = () => smRefresh();
-  const smPrev = $("btnSmPrev"); if (smPrev) smPrev.onclick = () => { if (_smPage > 1) smFetch(_smPage - 1, { force: true }); };
-  const smNext = $("btnSmNext"); if (smNext) smNext.onclick = () => { if (_smPage < _smPages) smFetch(_smPage + 1, { force: true }); };
-  const smQ = $("smQ"); if (smQ) smQ.oninput = () => smDebouncedFetch();
-  const smShow = $("smShow"); if (smShow) smShow.onchange = () => smFetch(1, { force: true });
-  const smSz = $("smPageSize"); if (smSz) smSz.onchange = () => smFetch(1, { force: true });
-  const smDel = $("btnSmDelete"); if (smDel) smDel.onclick = smDeleteSelected;
+// Shop Manager (CSP-safe: no inline/on* handlers)
+const smRef = $("btnSmRefresh"); if (smRef) smRef.addEventListener("click", () => smRefresh());
+const smPrev = $("btnSmPrev"); if (smPrev) smPrev.addEventListener("click", () => { if (_smPage > 1) smFetch(_smPage - 1, { force: true }); });
+const smNext = $("btnSmNext"); if (smNext) smNext.addEventListener("click", () => { if (_smPage < _smPages) smFetch(_smPage + 1, { force: true }); });
+const smQ = $("smQ"); if (smQ) smQ.addEventListener("input", () => smDebouncedFetch());
+const smShow = $("smShow"); if (smShow) smShow.addEventListener("change", () => smFetch(1, { force: true }));
+const smSz = $("smPageSize"); if (smSz) smSz.addEventListener("change", () => smFetch(1, { force: true }));
+const smDel = $("btnSmDelete"); if (smDel) smDel.addEventListener("click", () => smDeleteSelected());
 
-  // Load shops once key is present (or after user saves)
-  if (getKey()) smRefresh();
+// Ensure table delegation is bound once
+smBindTableActions();
+
+// Load shops once key is present (or after user saves)
+if (getKey()) smRefresh();
 });
