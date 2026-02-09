@@ -230,6 +230,89 @@
       <p class="hint">Tip: Click a row action to auto-fill <b>Target</b> for Extend/Revoke/Reset.</p>
     </section>
 
+    <!-- ===================== -->
+    <!-- Shop Manager -->
+    <!-- ===================== -->
+    <section class="card">
+      <div class="cardHead">
+        <div>
+          <h2 style="margin:0">Shop Manager</h2>
+          <p class="muted" style="margin-top:6px">Search, paginate, select a shop, and safely delete shops. Soft delete hides the shop (keeps data). Hard delete permanently removes shop and all related records.</p>
+        </div>
+        <span class="pill">Admin</span>
+      </div>
+
+      <div class="grid3" style="margin-top:10px">
+        <div>
+          <label>Search (name / code / id)</label>
+          <input id="smQ" placeholder="e.g. DAURAWA, SPNG-..., shopId" />
+        </div>
+        <div>
+          <label>Show</label>
+          <select id="smShow">
+            <option value="active" selected>Active only</option>
+            <option value="all">All (incl. deleted)</option>
+            <option value="deleted">Deleted only</option>
+          </select>
+        </div>
+        <div>
+          <label>Page Size</label>
+          <select id="smPageSize">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px; flex-wrap:wrap">
+        <button id="btnSmRefresh" class="btn primary">Refresh Shops</button>
+        <button id="btnSmPrev" class="btn">Prev</button>
+        <button id="btnSmNext" class="btn">Next</button>
+        <span id="smMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+
+      <div class="row" style="margin-top:10px; flex-wrap:wrap">
+        <div class="field" style="min-width:260px; flex:1">
+          <label>Selected Shop</label>
+          <input id="smSelected" placeholder="Click Select on a shop row" readonly />
+        </div>
+        <div class="field" style="min-width:160px">
+          <label>Delete Mode</label>
+          <select id="smDeleteMode">
+            <option value="soft" selected>Soft delete</option>
+            <option value="hard">Hard delete</option>
+          </select>
+        </div>
+        <div class="field" style="min-width:260px; flex:1">
+          <label>Reason (optional)</label>
+          <input id="smReason" placeholder="e.g. Duplicate shop / customer changed phone" />
+        </div>
+        <div class="row" style="align-items:flex-end">
+          <button id="btnSmDelete" class="btn danger">Delete Selected</button>
+        </div>
+      </div>
+
+      <div class="tableWrap" style="margin-top:12px">
+        <table class="table" id="smTable">
+          <thead>
+            <tr>
+              <th>Shop</th>
+              <th>Shop Code</th>
+              <th>Shop ID</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th style="width:220px">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="smTbody"></tbody>
+        </table>
+      </div>
+
+      <div id="smMsg" class="msg hidden" style="margin-top:10px"></div>
+    </section>
+
     <section class="card">
       <h2>RepairMasterPro License Table</h2>
       <div class="grid3">
@@ -267,40 +350,7 @@
     </section>
 
     
-    
     <section class="card">
-      <h2>Shop Manager</h2>
-      <p class="hint">Manage shops safely. <b>Soft delete</b> will hide the shop (keeps data). <b>Hard delete</b> will permanently remove the shop and related data.</p>
-
-      <div class="grid2">
-        <div>
-          <label>Select Shop</label>
-          <select id="smShopSelect"></select>
-          <div class="hint small">Tip: Click <b>Refresh</b> to reload shops.</div>
-        </div>
-
-        <div>
-          <label>Delete Mode</label>
-          <select id="smMode">
-            <option value="SOFT" selected>SOFT (Recommended)</option>
-            <option value="HARD">HARD (Permanent)</option>
-          </select>
-          <div class="hint small">HARD delete cannot be undone.</div>
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:10px;">
-        <button id="btnSmRefresh" class="btn">Refresh Shops</button>
-        <button id="btnSmDelete" class="btn danger">Delete Shop</button>
-        <span id="smMsg" class="hint" style="margin-left:auto;"></span>
-      </div>
-
-      <div style="height:10px"></div>
-      <div id="smTable" class="results"></div>
-    </section>
-
-
-<section class="card">
       <h2>Merge Shops</h2>
       <p class="hint">
         Use this when a user mistakenly created a new shop or changed phone/device.

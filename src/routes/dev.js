@@ -609,47 +609,139 @@ function sanitizeEmail(v) {
 // List shops (for Dev Portal owner assignment UI)
 r.get("/shops/list", requireDevKey, (req, res) => {
   const db = readDB();
-  const shops = (db.shops || []).map(s => ({
+
+  const hasPaging =
+    (req.query && (
+      Object.prototype.hasOwnProperty.call(req.query, "page") ||
+      Object.prototype.hasOwnProperty.call(req.query, "limit") ||
+      Object.prototype.hasOwnProperty.call(req.query, "q") ||
+      Object.prototype.hasOwnProperty.call(req.query, "show")
+    ));
+
+  const toShopRow = (s) => ({
     shopId: s.shopId,
     shopName: s.shopName,
-    shopCode: s.shopCode
-  }));
-  return res.json({ ok: true, shops });
+    shopCode: s.shopCode,
+    createdAt: Number(s.createdAt || 0),
+    isMerged: s.isMerged === true,
+    mergedInto: s.mergedInto || "",
+    isDeleted: s.isDeleted === true,
+    deletedAt: Number(s.deletedAt || 0),
+  });
+
+  let shops = (db.shops || []).map(toShopRow);
+
+  // Backward compatible: if no query params, return full list (older UI needs this)
+  if (!hasPaging) {
+    return res.json({ ok: true, shops });
+  }
+
+  const qRaw = trim(req.query.q || "");
+  const q = qRaw.toLowerCase();
+  const show = trim(req.query.show || "active").toLowerCase(); // active|all|deleted
+
+  // Filter by show mode
+  shops = shops.filter((s) => {
+    const isDel = s.isDeleted === true;
+    if (show === "active") return !isDel;
+    if (show === "deleted") return isDel;
+    return true; // all
+  });
+
+  // Search
+  if (q) {
+    shops = shops.filter((s) => {
+      const hay = `${s.shopName || ""} ${s.shopCode || ""} ${s.shopId || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  // Sort: active first (unless show is deleted), createdAt desc, then name
+  shops.sort((a, b) => {
+    const ad = a.isDeleted === true ? 1 : 0;
+    const bd = b.isDeleted === true ? 1 : 0;
+    if (ad !== bd) return ad - bd;
+    const ac = Number(a.createdAt || 0);
+    const bc = Number(b.createdAt || 0);
+    if (ac !== bc) return bc - ac;
+    return String(a.shopName || "").localeCompare(String(b.shopName || ""));
+  });
+
+  let page = parseInt(req.query.page || "1", 10);
+  let limit = parseInt(req.query.limit || "25", 10);
+  if (!Number.isFinite(page) || page < 1) page = 1;
+  if (!Number.isFinite(limit) || limit < 5) limit = 25;
+  if (limit > 200) limit = 200;
+
+  const total = shops.length;
+  const pages = Math.max(1, Math.ceil(total / limit));
+  if (page > pages) page = pages;
+
+  const start = (page - 1) * limit;
+  const end = Math.min(total, start + limit);
+  const slice = shops.slice(start, end);
+
+  return res.json({
+    ok: true,
+    page,
+    pages,
+    limit,
+    total,
+    q: qRaw,
+    show,
+    shops: slice
+  });
 });
-// Delete Shop (Dev Portal)
-// POST /api/dev/shops/delete  body: { shopIdOrCode, mode: "SOFT"|"HARD" }
-// - SOFT: marks shop as isDeleted=true (keeps history)
-// - HARD: removes shop and all related data from db.json (irreversible)
+
+
+// Delete shop (Dev Portal)
+// body: { shopIdOrCode, mode: 'soft'|'hard', reason? }
+// - soft: marks shop as isDeleted=true (keeps data)
+// - hard: permanently removes shop + all related rows
 r.post("/shops/delete", requireDevKey, (req, res) => {
-  const key = trim(req.body?.shopIdOrCode || req.body?.shopId || req.body?.shopCode);
-  const mode = trim(req.body?.mode || "SOFT").toUpperCase();
-  if (!key) return res.status(400).json({ ok: false, error: "shopIdOrCode required" });
+  const shopIdOrCode = trim(req.body?.shopIdOrCode);
+  const mode = trim(req.body?.mode || "soft").toLowerCase();
+  const reason = trim(req.body?.reason || "");
+
+  if (!shopIdOrCode) return res.status(400).json({ ok: false, error: "shopIdOrCode required" });
+  if (mode !== "soft" && mode !== "hard") return res.status(400).json({ ok: false, error: "mode must be soft or hard" });
 
   const db = readDB();
   if (!Array.isArray(db.shops)) db.shops = [];
 
-  // Find shop by id or code (case-insensitive)
-  const ukey = key.toUpperCase();
-  const shop = (db.shops || []).find(s => trim(s.shopId).toUpperCase() === ukey || trim(s.shopCode).toUpperCase() === ukey);
+  const findShop = () => {
+    const q = shopIdOrCode;
+    return db.shops.find(s => trim(s.shopId) === q) || db.shops.find(s => trim(s.shopCode) === q);
+  };
+
+  const shop = findShop();
   if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
 
-  const shopId = trim(shop.shopId);
-  const snapshot = { shopId: shop.shopId, shopCode: shop.shopCode, shopName: shop.shopName };
+  const targetShopId = trim(shop.shopId);
 
-  if (mode !== "HARD") {
-    // Soft delete
+  // helper: detect shop id field in any row
+  const keys = ["shopId", "shopID", "shop_id", "sid", "shop", "shop_id_fk"];
+  const matchesShop = (obj) => {
+    if (!obj || typeof obj !== "object") return false;
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k) && trim(obj[k]) === targetShopId) return true;
+    }
+    return false;
+  };
+
+  if (mode === "soft") {
     shop.isDeleted = true;
-    shop.deletedAt = Date.now();
-    shop.deletedReason = trim(req.body?.reason || "");
+    shop.deletedAt = now();
+    shop.deleteReason = reason;
     writeDB(db);
-    return res.json({ ok: true, mode: "SOFT", shop: snapshot });
+    return res.json({ ok: true, mode, shopId: shop.shopId, shopCode: shop.shopCode });
   }
 
-  // Hard delete: remove shop + related rows
+  // hard delete: remove from shops + related collections
   const beforeCounts = {};
   const afterCounts = {};
+
   const collections = [
-    "shops",
     "devices",
     "pairCodes",
     "products",
@@ -659,54 +751,60 @@ r.post("/shops/delete", requireDevKey, (req, res) => {
     "debtorPayments",
     "licenses",
     "pendingActivations",
-    "owners",
-    "shopAliases",
-    "trials",
     "rmpLicenses",
-    "rmpPendingActivations"
+    "rmpPendingActivations",
+    "trials",
   ];
 
-  // helper: remove items where any of these fields equals shopId
-  const shopFields = ["shopId", "shopID", "shop_id", "sid", "shop", "boundShopId"];
-  function keepItem(x) {
-    if (!x || typeof x !== "object") return true;
-    for (const f of shopFields) {
-      if (Object.prototype.hasOwnProperty.call(x, f) && trim(x[f]) === shopId) return false;
-    }
-    return true;
+  for (const name of collections) {
+    const arr = Array.isArray(db[name]) ? db[name] : [];
+    beforeCounts[name] = arr.length;
+    db[name] = arr.filter(row => !matchesShop(row));
+    afterCounts[name] = db[name].length;
   }
 
-  // shops list: remove by shopId
-  beforeCounts.shops = (db.shops || []).length;
-  db.shops = (db.shops || []).filter(s => trim(s.shopId) !== shopId);
+  // owners: remove shopId from allowed shops
+  if (Array.isArray(db.owners)) {
+    beforeCounts.owners = db.owners.length;
+    db.owners = db.owners.map(o => {
+      if (!o || typeof o !== "object") return o;
+      if (!Array.isArray(o.shops)) return o;
+      return { ...o, shops: o.shops.filter(id => trim(id) !== targetShopId) };
+    });
+    afterCounts.owners = db.owners.length;
+  }
+
+  // shopAliases: remove aliases pointing to this shop or originating from this shop
+  if (Array.isArray(db.shopAliases)) {
+    beforeCounts.shopAliases = db.shopAliases.length;
+    db.shopAliases = db.shopAliases.filter(a => {
+      const from = trim(a?.fromShopId || a?.from || "");
+      const to = trim(a?.toShopId || a?.to || "");
+      return from !== targetShopId && to !== targetShopId;
+    });
+    afterCounts.shopAliases = db.shopAliases.length;
+  }
+
+  // mergeLogs: keep, but mark that shop was deleted (audit)
+  if (!Array.isArray(db.mergeLogs)) db.mergeLogs = [];
+  db.mergeLogs.unshift({
+    type: "DELETE_SHOP",
+    mode: "hard",
+    shopId: targetShopId,
+    shopCode: shop.shopCode || "",
+    shopName: shop.shopName || "",
+    reason,
+    at: now(),
+  });
+
+  // finally remove shop record
+  beforeCounts.shops = db.shops.length;
+  db.shops = db.shops.filter(s => trim(s.shopId) !== targetShopId);
   afterCounts.shops = db.shops.length;
 
-  for (const k of collections) {
-    if (k === "shops") continue;
-    if (!Array.isArray(db[k])) continue;
-    beforeCounts[k] = db[k].length;
-
-    if (k === "owners") {
-      // owners store shops as array; just remove this shopId from their list
-      db.owners = db.owners.map(o => {
-        if (!o || typeof o !== "object") return o;
-        const arr = Array.isArray(o.shops) ? o.shops.map(trim) : [];
-        const next = arr.filter(id => id !== shopId);
-        return { ...o, shops: next };
-      });
-      afterCounts[k] = db.owners.length;
-      continue;
-    }
-
-    db[k] = db[k].filter(keepItem);
-    afterCounts[k] = db[k].length;
-  }
-
   writeDB(db);
-  return res.json({ ok: true, mode: "HARD", shop: snapshot, beforeCounts, afterCounts });
+  return res.json({ ok: true, mode, shopId: targetShopId, counts: { before: beforeCounts, after: afterCounts } });
 });
-
-
 
 
 

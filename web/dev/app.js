@@ -729,10 +729,6 @@ $("btnReset").addEventListener("click", () => doRevoke(true).catch((e) => toast(
 $("btnRevoke").addEventListener("click", () => doRevoke(false).catch((e) => toast(e.message)));
 $("btnExtend").addEventListener("click", () => doExtend().catch((e) => toast(e.message)));
 
-// Shop Manager actions
-if ($("btnSmRefresh")) $("btnSmRefresh").addEventListener("click", () => shopManagerRefresh().catch(()=>{}));
-if ($("btnSmDelete")) $("btnSmDelete").addEventListener("click", () => shopManagerDelete().catch(()=>{}));
-
 // Load token table on open
 refreshTokenTable(true).catch(() => {});
 
@@ -752,12 +748,10 @@ async function loadShopOptions() {
     const ownSel = $("ownShops");
     const fromSel = $("mergeFromShop");
     const toSel = $("mergeToShop");
-    const smSel = $("smShopSelect");
 
     if (ownSel) ownSel.innerHTML = "";
     if (fromSel) fromSel.innerHTML = "";
     if (toSel) toSel.innerHTML = "";
-    if (smSel) smSel.innerHTML = "";
 
     shops.forEach(sh => {
       const label = `${sh.shopName || "Shop"} (${sh.shopCode || sh.shopId})`;
@@ -785,95 +779,6 @@ async function loadShopOptions() {
     });
   } catch (e) {
     // ignore until dev key saved
-  }
-}
-
-
-
-// ------------------------------
-// Shop Manager (Delete Shop)
-// ------------------------------
-function renderShopManagerTable(shops){
-  const wrap = $("smTable");
-  if(!wrap) return;
-  const list = Array.isArray(shops) ? shops : [];
-  if(!list.length){
-    wrap.innerHTML = '<div class="hint">No shops found.</div>';
-    return;
-  }
-  const rows = list.map(sh => {
-    const sid = esc(sh.shopId);
-    const name = esc(sh.shopName || "Shop");
-    const code = esc(sh.shopCode || "");
-    const deleted = (sh.isDeleted === true) ? '<span class="pill danger">DELETED</span>' : '';
-    return `<div class="result-row" style="align-items:center;gap:10px">
-      <div style="flex:1">
-        <div style="font-weight:800">${name} ${deleted}</div>
-        <div class="hint">ShopCode: <b>${code || "-"}</b> • ShopId: <b>${sid}</b></div>
-      </div>
-      <button class="btn btn2" data-sm-select="${sid}">Select</button>
-    </div>`;
-  }).join("");
-  wrap.innerHTML = `<div class="results">${rows}</div>`;
-  wrap.querySelectorAll("[data-sm-select]").forEach(btn=>{
-    btn.addEventListener("click",(ev)=>{
-      ev.preventDefault();
-      const id = btn.getAttribute("data-sm-select");
-      const sel = $("smShopSelect");
-      if(sel && id){
-        sel.value = id;
-        toast("Selected shop " + id);
-      }
-    });
-  });
-}
-
-async function shopManagerRefresh(){
-  const msg = $("smMsg");
-  if(msg) msg.textContent = "Loading...";
-  try{
-    const data = await api("/api/dev/shops/list");
-    const shops = data.shops || [];
-    renderShopManagerTable(shops);
-    if(msg) msg.textContent = `Loaded ${shops.length} shop(s)`;
-  }catch(e){
-    if(msg) msg.textContent = "";
-    toast(e.message || String(e));
-  }
-}
-
-async function shopManagerDelete(){
-  const sel = $("smShopSelect");
-  const modeSel = $("smMode");
-  const msg = $("smMsg");
-  const shopId = (sel?.value || "").trim();
-  const mode = (modeSel?.value || "SOFT").trim().toUpperCase();
-
-  if(!shopId){ return toast("Select a shop first"); }
-
-  const shopLabel = sel?.selectedOptions?.[0]?.textContent || shopId;
-
-  if(mode === "HARD"){
-    const ok = confirm(`HARD DELETE will permanently remove ${shopLabel} and related data. This cannot be undone. Continue?`);
-    if(!ok) return;
-  } else {
-    const ok = confirm(`Soft delete will hide ${shopLabel} (keeps data). Continue?`);
-    if(!ok) return;
-  }
-
-  if(msg) msg.textContent = "Deleting...";
-  try{
-    const data = await api("/api/dev/shops/delete", {
-      method: "POST",
-      body: JSON.stringify({ shopIdOrCode: shopId, mode })
-    });
-    if(!data.ok) throw new Error(data.error || "Delete failed");
-    toast(`Shop deleted (${data.mode})`);
-    await shopManagerRefresh();
-    if(msg) msg.textContent = `Deleted (${data.mode})`;
-  }catch(e){
-    if(msg) msg.textContent = "";
-    toast(e.message || String(e));
   }
 }
 
@@ -1385,9 +1290,205 @@ function bulkCsvRmp() {
   downloadText(`repairmasterpro_bulk_tokens_${Date.now()}.csv`, csv);
 }
 
+/* =========================
+   Shop Manager (Server-side Pagination + Search + Delete)
+========================= */
+
+let _smAll = [];          // current page shops from server
+let _smPage = 1;          // 1-based
+let _smPages = 1;
+let _smTotal = 0;
+let _smSelectedShop = null; // {shopId, shopCode, shopName}
+let _smLastQuerySig = "";   // helps avoid redundant fetches
+
+function escJs(v) {
+  // escape for single-quoted inline onclick
+  return String(v == null ? "" : v)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+}
+
+function smSetMsg(kind, text) {
+  const box = $("smMsg");
+  if (!box) return;
+  box.classList.remove("hidden", "success", "error");
+  if (!text) {
+    box.classList.add("hidden");
+    box.textContent = "";
+    return;
+  }
+  if (kind) box.classList.add(kind);
+  box.textContent = text;
+}
+
+function smPageSize() {
+  const v = parseInt($("smPageSize")?.value || "25", 10);
+  return Math.max(5, Math.min(200, Number.isFinite(v) ? v : 25));
+}
+
+function smShowMode() {
+  return String($("smShow")?.value || "active");
+}
+
+function smQuery() {
+  return String($("smQ")?.value || "").trim();
+}
+
+function smSig(page) {
+  return `${page}|${smPageSize()}|${smShowMode()}|${smQuery().toLowerCase()}`;
+}
+
+function smRender() {
+  const tbody = $("smTbody");
+  const meta = $("smMeta");
+  const prev = $("btnSmPrev");
+  const next = $("btnSmNext");
+  if (!tbody || !meta) return;
+
+  const slice = Array.isArray(_smAll) ? _smAll : [];
+  tbody.innerHTML = slice.map((s) => {
+    const isDel = s?.isDeleted === true;
+    const status = isDel ? "DELETED" : (s?.isMerged === true ? "MERGED" : "ACTIVE");
+    const created = s?.createdAt ? fmtTs(s.createdAt) : "-";
+    const safeName = escHtml(s?.shopName || "(no name)");
+    const safeCode = escHtml(s?.shopCode || "");
+    const safeId = escHtml(s?.shopId || "");
+    const trClass = (_smSelectedShop && _smSelectedShop.shopId === s.shopId) ? "table-active" : "";
+    return `
+      <tr class="${trClass}" data-shopid="${safeId}">
+        <td><strong>${safeName}</strong></td>
+        <td class="mono">${safeCode}</td>
+        <td class="mono">${safeId}</td>
+        <td><span class="pill">${escHtml(status)}</span></td>
+        <td>${escHtml(created)}</td>
+        <td>
+          <button class="btn" onclick="smSelect('${escJs(s.shopId)}')">Select</button>
+          <button class="btn warn" onclick="smDeleteOne('${escJs(s.shopId)}','soft')">Soft</button>
+          <button class="btn danger" onclick="smDeleteOne('${escJs(s.shopId)}','hard')">Hard</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  meta.textContent = `Total ${_smTotal} • Page ${_smPage}/${_smPages} • Showing ${slice.length} shops`;
+
+  if (prev) prev.disabled = (_smPage <= 1);
+  if (next) next.disabled = (_smPage >= _smPages);
+}
+
+async function smFetch(page = 1, { force = false } = {}) {
+  smSetMsg("", "");
+  const btn = $("btnSmRefresh");
+  const prev = $("btnSmPrev");
+  const next = $("btnSmNext");
+
+  const sig = smSig(page);
+  if (!force && sig === _smLastQuerySig) return;
+
+  if (btn) btn.disabled = true;
+  if (prev) prev.disabled = true;
+  if (next) next.disabled = true;
+
+  try {
+    const limit = smPageSize();
+    const show = smShowMode();
+    const q = smQuery();
+
+    const qs = new URLSearchParams();
+    qs.set("page", String(Math.max(1, parseInt(page || 1, 10))));
+    qs.set("limit", String(limit));
+    qs.set("show", show);
+    if (q) qs.set("q", q);
+
+    const res = await api(`/api/dev/shops/list?${qs.toString()}`);
+
+    _smAll = Array.isArray(res.shops) ? res.shops : [];
+    _smPage = Number(res.page || 1) || 1;
+    _smPages = Number(res.pages || 1) || 1;
+    _smTotal = Number(res.total || 0) || 0;
+
+    _smLastQuerySig = sig;
+
+    // if selected shop is not on this page, keep selection but don't highlight
+    smRender();
+
+    const msg = `Loaded ${_smAll.length} shops (page ${_smPage}/${_smPages}).`;
+    smSetMsg("success", msg);
+  } catch (e) {
+    smSetMsg("error", e?.message || "Failed to load shops");
+  } finally {
+    if (btn) btn.disabled = false;
+    smRender();
+  }
+}
+
+async function smRefresh() {
+  _smPage = 1;
+  return smFetch(1, { force: true });
+}
+
+function smSelect(shopId) {
+  const s = (_smAll || []).find(x => String(x.shopId) === String(shopId));
+  if (!s) return;
+  _smSelectedShop = { shopId: s.shopId, shopCode: s.shopCode, shopName: s.shopName };
+  const box = $("smSelected");
+  if (box) box.value = `${s.shopName || ""} • ${s.shopCode || ""} • ${s.shopId}`;
+  smRender();
+}
+
+async function smDeleteSelected() {
+  if (!_smSelectedShop?.shopId) return toast("Select a shop first");
+  const mode = String($("smDeleteMode")?.value || "soft");
+  const reason = String($("smReason")?.value || "").trim();
+  return smDeleteOne(_smSelectedShop.shopId, mode, reason);
+}
+
+async function smDeleteOne(shopIdOrCode, mode = "soft", reason = "") {
+  const m = String(mode || "soft").toLowerCase();
+  const isHard = m === "hard";
+  const confirmMsg = isHard
+    ? `HARD DELETE will permanently remove this shop and ALL its data.\n\nType DELETE to confirm:`
+    : `Soft delete will hide the shop (keeps data).\n\nType DELETE to confirm:`;
+  const typed = prompt(confirmMsg);
+  if (String(typed || "").trim().toUpperCase() !== "DELETE") return;
+
+  try {
+    smSetMsg("", "");
+    await api("/api/dev/shops/delete", {
+      method: "POST",
+      body: JSON.stringify({ shopIdOrCode, mode: m, reason: reason || "" }),
+    });
+    smSetMsg("success", `Deleted shop (${m}). Refreshing...`);
+    // refresh current page (server may shrink pages after delete)
+    await smFetch(_smPage, { force: true });
+  } catch (e) {
+    smSetMsg("error", e?.message || "Delete failed");
+  }
+}
+
+// Debounce search to reduce server load
+let _smDebT = null;
+function smDebouncedFetch() {
+  clearTimeout(_smDebT);
+  _smDebT = setTimeout(() => smFetch(1, { force: true }), 250);
+}
 window.addEventListener("load", () => {
   const b1 = $("btnBulkGenerate"); if (b1) b1.onclick = bulkGenerateSpng;
   const b2 = $("btnBulkCsv"); if (b2) b2.onclick = bulkCsvSpng;
   const b3 = $("btnBulkRmpGenerate"); if (b3) b3.onclick = bulkGenerateRmp;
   const b4 = $("btnBulkRmpCsv"); if (b4) b4.onclick = bulkCsvRmp;
+
+  // Shop Manager
+  const smRef = $("btnSmRefresh"); if (smRef) smRef.onclick = () => smRefresh();
+  const smPrev = $("btnSmPrev"); if (smPrev) smPrev.onclick = () => { if (_smPage > 1) smFetch(_smPage - 1, { force: true }); };
+  const smNext = $("btnSmNext"); if (smNext) smNext.onclick = () => { if (_smPage < _smPages) smFetch(_smPage + 1, { force: true }); };
+  const smQ = $("smQ"); if (smQ) smQ.oninput = () => smDebouncedFetch();
+  const smShow = $("smShow"); if (smShow) smShow.onchange = () => smFetch(1, { force: true });
+  const smSz = $("smPageSize"); if (smSz) smSz.onchange = () => smFetch(1, { force: true });
+  const smDel = $("btnSmDelete"); if (smDel) smDel.onclick = smDeleteSelected;
+
+  // Load shops once key is present (or after user saves)
+  if (getKey()) smRefresh();
 });
