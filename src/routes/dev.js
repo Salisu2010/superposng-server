@@ -616,6 +616,97 @@ r.get("/shops/list", requireDevKey, (req, res) => {
   }));
   return res.json({ ok: true, shops });
 });
+// Delete Shop (Dev Portal)
+// POST /api/dev/shops/delete  body: { shopIdOrCode, mode: "SOFT"|"HARD" }
+// - SOFT: marks shop as isDeleted=true (keeps history)
+// - HARD: removes shop and all related data from db.json (irreversible)
+r.post("/shops/delete", requireDevKey, (req, res) => {
+  const key = trim(req.body?.shopIdOrCode || req.body?.shopId || req.body?.shopCode);
+  const mode = trim(req.body?.mode || "SOFT").toUpperCase();
+  if (!key) return res.status(400).json({ ok: false, error: "shopIdOrCode required" });
+
+  const db = readDB();
+  if (!Array.isArray(db.shops)) db.shops = [];
+
+  // Find shop by id or code (case-insensitive)
+  const ukey = key.toUpperCase();
+  const shop = (db.shops || []).find(s => trim(s.shopId).toUpperCase() === ukey || trim(s.shopCode).toUpperCase() === ukey);
+  if (!shop) return res.status(404).json({ ok: false, error: "Shop not found" });
+
+  const shopId = trim(shop.shopId);
+  const snapshot = { shopId: shop.shopId, shopCode: shop.shopCode, shopName: shop.shopName };
+
+  if (mode !== "HARD") {
+    // Soft delete
+    shop.isDeleted = true;
+    shop.deletedAt = Date.now();
+    shop.deletedReason = trim(req.body?.reason || "");
+    writeDB(db);
+    return res.json({ ok: true, mode: "SOFT", shop: snapshot });
+  }
+
+  // Hard delete: remove shop + related rows
+  const beforeCounts = {};
+  const afterCounts = {};
+  const collections = [
+    "shops",
+    "devices",
+    "pairCodes",
+    "products",
+    "staffs",
+    "sales",
+    "debtors",
+    "debtorPayments",
+    "licenses",
+    "pendingActivations",
+    "owners",
+    "shopAliases",
+    "trials",
+    "rmpLicenses",
+    "rmpPendingActivations"
+  ];
+
+  // helper: remove items where any of these fields equals shopId
+  const shopFields = ["shopId", "shopID", "shop_id", "sid", "shop", "boundShopId"];
+  function keepItem(x) {
+    if (!x || typeof x !== "object") return true;
+    for (const f of shopFields) {
+      if (Object.prototype.hasOwnProperty.call(x, f) && trim(x[f]) === shopId) return false;
+    }
+    return true;
+  }
+
+  // shops list: remove by shopId
+  beforeCounts.shops = (db.shops || []).length;
+  db.shops = (db.shops || []).filter(s => trim(s.shopId) !== shopId);
+  afterCounts.shops = db.shops.length;
+
+  for (const k of collections) {
+    if (k === "shops") continue;
+    if (!Array.isArray(db[k])) continue;
+    beforeCounts[k] = db[k].length;
+
+    if (k === "owners") {
+      // owners store shops as array; just remove this shopId from their list
+      db.owners = db.owners.map(o => {
+        if (!o || typeof o !== "object") return o;
+        const arr = Array.isArray(o.shops) ? o.shops.map(trim) : [];
+        const next = arr.filter(id => id !== shopId);
+        return { ...o, shops: next };
+      });
+      afterCounts[k] = db.owners.length;
+      continue;
+    }
+
+    db[k] = db[k].filter(keepItem);
+    afterCounts[k] = db[k].length;
+  }
+
+  writeDB(db);
+  return res.json({ ok: true, mode: "HARD", shop: snapshot, beforeCounts, afterCounts });
+});
+
+
 
 
 

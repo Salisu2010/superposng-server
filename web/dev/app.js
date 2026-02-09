@@ -729,6 +729,10 @@ $("btnReset").addEventListener("click", () => doRevoke(true).catch((e) => toast(
 $("btnRevoke").addEventListener("click", () => doRevoke(false).catch((e) => toast(e.message)));
 $("btnExtend").addEventListener("click", () => doExtend().catch((e) => toast(e.message)));
 
+// Shop Manager actions
+if ($("btnSmRefresh")) $("btnSmRefresh").addEventListener("click", () => shopManagerRefresh().catch(()=>{}));
+if ($("btnSmDelete")) $("btnSmDelete").addEventListener("click", () => shopManagerDelete().catch(()=>{}));
+
 // Load token table on open
 refreshTokenTable(true).catch(() => {});
 
@@ -748,10 +752,12 @@ async function loadShopOptions() {
     const ownSel = $("ownShops");
     const fromSel = $("mergeFromShop");
     const toSel = $("mergeToShop");
+    const smSel = $("smShopSelect");
 
     if (ownSel) ownSel.innerHTML = "";
     if (fromSel) fromSel.innerHTML = "";
     if (toSel) toSel.innerHTML = "";
+    if (smSel) smSel.innerHTML = "";
 
     shops.forEach(sh => {
       const label = `${sh.shopName || "Shop"} (${sh.shopCode || sh.shopId})`;
@@ -779,6 +785,95 @@ async function loadShopOptions() {
     });
   } catch (e) {
     // ignore until dev key saved
+  }
+}
+
+
+
+// ------------------------------
+// Shop Manager (Delete Shop)
+// ------------------------------
+function renderShopManagerTable(shops){
+  const wrap = $("smTable");
+  if(!wrap) return;
+  const list = Array.isArray(shops) ? shops : [];
+  if(!list.length){
+    wrap.innerHTML = '<div class="hint">No shops found.</div>';
+    return;
+  }
+  const rows = list.map(sh => {
+    const sid = esc(sh.shopId);
+    const name = esc(sh.shopName || "Shop");
+    const code = esc(sh.shopCode || "");
+    const deleted = (sh.isDeleted === true) ? '<span class="pill danger">DELETED</span>' : '';
+    return `<div class="result-row" style="align-items:center;gap:10px">
+      <div style="flex:1">
+        <div style="font-weight:800">${name} ${deleted}</div>
+        <div class="hint">ShopCode: <b>${code || "-"}</b> • ShopId: <b>${sid}</b></div>
+      </div>
+      <button class="btn btn2" data-sm-select="${sid}">Select</button>
+    </div>`;
+  }).join("");
+  wrap.innerHTML = `<div class="results">${rows}</div>`;
+  wrap.querySelectorAll("[data-sm-select]").forEach(btn=>{
+    btn.addEventListener("click",(ev)=>{
+      ev.preventDefault();
+      const id = btn.getAttribute("data-sm-select");
+      const sel = $("smShopSelect");
+      if(sel && id){
+        sel.value = id;
+        toast("Selected shop " + id);
+      }
+    });
+  });
+}
+
+async function shopManagerRefresh(){
+  const msg = $("smMsg");
+  if(msg) msg.textContent = "Loading...";
+  try{
+    const data = await api("/api/dev/shops/list");
+    const shops = data.shops || [];
+    renderShopManagerTable(shops);
+    if(msg) msg.textContent = `Loaded ${shops.length} shop(s)`;
+  }catch(e){
+    if(msg) msg.textContent = "";
+    toast(e.message || String(e));
+  }
+}
+
+async function shopManagerDelete(){
+  const sel = $("smShopSelect");
+  const modeSel = $("smMode");
+  const msg = $("smMsg");
+  const shopId = (sel?.value || "").trim();
+  const mode = (modeSel?.value || "SOFT").trim().toUpperCase();
+
+  if(!shopId){ return toast("Select a shop first"); }
+
+  const shopLabel = sel?.selectedOptions?.[0]?.textContent || shopId;
+
+  if(mode === "HARD"){
+    const ok = confirm(`HARD DELETE will permanently remove ${shopLabel} and related data. This cannot be undone. Continue?`);
+    if(!ok) return;
+  } else {
+    const ok = confirm(`Soft delete will hide ${shopLabel} (keeps data). Continue?`);
+    if(!ok) return;
+  }
+
+  if(msg) msg.textContent = "Deleting...";
+  try{
+    const data = await api("/api/dev/shops/delete", {
+      method: "POST",
+      body: JSON.stringify({ shopIdOrCode: shopId, mode })
+    });
+    if(!data.ok) throw new Error(data.error || "Delete failed");
+    toast(`Shop deleted (${data.mode})`);
+    await shopManagerRefresh();
+    if(msg) msg.textContent = `Deleted (${data.mode})`;
+  }catch(e){
+    if(msg) msg.textContent = "";
+    toast(e.message || String(e));
   }
 }
 

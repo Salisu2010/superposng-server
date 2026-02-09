@@ -267,7 +267,40 @@
     </section>
 
     
+    
     <section class="card">
+      <h2>Shop Manager</h2>
+      <p class="hint">Manage shops safely. <b>Soft delete</b> will hide the shop (keeps data). <b>Hard delete</b> will permanently remove the shop and related data.</p>
+
+      <div class="grid2">
+        <div>
+          <label>Select Shop</label>
+          <select id="smShopSelect"></select>
+          <div class="hint small">Tip: Click <b>Refresh</b> to reload shops.</div>
+        </div>
+
+        <div>
+          <label>Delete Mode</label>
+          <select id="smMode">
+            <option value="SOFT" selected>SOFT (Recommended)</option>
+            <option value="HARD">HARD (Permanent)</option>
+          </select>
+          <div class="hint small">HARD delete cannot be undone.</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btnSmRefresh" class="btn">Refresh Shops</button>
+        <button id="btnSmDelete" class="btn danger">Delete Shop</button>
+        <span id="smMsg" class="hint" style="margin-left:auto;"></span>
+      </div>
+
+      <div style="height:10px"></div>
+      <div id="smTable" class="results"></div>
+    </section>
+
+
+<section class="card">
       <h2>Merge Shops</h2>
       <p class="hint">
         Use this when a user mistakenly created a new shop or changed phone/device.
