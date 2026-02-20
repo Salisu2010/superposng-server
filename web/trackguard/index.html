@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TrackGuard Dashboard</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">TG</div>
+      <div>
+        <div class="title">TrackGuard Dashboard</div>
+        <div class="sub" id="statusText">Ready</div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <input id="serverUrl" class="in" placeholder="Server URL e.g. http://10.158.203.47:3000" />
+      <input id="adminKey" class="in" placeholder="Admin Key" />
+      <button id="btnSaveServer" class="btn">Save</button>
+      <button id="btnGeneratePair" class="btn btn2">Generate Pair Code</button>
+      <button id="btnNotif" class="btn btn3">Notifications: OFF</button>
+      <button id="btnBeep" class="btn btn3">Beep: ON</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid">
+      <div class="card">
+        <div class="card-h">
+          <div class="h-title">Pairing</div>
+          <div class="h-meta">Generate pair code, then enter it on the device</div>
+        </div>
+        <div class="pair">
+          <div class="paircode" id="pairCode">----</div>
+          <div class="pairhelp">Code expires in 5 minutes</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="h-title">Devices <span class="pill" id="devCount">0</span></div>
+          <div class="h-meta" id="status">Ready</div>
+        </div>
+
+        <div class="row">
+          <select id="deviceSelect" class="in">
+            <option value="">Select device...</option>
+          </select>
+
+          <button id="btnOpenDrawer" class="btn btn2">Device Details</button>
+        </div>
+
+        <div class="cmds">
+          <button id="btnLocate" class="btn">Locate Now</button>
+          <button id="btnAlarm" class="btn btnBad">Ring Alarm</button>
+          <button id="btnEmerOn" class="btn btnWarn">Emergency ON</button>
+          <button id="btnEmerOff" class="btn btn2">Emergency OFF</button>
+        </div>
+
+        <div id="devices" class="devlist"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="h-title">Live Map</div>
+          <div class="h-meta" id="mapMeta">No device selected</div>
+        </div>
+        <div id="map" class="map"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="h-title">Intruder</div>
+          <div class="h-meta">Latest intruder photo + history</div>
+        </div>
+
+        <div class="intruder">
+          <div class="intruderPreview">
+            <img id="intruderImg" alt="intruder" style="display:none;" />
+            <div id="intruderMeta" class="muted">No intruder photo yet.</div>
+          </div>
+
+          <div class="intruderActions">
+            <button id="btnIntruderReload" class="btn">Reload History</button>
+            <button id="btnOpenIntruder" class="btn btn2">Open Photo</button>
+            <button id="btnClearIntruderView" class="btn btn3">Clear View</button>
+          </div>
+
+          <div id="intruderList" class="intruderList"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="h-title">Commands History</div>
+          <div class="h-meta" id="cmdMeta">Select a device to view history</div>
+        </div>
+
+        <div class="row">
+          <select id="cmdFilter" class="in">
+            <option value="ALL">All</option>
+            <option value="queued">queued</option>
+            <option value="sent">sent</option>
+            <option value="done">done</option>
+            <option value="failed">failed</option>
+          </select>
+          <button id="btnCmdReload" class="btn btn2">Reload</button>
+          <button id="btnCmdClear" class="btn btn3">Clear UI</button>
+        </div>
+
+        <div id="cmdHistory" class="cmdHistory"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="h-title">Logs</div>
+          <div class="h-meta">Last 140 lines</div>
+        </div>
+        <div id="logs" class="logs"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drawer -->
+  <div id="drawerMask" class="mask" style="display:none;"></div>
+  <div id="drawer" class="drawer" style="display:none;">
+    <div class="drawerHead">
+      <div>
+        <div class="drawerTitle" id="drawerTitle">Device Details</div>
+        <div class="drawerSub" id="drawerSub">-</div>
+      </div>
+      <div class="drawerBtns">
+        <button id="btnDrawerClose" class="btn btn3">Close</button>
+      </div>
+    </div>
+
+    <div class="drawerBody">
+      <div class="kv" id="drawerKv"></div>
+
+      <div class="divider"></div>
+
+      <div class="drawerRow">
+        <button id="btnDrawerLocate" class="btn">Locate Now</button>
+        <button id="btnDrawerAlarm" class="btn btnBad">Ring Alarm</button>
+      </div>
+      <div class="drawerRow">
+        <button id="btnDrawerEmerOn" class="btn btnWarn">Emergency ON</button>
+        <button id="btnDrawerEmerOff" class="btn btn2">Emergency OFF</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="muted small">
+        Tip: Idan har yanzu battery/network ba su bayyana ba, sai mu kara “status push” daga app (zan baka class din Java).
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="./main.js"></script>
+</body>
+</html>

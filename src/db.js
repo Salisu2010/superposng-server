@@ -26,7 +26,16 @@ function initDB() {
       shopAliases: [],
 
       // Trial (server-backed) for SPNG + RMP
-      trials: []
+      trials: [],
+
+      // TrackGuard Registry (Lite + Enterprise)
+      tgOrgs: [],
+      tgDevices: [],
+      tgEnrollTokens: [],
+      tgCommands: [],
+      tgLocations: [],
+      tgHeartbeats: [],
+      tgPairCodes: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -111,7 +120,16 @@ function readDB() {
       shopAliases: [],
 
       // Trial (server-backed) for SPNG + RMP
-      trials: []
+      trials: [],
+
+      // TrackGuard Registry (Lite + Enterprise)
+      tgOrgs: [],
+      tgDevices: [],
+      tgEnrollTokens: [],
+      tgCommands: [],
+      tgLocations: [],
+      tgHeartbeats: [],
+      tgPairCodes: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData

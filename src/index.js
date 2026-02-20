@@ -16,6 +16,7 @@ import licenseRoutes from "./routes/license.js";
 import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
 import trialRoutes from "./routes/trial.js";
+import trackguardRoutes from "./routes/trackguard.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -61,6 +62,9 @@ app.get("/", (_req, res) => {
 
 // Local Hub Web Dashboard (no auth; intended for LAN use)
 app.use("/dashboard", express.static(path.join(WEB_DIR, "dashboard")));
+// TrackGuard Admin Dashboard (integrated)
+app.use("/dashboard/trackguard", express.static(path.join(WEB_DIR, "trackguard")));
+
 // Developer Portal UI
 app.use("/dev", express.static(path.join(WEB_DIR, "dev")));
 // Owner Cloud Dashboard UI
@@ -80,6 +84,7 @@ function sendIndex(res, dirName) {
 app.get("/dev", (_req, res) => sendIndex(res, "dev"));
 app.get("/dashboard", (_req, res) => sendIndex(res, "dashboard"));
 app.get("/owner", (_req, res) => sendIndex(res, "owner"));
+app.get("/dashboard/trackguard", (_req, res) => sendIndex(res, "trackguard"));
 app.use("/api/dashboard", dashboardRoutes);
 
 // Developer-only APIs
@@ -92,6 +97,9 @@ app.use("/api/license", licenseRoutes);
 
 // Server-backed Trial (SPNG + RMP)
 app.use("/api/trial", trialRoutes);
+
+// TrackGuard (Lite + Enterprise) Registry + Dashboard APIs
+app.use("/api/trackguard", trackguardRoutes);
 
 // RepairMasterPro Online Licensing (RMP)
 app.use("/api/rmp", rmpRoutes);
