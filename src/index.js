@@ -42,9 +42,9 @@ app.use(helmet({
       "script-src-elem": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
       "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
       "style-src-elem": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-      "img-src": ["'self'", "data:"],
-      "font-src": ["'self'", "data:"],
-      "connect-src": ["'self'"],
+      "img-src": ["'self'", "data:", "blob:", "https:"],
+      "font-src": ["'self'", "data:", "https:"],
+      "connect-src": ["'self'", "https:"],
       "object-src": ["'none'"],
       "base-uri": ["'self'"],
       "frame-ancestors": ["'self'"]

@@ -20,6 +20,7 @@ function ensureCollections(db){
   if (!Array.isArray(db.tgCommands)) db.tgCommands = [];
   if (!Array.isArray(db.tgLocations)) db.tgLocations = [];
   if (!Array.isArray(db.tgHeartbeats)) db.tgHeartbeats = [];
+  if (!Array.isArray(db.tgIntruders)) db.tgIntruders = [];
 }
 
 function upsertDevice(db, patch){
@@ -65,6 +66,23 @@ function requireAdminJWT(req, res, next){
     if (!isAdminOrOwner(req)) return res.status(403).json({ ok:false, error:"forbidden" });
     next();
   });
+}
+
+// Dashboard-friendly admin auth:
+// - Accept ?key=API_KEY (or header x-api-key) so TrackGuard dashboard can work even in Incognito
+//   without relying on SuperPOS owner portal JWT in localStorage.
+function requireAdminAccess(req, res, next){
+  const apiKey = trim(process.env.API_KEY || "");
+  const keyQ = trim(req.query?.key || "");
+  const keyH = trim(req.headers["x-api-key"] || req.headers["X-API-Key"] || "");
+  const key = keyQ || keyH;
+
+  if (apiKey && key && key === apiKey) {
+    // Minimal auth object for audit/debug
+    req.auth = { role: "admin", sub: "API_KEY" };
+    return next();
+  }
+  return requireAdminJWT(req, res, next);
 }
 
 // ------------------- Device auth (x-device-key) -------------------
@@ -246,7 +264,7 @@ r.post("/command/result", (req,res)=>{
 
 // ------------------- Admin endpoints -------------------
 
-r.post("/org", requireAdminJWT, (req,res)=>{
+r.post("/org", requireAdminAccess, (req,res)=>{
   const name = trim(req.body?.name);
   const orgCode = trim(req.body?.orgCode) || ("ORG-" + code6());
   if (!name) return res.status(400).json({ ok:false, error:"missing_name" });
@@ -262,7 +280,7 @@ r.post("/org", requireAdminJWT, (req,res)=>{
   return res.json({ ok:true, org: row });
 });
 
-r.post("/enroll/token", requireAdminJWT, (req,res)=>{
+r.post("/enroll/token", requireAdminAccess, (req,res)=>{
   const orgCode = trim(req.body?.orgCode);
   if (!orgCode) return res.status(400).json({ ok:false, error:"missing_orgCode" });
 
@@ -279,18 +297,18 @@ r.post("/enroll/token", requireAdminJWT, (req,res)=>{
   return res.json({ ok:true, token, expAt });
 });
 
-r.get("/org/:orgCode/devices", requireAdminJWT, (req,res)=>{
+r.get("/org/:orgCode/devices", requireAdminAccess, (req,res)=>{
   const orgCode = trim(req.params.orgCode);
   const db = readDB(); ensureCollections(db);
   return res.json({ ok:true, devices: safeListDevices(db, orgCode) });
 });
 
-r.get("/devices", requireAdminJWT, (req,res)=>{
+r.get("/devices", requireAdminAccess, (req,res)=>{
   const db = readDB(); ensureCollections(db);
   return res.json({ ok:true, devices: safeListDevices(db, "") });
 });
 
-r.post("/pair/generate", requireAdminJWT, (req,res)=>{
+r.post("/pair/generate", requireAdminAccess, (req,res)=>{
   const db = readDB(); ensureCollections(db);
   const pairCode = code6();
   const expAt = now() + 10*60*1000; // 10 minutes
@@ -302,7 +320,7 @@ r.post("/pair/generate", requireAdminJWT, (req,res)=>{
   return res.json({ ok:true, pairCode, expAt });
 });
 
-r.post("/command/send", requireAdminJWT, (req,res)=>{
+r.post("/command/send", requireAdminAccess, (req,res)=>{
   const deviceId = trim(req.body?.deviceId);
   const type = trim(req.body?.type).toUpperCase();
   const payload = req.body?.payload ?? {};
@@ -318,6 +336,73 @@ r.post("/command/send", requireAdminJWT, (req,res)=>{
 
   publish("command_queued", { deviceId, commandId: cmd.id, type });
   return res.json({ ok:true, commandId: cmd.id });
+});
+
+
+// ------------------- Admin read helpers (for Dashboard) -------------------
+function getDeviceOrNull(db, deviceId){
+  const id = trim(deviceId);
+  if (!id) return null;
+  return db.tgDevices.find(x => trim(x.deviceId) === id) || null;
+}
+
+// Location trail (admin) - used by dashboard map
+function handleLocationTrail(req, res){
+  const db = readDB(); ensureCollections(db);
+  const deviceId = trim(req.query?.deviceId || "");
+  const limit = Math.max(1, Math.min(1000, parseInt(req.query?.limit || "200", 10) || 200));
+  const list = db.tgLocations
+    .filter(x => !deviceId || trim(x.deviceId) === deviceId)
+    .sort((a,b)=> (b.ts||0)-(a.ts||0))
+    .slice(0, limit);
+  return res.json({ ok:true, items:list });
+}
+r.get("/location/trail", requireAdminAccess, handleLocationTrail);
+// Backward-compat: dashboard older build calls /api/location/trail
+r.get("/api/location/trail", requireAdminAccess, handleLocationTrail);
+
+// Commands list (admin) - dashboard reads queued/recent commands
+function handleCommandsList(req, res){
+  const db = readDB(); ensureCollections(db);
+  const deviceId = trim(req.query?.deviceId || "");
+  const limit = Math.max(1, Math.min(2000, parseInt(req.query?.limit || "200", 10) || 200));
+  const list = db.tgCommands
+    .filter(x => !deviceId || trim(x.deviceId) === deviceId)
+    .sort((a,b)=> (b.ts||0)-(a.ts||0))
+    .slice(0, limit);
+  return res.json({ ok:true, items:list });
+}
+r.get("/commands", requireAdminAccess, handleCommandsList);
+r.get("/api/commands", requireAdminAccess, handleCommandsList);
+
+// Intruder list (admin) - optional; returns empty if none
+function handleIntruderList(req, res){
+  const db = readDB(); ensureCollections(db);
+  const deviceId = trim(req.query?.deviceId || "");
+  const limit = Math.max(1, Math.min(200, parseInt(req.query?.limit || "50", 10) || 50));
+  const list = db.tgIntruders
+    .filter(x => !deviceId || trim(x.deviceId) === deviceId)
+    .sort((a,b)=> (b.ts||0)-(a.ts||0))
+    .slice(0, limit);
+  return res.json({ ok:true, items:list });
+}
+r.get("/intruder/list", requireAdminAccess, handleIntruderList);
+r.get("/api/intruder/list", requireAdminAccess, handleIntruderList);
+
+// Device can push intruder snapshot/event (optional)
+r.post("/intruder/push", requireDeviceKey, (req, res) => {
+  const db = req.tgDB; ensureCollections(db);
+  const deviceId = trim(req.body?.deviceId || "");
+  const kind = trim(req.body?.kind || "SNAP");
+  const image = trim(req.body?.image || ""); // base64 data URL recommended
+  const note = trim(req.body?.note || "");
+  const item = { id:newId(), deviceId, kind, image, note, ts: now() };
+  db.tgIntruders.push(item);
+  // keep last 2000
+  if (db.tgIntruders.length > 2000) db.tgIntruders = db.tgIntruders.slice(db.tgIntruders.length-2000);
+  writeDB(db);
+  publish("intruder", { deviceId, id:item.id, kind });
+  return res.json({ ok:true, id:item.id });
 });
 
 export default r;

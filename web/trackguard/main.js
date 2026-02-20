@@ -73,9 +73,25 @@ function currentServer() {
 }
 
 function currentKey() {
-  // Use SuperPOSNG owner/admin JWT stored by the Owner portal
-  // Dashboard will work seamlessly without a separate admin key.
-  return (localStorage.getItem('spng_owner_token') || '').trim();
+  // Preferred: SuperPOSNG owner/admin JWT stored by the Owner portal.
+  const jwt = (localStorage.getItem('spng_owner_token') || '').trim();
+  if (jwt) return jwt;
+  // Fallback: Admin Key typed in dashboard (works great in Incognito)
+  return (state.adminKey || '').trim();
+}
+
+function looksLikeJwt(s) {
+  s = String(s || '').trim();
+  // Very light check: header.payload.signature
+  return s.split('.').length === 3;
+}
+
+function withKey(url, key) {
+  key = String(key || '').trim();
+  if (!key) return url;
+  const u = new URL(url, window.location.origin);
+  if (!u.searchParams.get('key')) u.searchParams.set('key', key);
+  return u.toString();
 }
 
 async function api(path, opt = {}) {
@@ -85,11 +101,17 @@ async function api(path, opt = {}) {
   const headers = Object.assign({}, opt.headers || {});
   headers["Content-Type"] = "application/json";
 
-  const token = currentKey();
-  if (token) headers["Authorization"] = "Bearer " + token;
+  const keyOrJwt = currentKey();
+  if (keyOrJwt && looksLikeJwt(keyOrJwt)) {
+    headers["Authorization"] = "Bearer " + keyOrJwt;
+  }
 
   // Namespace all calls under SuperPOS TrackGuard module
-  const url = srv + "/api/trackguard" + path;
+  let url = srv + "/api/trackguard" + path;
+  // If we're not using JWT, pass admin key through ?key=...
+  if (keyOrJwt && !looksLikeJwt(keyOrJwt)) {
+    url = withKey(url, keyOrJwt);
+  }
 
   const res = await fetch(url, {
     method: opt.method || "GET",
@@ -118,8 +140,15 @@ function initMap() {
 
 function setMarker(deviceId, loc) {
   if (!state.map || !window.L) return;
-  const latlng = [loc.lat, loc.lon];
-  const pop = `<b>${deviceId}</b><br>acc: ${Math.round(loc.acc || 0)}m<br>speed: ${Math.round((loc.speed || 0) * 10) / 10}<br>src: ${(loc.src || "")}<br>time: ${new Date(loc.time || Date.now()).toLocaleString()}`;
+  const lat = Number(loc.lat);
+  const lng = Number(loc.lng ?? loc.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  const latlng = [lat, lng];
+  const acc = Number(loc.acc ?? loc.accuracy ?? 0);
+  const spd = Number(loc.speed ?? 0);
+  const src = String(loc.src || loc.source || "");
+  const ts = Number(loc.time ?? loc.at ?? loc.ts ?? Date.now());
+  const pop = `<b>${deviceId}</b><br>acc: ${Math.round(acc)}m<br>speed: ${Math.round(spd * 10) / 10}<br>src: ${src}<br>time: ${new Date(ts).toLocaleString()}`;
 
   if (!state.markers.has(deviceId)) {
     const m = L.marker(latlng).addTo(state.map);
@@ -132,14 +161,14 @@ function setMarker(deviceId, loc) {
   }
 
   const meta = el("mapMeta");
-  if (meta) meta.textContent = `${deviceId} • ${Number(loc.lat).toFixed(6)}, ${Number(loc.lon).toFixed(6)} • acc ${Math.round(loc.acc || 0)}m • ${new Date(loc.time || Date.now()).toLocaleTimeString()}`;
+  if (meta) meta.textContent = `${deviceId} • ${lat.toFixed(6)}, ${lng.toFixed(6)} • acc ${Math.round(acc)}m • ${new Date(ts).toLocaleTimeString()}`;
 }
 
 async function drawTrail(deviceId) {
   try {
     if (!state.map || !window.L) return;
-    const r = await api(`/api/location/trail?deviceId=${encodeURIComponent(deviceId)}&limit=120`);
-    const pts = (r.trail || []).map(p => [p.lat, p.lon]).filter(x => Number.isFinite(x[0]) && Number.isFinite(x[1]));
+    const r = await api(`/location/trail?deviceId=${encodeURIComponent(deviceId)}&limit=120`);
+    const pts = (r.items || r.trail || []).map(p => [Number(p.lat), Number(p.lng ?? p.lon)]).filter(x => Number.isFinite(x[0]) && Number.isFinite(x[1]));
     if (pts.length < 2) return;
 
     if (state.polylines.has(deviceId)) {
@@ -283,7 +312,7 @@ async function loadIntruderList(deviceId) {
   }
 
   try {
-    const r = await api(`/api/intruder/list?deviceId=${encodeURIComponent(deviceId)}&limit=20`);
+    const r = await api(`/intruder/list?deviceId=${encodeURIComponent(deviceId)}&limit=20`);
     const items = r.items || [];
     if (!items.length) {
       box.innerHTML = `<div class="logline logmuted">No intruder photos yet</div>`;
@@ -389,7 +418,7 @@ async function loadCommandHistory(deviceId) {
   }
   if (meta) meta.textContent = `Loading commands for ${deviceId}...`;
   try {
-    const r = await api(`/api/commands?deviceId=${encodeURIComponent(deviceId)}`);
+    const r = await api(`/commands?deviceId=${encodeURIComponent(deviceId)}`);
     const cmds = r.commands || [];
     state.commandsCache = cmds;
     if (meta) meta.textContent = `${deviceId} • ${cmds.length} commands`;
@@ -600,7 +629,7 @@ async function refresh() {
       const d = devices.find(x => x.deviceId === state.selectedDeviceId) || null;
       if (d) {
         renderDrawerForDevice(d);
-        if (d.location && state.map && Number.isFinite(d.location.lat) && Number.isFinite(d.location.lon)) {
+        if (d.location && state.map) {
           setMarker(d.deviceId, d.location);
         }
       }

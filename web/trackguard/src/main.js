@@ -140,7 +140,7 @@ function setMarker(deviceId, loc) {
 async function drawTrail(deviceId) {
   try {
     if (!state.map || !window.L) return;
-    const r = await api(`/api/location/trail?deviceId=${encodeURIComponent(deviceId)}&limit=120`);
+    const r = await api(`/location/trail?deviceId=${encodeURIComponent(deviceId)}&limit=120`);
     const pts = (r.trail || []).map(p => [p.lat, p.lon]).filter(x => Number.isFinite(x[0]) && Number.isFinite(x[1]));
     if (pts.length < 2) return;
 
@@ -285,7 +285,7 @@ async function loadIntruderList(deviceId) {
   }
 
   try {
-    const r = await api(`/api/intruder/list?deviceId=${encodeURIComponent(deviceId)}&limit=20`);
+    const r = await api(`/intruder/list?deviceId=${encodeURIComponent(deviceId)}&limit=20`);
     const items = r.items || [];
     if (!items.length) {
       box.innerHTML = `<div class="logline logmuted">No intruder photos yet</div>`;
@@ -369,7 +369,7 @@ function renderCommandList(deviceId, commands) {
 
     row.querySelector("button").onclick = async () => {
       try {
-        await api("/api/command/send", { method: "POST", body: { deviceId, type: String(cmd.type || "LOCATE").toUpperCase() } });
+        await api("/command/send", { method: "POST", body: { deviceId, type: String(cmd.type || "LOCATE").toUpperCase() } });
         logLine(`Retry queued: ${cmd.type} → ${deviceId}`, "logok");
         beep();
         notify("Command queued", `${cmd.type} → ${deviceId}`, { silent: true });
@@ -391,7 +391,7 @@ async function loadCommandHistory(deviceId) {
   }
   if (meta) meta.textContent = `Loading commands for ${deviceId}...`;
   try {
-    const r = await api(`/api/commands?deviceId=${encodeURIComponent(deviceId)}`);
+    const r = await api(`/commands?deviceId=${encodeURIComponent(deviceId)}`);
     const cmds = r.commands || [];
     state.commandsCache = cmds;
     if (meta) meta.textContent = `${deviceId} • ${cmds.length} commands`;
@@ -565,7 +565,7 @@ async function sendCommand(type) {
   const deviceId = String(state.selectedDeviceId || (el("deviceSelect") ? el("deviceSelect").value : "") || "").trim();
   if (!deviceId) { logLine("Select device first", "logbad"); return; }
   try {
-    await api("/api/command/send", { method: "POST", body: { deviceId, type: String(type).toUpperCase() } });
+    await api("/command/send", { method: "POST", body: { deviceId, type: String(type).toUpperCase() } });
     logLine(`Command queued: ${type} → ${deviceId}`, "logok");
     beep();
     notify("Command queued", `${type} → ${deviceId}`, { silent: true });
@@ -577,7 +577,7 @@ async function sendCommand(type) {
 
 async function generatePair() {
   try {
-    const r = await api("/api/pair/generate", { method: "POST", body: {} });
+    const r = await api("/pair/generate", { method: "POST", body: {} });
     const code = r.code || (r.payload && r.payload.code) || "";
     if (el("pairCode")) el("pairCode").textContent = code || "----";
     logLine("Pair code generated: " + (code || "-"), "logok");
@@ -591,7 +591,7 @@ async function generatePair() {
 async function refresh() {
   try {
     setStatus("Loading...");
-    const r = await api("/api/devices");
+    const r = await api("/devices");
     const devices = r.devices || [];
     state.devicesCache = devices;
 
