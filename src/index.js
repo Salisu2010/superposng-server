@@ -5,6 +5,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import fs from "fs";
+import jwt from "jsonwebtoken";
+import { publish, getSince, sseHeaders, sendSse } from "./tg_events.js";
 
 import { authMiddleware } from "./middleware/auth.js";
 import shopRoutes from "./routes/shop.js";
@@ -35,9 +37,11 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      "script-src": ["'self'", "https://cdn.jsdelivr.net"],
-      "script-src-elem": ["'self'", "https://cdn.jsdelivr.net"],
-      "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      // Allow CDN assets used by TrackGuard dashboard (Leaflet, icons)
+      "script-src": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+      "script-src-elem": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+      "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
+      "style-src-elem": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
       "img-src": ["'self'", "data:"],
       "font-src": ["'self'", "data:"],
       "connect-src": ["'self'"],
@@ -59,6 +63,9 @@ app.get("/", (_req, res) => {
     time: new Date().toISOString()
   });
 });
+
+// Avoid noisy 404s in browser console
+app.get("/favicon.ico", (_req, res) => res.status(204).end());
 
 // Local Hub Web Dashboard (no auth; intended for LAN use)
 app.use("/dashboard", express.static(path.join(WEB_DIR, "dashboard")));
@@ -107,6 +114,92 @@ app.use("/api/rmp", rmpRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/pair", pairRoutes);
 app.use("/api/sync", authMiddleware, syncRoutes);
+
+/**
+ * TrackGuard Realtime Events (SSE)
+ * Dashboard connects here for live online/offline + actions.
+ * Auth: either ?key=API_KEY or Bearer JWT (Owner/Admin).
+ */
+app.get("/api/events", (req, res) => {
+  const apiKey = String(process.env.API_KEY || "").trim();
+  const key = String(req.query?.key || "").trim();
+  const authH = String(req.headers.authorization || "");
+  const bearer = authH.startsWith("Bearer ") ? authH.substring(7) : "";
+
+  let ok = false;
+  if (apiKey && key && key === apiKey) ok = true;
+
+  // Note: EventSource can't set Authorization headers easily, so we also accept
+  // a JWT passed via ?key=... (dashboard currently does this).
+  const jwtCandidate = bearer || key;
+
+  if (!ok && jwtCandidate) {
+    try {
+      const secret = process.env.JWT_SECRET || "dev_secret_change_me";
+      const decoded = jwt.verify(jwtCandidate, secret);
+      const role = String(decoded?.role || "").toLowerCase();
+      if (role === "admin" || role === "owner") ok = true;
+    } catch {}
+  }
+
+  if (!ok) return res.status(401).json({ ok:false, error:"unauthorized" });
+
+  sseHeaders(res);
+  sendSse(res, "hello", { ok:true, at: Date.now() });
+
+  let lastId = Number(req.query?.lastId || 0) || 0;
+
+  // Send missed events immediately
+  const missed = getSince(lastId);
+  for (const e of missed) {
+    sendSse(res, e.type, e);
+    lastId = Math.max(lastId, e.id);
+  }
+
+  const ping = setInterval(() => {
+    sendSse(res, "ping", { t: Date.now() });
+  }, 15000);
+
+  const pump = setInterval(() => {
+    const batch = getSince(lastId);
+    for (const e of batch) {
+      sendSse(res, e.type, e);
+      lastId = Math.max(lastId, e.id);
+    }
+  }, 1200);
+
+  req.on("close", () => {
+    try { clearInterval(ping); } catch {}
+    try { clearInterval(pump); } catch {}
+  });
+});
+
+/**
+ * TrackGuard online/offline reconciliation.
+ * Marks device offline if no heartbeat within OFFLINE_MS and emits "status" events.
+ */
+const OFFLINE_MS = parseInt(process.env.TG_OFFLINE_MS || "45000", 10);
+setInterval(() => {
+  try{
+    const db = readDB();
+    if (!db || !Array.isArray(db.tgDevices)) return;
+
+    const nowTs = Date.now();
+    let changed = false;
+
+    for (const d of db.tgDevices) {
+      const lastSeen = Number(d.lastSeen || 0) || 0;
+      const onlineNow = lastSeen > 0 && (nowTs - lastSeen) <= OFFLINE_MS;
+      const prev = !!d.online;
+      if (onlineNow !== prev) {
+        d.online = onlineNow;
+        changed = true;
+        publish("status", { deviceId: d.deviceId, online: onlineNow, lastSeen });
+      }
+    }
+    if (changed) writeDB(db);
+  } catch {}
+}, 5000);
 
 const PORT = parseInt(process.env.PORT || "8080", 10);
 app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`));

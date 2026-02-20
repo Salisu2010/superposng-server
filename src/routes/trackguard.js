@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { readDB, writeDB } from "../db.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { publish } from "../tg_events.js";
 
 const r = Router();
 
@@ -134,6 +135,8 @@ r.post("/device/register", requireAdmin, (req,res)=>{
   db.tgHeartbeats.push({ id:newId(), deviceId, orgCode, at: now(), type:"register" });
   writeDB(db);
 
+  publish("heartbeat", { deviceId, orgCode, lastSeen: d.lastSeen, online: true, mode: d.mode || "" });
+
   return res.json({ ok:true, deviceId, orgCode, deviceKey });
 });
 
@@ -180,6 +183,7 @@ r.post("/pair/generate", requireAdmin, (req,res)=>{
   // trim
   db.tgPairCodes = db.tgPairCodes.filter(x => (x.expAt||0) > now());
   writeDB(db);
+  publish("pair_code", { code: pairCode, expiresAt: expAt });
   return res.json({ ok:true, pairCode, expAt });
 });
 
@@ -208,6 +212,7 @@ r.post("/command/send", requireAdmin, (req,res)=>{
   db.tgCommands.push(cmd);
   if (db.tgCommands.length > 2000) db.tgCommands.splice(0, db.tgCommands.length-2000);
   writeDB(db);
+  publish("command_queued", { deviceId, commandId: cmd.id, type });
   return res.json({ ok:true, commandId: cmd.id, deviceId, type });
 });
 
