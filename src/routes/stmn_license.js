@@ -186,4 +186,110 @@ r.post("/check", (req, res) => {
   return res.json({ ok: true, message: "OK", plan: pv.plan, expiryYmd: parseInt(pv.expiryYmd, 10) || 0, daysLeft, token: pv.token });
 });
 
+
+// POST /api/stmn/license/auto-activate
+// body: { app:"STMN", androidId, fpHash?, installId? }
+// Returns assigned token for this device if already activated via dev portal.
+r.post("/auto-activate", (req, res) => {
+  const db = readDB();
+  db.stmnLicenses = Array.isArray(db.stmnLicenses) ? db.stmnLicenses : [];
+
+  const androidId = trim(req.body?.androidId || req.body?.deviceId);
+  const fpHash = trim(req.body?.fpHash);
+  if (!androidId) return res.status(400).json({ ok: false, assigned: false, message: "androidId required" });
+
+  // Find ACTIVE, bound licenses for this androidId
+  const active = db.stmnLicenses.filter(x =>
+    trim(x.boundDeviceId) === androidId &&
+    String(x.status || "").toUpperCase() === "ACTIVE" &&
+    String(x.token || "").trim().length > 0
+  );
+
+  if (!active.length) {
+    return res.json({ ok: true, assigned: false });
+  }
+
+  // Prefer most recently seen/activated
+  active.sort((a,b) => (Number(b.lastSeenAt||b.activatedAt||0) - Number(a.lastSeenAt||a.activatedAt||0)));
+
+  // If the top is STMN2, ensure fpHash matches (if stored fpHash exists)
+  let lic = active[0];
+  if (String(lic.tokenVersion || "STMN1").toUpperCase() === "STMN2") {
+    if (!fpHash) return res.status(400).json({ ok: false, assigned: false, message: "fpHash required" });
+    const storedFp = trim(lic.fpHash);
+    if (storedFp && storedFp !== fpHash) {
+      return res.status(403).json({ ok: false, assigned: false, message: "Device mismatch" });
+    }
+    // update stored fpHash if missing
+    if (!storedFp) lic.fpHash = fpHash;
+  }
+
+  // Expiry check
+  const expYmd = String(lic.expiryYmd || "");
+  const daysLeft = daysLeftFromYmd(expYmd);
+  lic.lastSeenAt = now();
+  writeDB(db);
+
+  if (daysLeft <= 0) {
+    return res.status(403).json({
+      ok: false,
+      assigned: true,
+      message: "Token expired",
+      token: trim(lic.token),
+      plan: String(lic.plan || "").toUpperCase() || "MONTHLY",
+      expiryYmd: parseInt(expYmd || "0", 10) || 0,
+      daysLeft: 0
+    });
+  }
+
+  return res.json({
+    ok: true,
+    assigned: true,
+    token: trim(lic.token),
+    plan: String(lic.plan || "").toUpperCase() || "MONTHLY",
+    expiryYmd: parseInt(expYmd || "0", 10) || 0,
+    daysLeft
+  });
+});
+
+// GET /api/stmn/license/assigned?androidId=...&fpHash=...
+// legacy fallback for older app versions
+r.get("/assigned", (req, res) => {
+  const db = readDB();
+  db.stmnLicenses = Array.isArray(db.stmnLicenses) ? db.stmnLicenses : [];
+
+  const androidId = trim(req.query?.androidId || req.query?.deviceId);
+  const fpHash = trim(req.query?.fpHash);
+  if (!androidId) return res.status(400).json({ ok: false, assigned: false, message: "androidId required" });
+
+  const active = db.stmnLicenses.filter(x =>
+    trim(x.boundDeviceId) === androidId &&
+    String(x.status || "").toUpperCase() === "ACTIVE" &&
+    String(x.token || "").trim().length > 0
+  );
+
+  if (!active.length) return res.json({ ok: true, assigned: false });
+
+  active.sort((a,b) => (Number(b.lastSeenAt||b.activatedAt||0) - Number(a.lastSeenAt||a.activatedAt||0)));
+  let lic = active[0];
+
+  if (String(lic.tokenVersion || "STMN1").toUpperCase() === "STMN2") {
+    if (!fpHash) return res.status(400).json({ ok: false, assigned: false, message: "fpHash required" });
+    const storedFp = trim(lic.fpHash);
+    if (storedFp && storedFp !== fpHash) return res.status(403).json({ ok:false, assigned:false, message:"Device mismatch" });
+    if (!storedFp) lic.fpHash = fpHash;
+  }
+
+  const expYmd = String(lic.expiryYmd || "");
+  const daysLeft = daysLeftFromYmd(expYmd);
+  lic.lastSeenAt = now();
+  writeDB(db);
+
+  if (daysLeft <= 0) {
+    return res.status(403).json({ ok:false, assigned:true, message:"Token expired", token:trim(lic.token), plan:String(lic.plan||"").toUpperCase()||"MONTHLY", expiryYmd: parseInt(expYmd||"0",10)||0, daysLeft:0 });
+  }
+
+  return res.json({ ok:true, assigned:true, token: trim(lic.token), plan:String(lic.plan||"").toUpperCase()||"MONTHLY", expiryYmd: parseInt(expYmd||"0",10)||0, daysLeft });
+});
+
 export default r;
