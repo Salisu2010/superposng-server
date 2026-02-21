@@ -17,6 +17,7 @@ import devRoutes from "./routes/dev.js";
 import licenseRoutes from "./routes/license.js";
 import stmnDevRoutes from "./routes/stmn_dev.js";
 import stmnLicenseRoutes from "./routes/stmn_license.js";
+import stmnSyncRoutes from "./routes/stmn_sync.js";
 import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
 import trialRoutes from "./routes/trial.js";
@@ -118,6 +119,7 @@ app.use("/api/rmp", rmpRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/pair", pairRoutes);
 app.use("/api/sync", authMiddleware, syncRoutes);
+app.use("/api/stmn/sync", authMiddleware, stmnSyncRoutes);
 
 /**
  * TrackGuard Realtime Events (SSE)
