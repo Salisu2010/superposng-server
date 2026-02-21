@@ -24,6 +24,7 @@ function normalizeApp(app) {
   const a = String(app || "").trim().toUpperCase();
   if (a === "SPNG" || a === "SUPERPOSNG") return "SPNG";
   if (a === "RMP" || a === "REPAIRMASTERPRO") return "RMP";
+  if (a === "STMN" || a === "STAYMASTER" || a === "STAYMASTERNG" || a === "STMNG") return "STMN";
   return "";
 }
 
@@ -48,7 +49,7 @@ router.get("/claim", (req, res) => {
   const installId = String(req.query.installId || "").trim();
 
   if (!app) {
-    return res.status(400).json({ ok: false, message: "Missing/invalid app. Use app=SPNG or app=RMP" });
+    return res.status(400).json({ ok: false, message: "Missing/invalid app. Use app=SPNG, app=RMP or app=STMN" });
   }
   if (!fpHash) {
     return res.status(400).json({ ok: false, message: "Missing fpHash" });

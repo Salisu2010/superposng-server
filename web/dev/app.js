@@ -25,6 +25,7 @@ function setKey(v) {
 
 let _lastGenerated = null; // { licenseId, token }
 let _lastRmpGenerated = null; // { licenseId, token }
+let _lastStmnGenerated = null; // { licenseId, token }
 let _tblOffset = 0;
 const _tblLimit = 50;
 
@@ -336,6 +337,67 @@ async function doActivateRmpOnline() {
   return out;
 }
 
+// ------------------------------
+// StayMasterNG token generator (STMN1/STMN2)
+// ------------------------------
+async function doGenerateStmnToken() {
+  const plan = ($("stmnPlan")?.value || "MONTHLY").trim();
+  const deviceId = ($("stmnDeviceId")?.value || "").trim();
+  const use2 = $("stmnUseStmn2") ? !!$("stmnUseStmn2").checked : false;
+  const fpHash = use2 ? ($("stmnFpHash")?.value || "").trim() : "";
+
+  if (!deviceId) {
+    toast("ANDROID_ID/Device ID is required");
+    return;
+  }
+  if (use2 && !fpHash) {
+    toast("Paste Device Code (STMN2)");
+    return;
+  }
+
+  const out = await api("/api/stmn/dev/generate-token", {
+    method: "POST",
+    body: JSON.stringify({ plan, deviceId, fpHash })
+  });
+
+  _lastStmnGenerated = out?.license ? { licenseId: out.license.licenseId, token: out.license.token } : null;
+  if ($("stmnToken")) $("stmnToken").value = _lastStmnGenerated?.token || "";
+  toast("STMN token generated");
+  return out;
+}
+
+// ------------------------------
+// StayMasterNG: Activate device online (bind token to device)
+// ------------------------------
+async function doActivateStmnDevice() {
+  const token = ($("stmnActToken")?.value || "").trim();
+  const androidId = ($("stmnActAndroidId")?.value || "").trim();
+  const fpHash = ($("stmnActFpHash")?.value || "").trim();
+
+  if (!token) {
+    toast("Token is required");
+    return;
+  }
+  if (!androidId) {
+    toast("ANDROID_ID is required");
+    return;
+  }
+
+  const out = await api("/api/stmn/dev/activate-device", {
+    method: "POST",
+    body: JSON.stringify({ token, androidId, fpHash })
+  });
+
+  toast("STMN device activated ✅");
+  return out;
+}
+
+function updateStmn2Ui() {
+  const use = $("stmnUseStmn2") ? !!$("stmnUseStmn2").checked : false;
+  if ($("stmnFpWrap")) $("stmnFpWrap").style.display = use ? "block" : "none";
+  if (!use && $("stmnFpHash")) $("stmnFpHash").value = "";
+}
+
 function copyText(v) {
   const s = String(v || "");
   if (!s) return;
@@ -621,6 +683,33 @@ if ($("btnRmpCopy")) {
   $("btnRmpCopy").addEventListener("click", () => {
     copyText($("rmpToken")?.value || "");
     toast("Copied RMP token");
+  });
+}
+
+// STMN Generator
+if ($("stmnUseStmn2")) {
+  $("stmnUseStmn2").addEventListener("change", updateStmn2Ui);
+  updateStmn2Ui();
+}
+if ($("btnStmnGenerate")) {
+  $("btnStmnGenerate").addEventListener("click", () => doGenerateStmnToken().catch((e) => toast(e.message)));
+}
+if ($("btnStmnCopy")) {
+  $("btnStmnCopy").addEventListener("click", () => {
+    copyText($("stmnToken")?.value || "");
+    toast("Copied STMN token");
+  });
+}
+
+if ($("btnStmnActivateDevice")) {
+  $("btnStmnActivateDevice").addEventListener("click", () => doActivateStmnDevice().catch((e) => toast(e.message)));
+}
+if ($("btnStmnActivateDeviceFill")) {
+  $("btnStmnActivateDeviceFill").addEventListener("click", () => {
+    if ($("stmnActToken")) $("stmnActToken").value = $("stmnToken")?.value || _lastStmnGenerated?.token || "";
+    if ($("stmnActAndroidId") && !$("stmnActAndroidId").value.trim()) $("stmnActAndroidId").value = $("stmnDeviceId")?.value || "";
+    if ($("stmnActFpHash") && !$("stmnActFpHash").value.trim()) $("stmnActFpHash").value = $("stmnFpHash")?.value || "";
+    toast("Filled from generator");
   });
 }
 

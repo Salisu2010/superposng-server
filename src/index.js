@@ -15,6 +15,8 @@ import syncRoutes from "./routes/sync.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import devRoutes from "./routes/dev.js";
 import licenseRoutes from "./routes/license.js";
+import stmnDevRoutes from "./routes/stmn_dev.js";
+import stmnLicenseRoutes from "./routes/stmn_license.js";
 import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
 import trialRoutes from "./routes/trial.js";
@@ -96,11 +98,13 @@ app.use("/api/dashboard", dashboardRoutes);
 
 // Developer-only APIs
 app.use("/api/dev", devRoutes);
+app.use("/api/stmn/dev", stmnDevRoutes);
 // Owner (Shop User) APIs
 app.use("/api/owner", ownerRoutes);
 
 // Public license claim endpoint for device activation
 app.use("/api/license", licenseRoutes);
+app.use("/api/stmn/license", stmnLicenseRoutes);
 
 // Server-backed Trial (SPNG + RMP)
 app.use("/api/trial", trialRoutes);

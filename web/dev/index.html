@@ -129,6 +129,76 @@
     </section>
 
     <section class="card">
+      <h2>StayMasterNG Token Generator (STMN)</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="stmnPlan">
+            <option value="MONTHLY" selected>MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID / Device ID (required)</label>
+          <input id="stmnDeviceId" placeholder="paste ANDROID_ID from StayMasterNG" />
+        </div>
+        <div>
+          <label>Anti-Clone (Recommended)</label>
+          <div class="switchRow">
+            <label class="switch">
+              <input id="stmnUseStmn2" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+            <div class="switchText">
+              <div class="switchTitle">Use STMN2 Device Code</div>
+              <div class="hint" style="margin:0">From app: <b>Activation</b> → <b>Copy Device Code</b></div>
+            </div>
+          </div>
+        </div>
+        <div id="stmnFpWrap">
+          <label>Device Code (STMN2)</label>
+          <input id="stmnFpHash" placeholder="paste device code from the app" />
+        </div>
+        <div class="row">
+          <button id="btnStmnGenerate" class="btn primary">Generate STMN Token</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>STMN Token</label>
+          <input id="stmnToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnStmnCopy" class="btn">Copy STMN Token</button>
+        </div>
+      </div>
+      <p class="hint">Formats: <code>STMN1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> or <code>STMN2|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (Anti-Clone).</p>
+    </section>
+
+    <section class="card">
+      <h2>StayMasterNG: Activate Device (Online)</h2>
+      <div class="grid2">
+        <div>
+          <label>Token (STMN1/STMN2)</label>
+          <input id="stmnActToken" placeholder="paste token" />
+        </div>
+        <div>
+          <label>ANDROID_ID</label>
+          <input id="stmnActAndroidId" placeholder="paste ANDROID_ID from the app" />
+        </div>
+        <div>
+          <label>Device Code (required only for STMN2)</label>
+          <input id="stmnActFpHash" placeholder="paste Device Code from the app" />
+        </div>
+        <div class="row">
+          <button id="btnStmnActivateDevice" class="btn primary">Activate Device</button>
+          <button id="btnStmnActivateDeviceFill" class="btn">Use Generated Token</button>
+        </div>
+      </div>
+      <p class="hint">This will bind the token to the device online (like SuperPOSNG / RepairMasterPro). Customer app then taps <b>Activate Token</b> or <b>Start Trial</b> with internet.</p>
+    </section>
+
+    <section class="card">
       <h2>Search Device / Token / Shop</h2>
       <div class="grid3">
         <div>
