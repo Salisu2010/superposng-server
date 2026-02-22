@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import jwt from "jsonwebtoken";
 import { publish, getSince, sseHeaders, sendSse } from "./tg_events.js";
+import { stmnAddClient, stmnSseHeaders, stmnSendSse } from "./stmn_events.js";
 
 import { authMiddleware } from "./middleware/auth.js";
 import shopRoutes from "./routes/shop.js";
@@ -18,6 +19,7 @@ import licenseRoutes from "./routes/license.js";
 import stmnDevRoutes from "./routes/stmn_dev.js";
 import stmnLicenseRoutes from "./routes/stmn_license.js";
 import stmnSyncRoutes from "./routes/stmn_sync.js";
+import stmnFcmRoutes from "./routes/stmn_fcm.js";
 import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
 import trialRoutes from "./routes/trial.js";
@@ -120,6 +122,33 @@ app.use("/api/shop", shopRoutes);
 app.use("/api/pair", pairRoutes);
 app.use("/api/sync", authMiddleware, syncRoutes);
 app.use("/api/stmn/sync", authMiddleware, stmnSyncRoutes);
+app.use("/api/stmn/fcm", authMiddleware, stmnFcmRoutes);
+
+/**
+ * StayMasterNG Realtime Events (SSE)
+ * Purpose: 0-1s push signal whenever rooms/bookings change.
+ * Auth: Bearer token (same token used for /api/stmn/sync).
+ */
+app.get("/api/stmn/events", authMiddleware, (req, res) => {
+  try {
+    const shopId = String(req.auth?.shopId || "").trim();
+    if (!shopId) return res.status(401).json({ ok:false, error:"Missing auth shopId" });
+
+    stmnSseHeaders(res);
+    stmnSendSse(res, "hello", { ok:true, shopId, at: Date.now() });
+    stmnAddClient(shopId, res);
+
+    const ping = setInterval(() => {
+      try { stmnSendSse(res, "ping", { t: Date.now() }); } catch {}
+    }, 15000);
+
+    req.on("close", () => {
+      try { clearInterval(ping); } catch {}
+    });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:"Server error" });
+  }
+});
 
 /**
  * TrackGuard Realtime Events (SSE)

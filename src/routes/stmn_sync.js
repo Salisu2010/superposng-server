@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { readDB, writeDB } from "../db.js";
+import { stmnPublish } from "../stmn_events.js";
+import { pushShopChange } from "../fcm.js";
 
 const r = Router();
 
@@ -40,7 +42,7 @@ function bookingKey(shopId, branchId, bookingUid, roomNumber, checkInAt) {
  * POST /api/stmn/sync/push
  * body: { deviceId, branchId, rooms:[...], bookings:[...], room_status_updates:[...] }
  */
-r.post("/push", (req, res) => {
+r.post("/push", async (req, res) => {
   try {
     const shopId = requireShop(req, res);
     if (!shopId) return;
@@ -172,6 +174,22 @@ r.post("/push", (req, res) => {
     if (db.stmnBookings.length > 10000) db.stmnBookings = db.stmnBookings.slice(-10000);
 
     writeDB(db);
+    // Realtime push signal: tell all online devices in this shop that fresh data is available.
+    // Clients will immediately trigger a pull to fetch full updates.
+    try {
+      stmnPublish(shopId, "stmn_changed", { branchId, at: now });
+    } catch {}
+
+    // Background push (FCM) for devices that are not currently connected via SSE.
+    // Optional: will no-op if FCM isn't configured.
+    try {
+      await pushShopChange({
+        shopId,
+        title: "StayMasterNG",
+        body: "New update available",
+        data: { type: "stmn_changed", branchId, at: now }
+      });
+    } catch {}
     return res.json({ ok: true, roomsUpserted: rooms.length, bookingsUpserted: bookings.length, serverTime: now });
   } catch (e) {
     console.error("POST /api/stmn/sync/push error", e);
