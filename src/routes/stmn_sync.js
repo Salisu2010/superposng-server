@@ -65,7 +65,10 @@ r.post("/push", (req, res) => {
       const key = roomKey(shopId, branchId, rn);
       const status = trim(u0?.status);
       if (!status) continue;
-      const updated_at = toInt(u0?.updated_at, now) || now;
+      // Always bump server-side updated_at to guarantee monotonic change tracking.
+      // This prevents clients from sending stale updated_at values (common on checkout/checkin)
+      // which would otherwise cause other devices to miss updates during pull(since).
+      const updated_at = now;
 
       const idx = db.stmnRooms.findIndex((x) => x.key === key);
       if (idx >= 0) {
@@ -102,7 +105,8 @@ r.post("/push", (req, res) => {
         category: trim(r0?.category || r0?.room_category || r0?.roomCategory) || "Standard",
         price_per_night: Number(r0?.price_per_night ?? r0?.pricePerNight ?? 0) || 0,
         status: trim(r0?.status) || "available",
-        updated_at: toInt(r0?.updated_at, now) || now,
+        // Always set updated_at on server to ensure pulls see the latest change.
+        updated_at: now,
         key,
       };
 
@@ -143,7 +147,8 @@ r.post("/push", (req, res) => {
         total_amount: Number(b0?.total_amount ?? b0?.totalAmount ?? 0) || 0,
         status: trim(b0?.status) || "active",
         created_at: toInt(b0?.created_at, ci) || ci,
-        updated_at: toInt(b0?.updated_at, now) || now,
+        // Always set updated_at on server to ensure pulls see the latest change.
+        updated_at: now,
         completed_at: toInt(b0?.completed_at, 0),
         group_id: trim(b0?.group_id || ""),
         group_name: trim(b0?.group_name || ""),
