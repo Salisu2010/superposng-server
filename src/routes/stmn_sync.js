@@ -38,7 +38,7 @@ function bookingKey(shopId, branchId, bookingUid, roomNumber, checkInAt) {
 
 /**
  * POST /api/stmn/sync/push
- * body: { deviceId, branchId, rooms:[...], bookings:[...] }
+ * body: { deviceId, branchId, rooms:[...], bookings:[...], room_status_updates:[...] }
  */
 r.post("/push", (req, res) => {
   try {
@@ -48,11 +48,46 @@ r.post("/push", (req, res) => {
     const branchId = toInt(req.body?.branchId, 1) || 1;
     const rooms = Array.isArray(req.body?.rooms) ? req.body.rooms : [];
     const bookings = Array.isArray(req.body?.bookings) ? req.body.bookings : [];
+    const roomStatusUpdates = Array.isArray(req.body?.room_status_updates)
+      ? req.body.room_status_updates
+      : [];
 
     const db = readDB();
     ensureDb(db);
 
     const now = Date.now();
+
+    // Room status-only updates (safe for non-admin roles)
+    // This path ONLY touches status + updated_at and never overwrites category/price.
+    for (const u0 of roomStatusUpdates) {
+      const rn = trim(u0?.room_number || u0?.roomNumber);
+      if (!rn) continue;
+      const key = roomKey(shopId, branchId, rn);
+      const status = trim(u0?.status);
+      if (!status) continue;
+      const updated_at = toInt(u0?.updated_at, now) || now;
+
+      const idx = db.stmnRooms.findIndex((x) => x.key === key);
+      if (idx >= 0) {
+        const prev = db.stmnRooms[idx];
+        const prevU = toInt(prev?.updated_at, 0);
+        if (updated_at >= prevU) {
+          db.stmnRooms[idx] = { ...prev, status, updated_at };
+        }
+      } else {
+        // If room doesn't exist yet, create minimal record.
+        db.stmnRooms.push({
+          shopId,
+          branchId,
+          room_number: rn,
+          category: "Standard",
+          price_per_night: 0,
+          status,
+          updated_at,
+          key,
+        });
+      }
+    }
 
     // Rooms upsert
     for (const r0 of rooms) {
