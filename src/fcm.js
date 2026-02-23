@@ -190,7 +190,7 @@ export async function pushShopChange(shopId, payload, opts = {}) {
 
   const message = {
     tokens: uniqueTokens,
-    notification: { title, body },
+    
     data,
     android: {
       priority: "high",
