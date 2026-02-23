@@ -31,10 +31,14 @@ r.post("/register", async (req, res) => {
 
   if (!token) return res.status(400).json({ ok: false, error: "missing_token" });
 
-  upsertDeviceToken({ shopId, deviceId, token, platform: "android", role });
+  // IMPORTANT: upsertDeviceToken signature is (shopId, deviceId, role, token)
+  // A previous refactor accidentally called it with an object which caused tokens
+  // not to be stored (=> no notifications after server upgrade).
+  const out = upsertDeviceToken(shopId, deviceId, role, token);
+
   // Check if FCM is configured (optional)
-  const messaging = await ensureFcm();
-  return res.json({ ok: true, fcmReady: !!messaging });
+  const st = ensureFcm();
+  return res.json({ ok: true, stored: !!out?.ok, fcmDisabled: !!st?.disabled, reason: st?.reason || "" });
 });
 
 /**
@@ -44,9 +48,11 @@ r.post("/register", async (req, res) => {
 r.post("/unregister", (req, res) => {
   const shopId = requireShop(req, res);
   if (!shopId) return;
+  // token is optional here; deviceId is our primary key
   const token = trim(req.body?.token);
   const deviceId = trim(req.body?.deviceId);
-  const out = removeDeviceToken({ shopId, deviceId, token });
+  // removeDeviceToken signature is (shopId, deviceId)
+  const out = removeDeviceToken(shopId, deviceId);
   return res.json({ ok: true, ...out });
 });
 

@@ -54,6 +54,11 @@ function safeJsonParse(s) {
 let _fcmReady = false;
 let _fcmDisabledReason = "";
 
+function fcmLog(...args) {
+  if (String(process.env.FCM_LOG || "1") === "0") return;
+  try { console.log("[FCM]", ...args); } catch {}
+}
+
 export function ensureFcm() {
   if (_fcmReady) return { ok: true, disabled: false };
 
@@ -68,11 +73,13 @@ export function ensureFcm() {
   // Allow running without push (sync should still work)
   if (!credPath) {
     _fcmDisabledReason = "GOOGLE_APPLICATION_CREDENTIALS not set";
+    fcmLog("disabled:", _fcmDisabledReason);
     return { ok: true, disabled: true, reason: _fcmDisabledReason };
   }
 
   if (!fs.existsSync(credPath)) {
     _fcmDisabledReason = `Service account file not found: ${credPath}`;
+    fcmLog("disabled:", _fcmDisabledReason);
     return { ok: true, disabled: true, reason: _fcmDisabledReason };
   }
 
@@ -80,6 +87,7 @@ export function ensureFcm() {
   const credJson = safeJsonParse(raw);
   if (!credJson) {
     _fcmDisabledReason = `Service account file is not valid JSON: ${credPath}`;
+    fcmLog("disabled:", _fcmDisabledReason);
     return { ok: true, disabled: true, reason: _fcmDisabledReason };
   }
 
@@ -89,15 +97,18 @@ export function ensureFcm() {
     });
     _fcmReady = true;
     _fcmDisabledReason = "";
+    fcmLog("ready. service account:", credJson?.project_id || "(unknown)");
     return { ok: true, disabled: false };
   } catch (e) {
     // If initializeApp called twice, firebase-admin throws.
     // If already initialized elsewhere, consider it ready.
     if (String(e?.message || "").toLowerCase().includes("already exists")) {
       _fcmReady = true;
+      fcmLog("ready (already initialized)");
       return { ok: true, disabled: false };
     }
     _fcmDisabledReason = `firebase-admin init failed: ${e?.message || e}`;
+    fcmLog("disabled:", _fcmDisabledReason);
     return { ok: false, disabled: true, reason: _fcmDisabledReason };
   }
 }
@@ -146,6 +157,12 @@ export function upsertDeviceToken(shopId, deviceId, role, token) {
   }
 
   writeDB(db);
+  fcmLog("token saved", {
+    shopId: entry.shopId,
+    deviceId: entry.deviceId,
+    role: entry.role,
+    tokenHash: entry.tokenHash,
+  });
   return { ok: true };
 }
 
@@ -157,6 +174,7 @@ export function removeDeviceToken(shopId, deviceId) {
   );
   writeDB(db);
   const after = db.stmnFcmTokens.length;
+  fcmLog("token removed", { shopId: String(shopId || ""), deviceId: String(deviceId || ""), removed: before - after });
   return { ok: true, removed: before - after };
 }
 
@@ -171,7 +189,10 @@ function getShopTokens(shopId) {
 export async function pushShopChange(shopId, payload, opts = {}) {
   const init = ensureFcm();
   if (!init.ok) return { ok: false, error: init.reason || "FCM init failed" };
-  if (init.disabled) return { ok: true, skipped: true, reason: init.reason || "FCM disabled" };
+  if (init.disabled) {
+    fcmLog("skip push (disabled)", init.reason || "FCM disabled");
+    return { ok: true, skipped: true, reason: init.reason || "FCM disabled" };
+  }
 
   const tokens = getShopTokens(shopId).map((t) => t.token).filter(Boolean);
   const uniqueTokens = Array.from(new Set(tokens));
@@ -198,6 +219,12 @@ export async function pushShopChange(shopId, payload, opts = {}) {
   };
 
   try {
+    fcmLog("sending", {
+      shopId: String(shopId || ""),
+      tokens: uniqueTokens.length,
+      type: data?.type || "(none)",
+      title,
+    });
     const res = await admin.messaging().sendEachForMulticast(message);
 
     // Remove invalid tokens to keep db clean
@@ -231,6 +258,7 @@ export async function pushShopChange(shopId, payload, opts = {}) {
       failureCount: res?.failureCount || 0,
     };
   } catch (e) {
+    fcmLog("send error", e?.message || String(e));
     return { ok: false, error: e?.message || String(e) };
   }
 }
