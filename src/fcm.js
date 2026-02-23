@@ -1,140 +1,239 @@
+/**
+ * Firebase Cloud Messaging helper for SuperPOSNG / StayMasterNG cloud push.
+ *
+ * Exports:
+ *  - ensureFcm() -> initializes firebase-admin (lazy) if credentials exist
+ *  - upsertDeviceToken(shopId, deviceId, role, token)
+ *  - removeDeviceToken(shopId, deviceId)
+ *  - pushShopChange(shopId, payload, opts)
+ *
+ * Notes:
+ *  - This project runs as ESM (package.json "type": "module").
+ *  - firebase-admin is imported as default to support Node 20 ESM.
+ */
 import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import admin from "firebase-admin";
+import { fileURLToPath } from "url";
 import { readDB, writeDB } from "./db.js";
 
-let _messaging = null;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-/**
- * Initialize Firebase Admin SDK.
- * Supports either:
- *  - GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccount.json
- *  - FIREBASE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'
- */
-export async function ensureFcm() {
-  if (_messaging) return _messaging;
+// ---- Config helpers ----
+function resolveCredPath(p) {
+  if (!p || typeof p !== "string") return null;
+  // If relative, resolve relative to project root (../ from src)
+  if (!path.isAbsolute(p)) {
+    const projectRoot = path.resolve(__dirname, "..");
+    return path.resolve(projectRoot, p);
+  }
+  return p;
+}
 
+function credPathFromEnv() {
+  // Prefer GOOGLE_APPLICATION_CREDENTIALS but accept legacy envs too
+  const p =
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+    process.env.FIREBASE_SERVICE_ACCOUNT ||
+    process.env.FCM_SERVICE_ACCOUNT ||
+    "";
+  return resolveCredPath(p);
+}
+
+function safeJsonParse(s) {
   try {
-    // Lazy import so server still works even if firebase-admin isn't configured.
-    // eslint-disable-next-line no-unused-vars
-    const admin = await importAdmin();
-
-    const jsonInline = String(process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").trim();
-    if (jsonInline) {
-      const cred = admin.credential.cert(JSON.parse(jsonInline));
-      admin.initializeApp({ credential: cred });
-    } else {
-      // Will use GOOGLE_APPLICATION_CREDENTIALS if set.
-      admin.initializeApp();
-    }
-
-    _messaging = admin.messaging();
-    return _messaging;
-  } catch (e) {
-    // Not configured; keep null so callers can fallback.
+    return JSON.parse(s);
+  } catch {
     return null;
   }
 }
 
-async function importAdmin() {
-  // firebase-admin is ESM-friendly. Use dynamic import so server can boot without config.
-  return await import("firebase-admin");
+// ---- firebase-admin init ----
+let _fcmReady = false;
+let _fcmDisabledReason = "";
+
+export function ensureFcm() {
+  if (_fcmReady) return { ok: true, disabled: false };
+
+  // If already initialized by other code, mark ready
+  if (admin?.apps?.length) {
+    _fcmReady = true;
+    return { ok: true, disabled: false };
+  }
+
+  const credPath = credPathFromEnv();
+
+  // Allow running without push (sync should still work)
+  if (!credPath) {
+    _fcmDisabledReason = "GOOGLE_APPLICATION_CREDENTIALS not set";
+    return { ok: true, disabled: true, reason: _fcmDisabledReason };
+  }
+
+  if (!fs.existsSync(credPath)) {
+    _fcmDisabledReason = `Service account file not found: ${credPath}`;
+    return { ok: true, disabled: true, reason: _fcmDisabledReason };
+  }
+
+  const raw = fs.readFileSync(credPath, "utf-8");
+  const credJson = safeJsonParse(raw);
+  if (!credJson) {
+    _fcmDisabledReason = `Service account file is not valid JSON: ${credPath}`;
+    return { ok: true, disabled: true, reason: _fcmDisabledReason };
+  }
+
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert(credJson),
+    });
+    _fcmReady = true;
+    _fcmDisabledReason = "";
+    return { ok: true, disabled: false };
+  } catch (e) {
+    // If initializeApp called twice, firebase-admin throws.
+    // If already initialized elsewhere, consider it ready.
+    if (String(e?.message || "").toLowerCase().includes("already exists")) {
+      _fcmReady = true;
+      return { ok: true, disabled: false };
+    }
+    _fcmDisabledReason = `firebase-admin init failed: ${e?.message || e}`;
+    return { ok: false, disabled: true, reason: _fcmDisabledReason };
+  }
 }
 
-function now() { return Date.now(); }
+// ---- Device token store (db.json) ----
+function nowTs() {
+  return Date.now();
+}
 
-/** Upsert token in db.json (persisted). */
-export function upsertDeviceToken({ shopId, deviceId, token, platform, role }) {
-  if (!shopId || !token) return { ok: false, error: "missing" };
+function normalizeRole(role) {
+  if (!role) return "unknown";
+  const r = String(role).trim().toLowerCase();
+  return r || "unknown";
+}
+
+function tokenKey(token) {
+  // Stable, short hash for debugging (don't log full token)
+  return crypto.createHash("sha256").update(String(token)).digest("hex").slice(0, 12);
+}
+
+export function upsertDeviceToken(shopId, deviceId, role, token) {
   const db = readDB();
   db.stmnFcmTokens = Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens : [];
 
-  const key = `${String(shopId)}:${String(deviceId || "")}:${String(token)}`;
-  const idx = db.stmnFcmTokens.findIndex((x) => x && x.key === key);
-  const rec = {
-    key,
-    shopId: String(shopId),
-    deviceId: String(deviceId || ""),
-    token: String(token),
-    platform: String(platform || "android"),
-    role: String(role || ""),
-    updatedAt: now(),
+  const entry = {
+    shopId: String(shopId || "").trim(),
+    deviceId: String(deviceId || "").trim(),
+    role: normalizeRole(role),
+    token: String(token || "").trim(),
+    tokenHash: tokenKey(token),
+    updatedAt: nowTs(),
   };
-  if (idx >= 0) db.stmnFcmTokens[idx] = { ...db.stmnFcmTokens[idx], ...rec };
-  else db.stmnFcmTokens.push(rec);
 
-  // Bound size to avoid runaway growth.
-  if (db.stmnFcmTokens.length > 20000) db.stmnFcmTokens = db.stmnFcmTokens.slice(-20000);
+  if (!entry.shopId || !entry.deviceId || !entry.token) {
+    return { ok: false, error: "Missing shopId/deviceId/token" };
+  }
+
+  const idx = db.stmnFcmTokens.findIndex(
+    (t) => t.shopId === entry.shopId && t.deviceId === entry.deviceId
+  );
+
+  if (idx >= 0) {
+    db.stmnFcmTokens[idx] = { ...db.stmnFcmTokens[idx], ...entry };
+  } else {
+    db.stmnFcmTokens.push(entry);
+  }
+
   writeDB(db);
   return { ok: true };
 }
 
-export function removeDeviceToken({ shopId, deviceId, token }) {
+export function removeDeviceToken(shopId, deviceId) {
   const db = readDB();
-  db.stmnFcmTokens = Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens : [];
-  const before = db.stmnFcmTokens.length;
-  db.stmnFcmTokens = db.stmnFcmTokens.filter((x) => {
-    if (!x) return false;
-    if (shopId && String(x.shopId) !== String(shopId)) return true;
-    if (deviceId && String(x.deviceId) !== String(deviceId)) return true;
-    if (token && String(x.token) !== String(token)) return true;
-    return false;
-  });
+  const before = Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens.length : 0;
+  db.stmnFcmTokens = (Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens : []).filter(
+    (t) => !(t.shopId === String(shopId || "").trim() && t.deviceId === String(deviceId || "").trim())
+  );
   writeDB(db);
-  return { ok: true, removed: before - db.stmnFcmTokens.length };
+  const after = db.stmnFcmTokens.length;
+  return { ok: true, removed: before - after };
 }
 
-/**
- * Send background push notification to all tokens in a shop.
- * Payload is kept small; clients will do a delta pull on receipt.
- */
-export async function pushShopChange({ shopId, title, body, data = {} }) {
-  const messaging = await ensureFcm();
-  if (!messaging) return { ok: false, error: "fcm_not_configured" };
-
+function getShopTokens(shopId) {
   const db = readDB();
-  const tokens = (Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens : [])
-    .filter((x) => x && String(x.shopId) === String(shopId))
-    .map((x) => String(x.token))
-    .filter(Boolean);
+  const list = Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens : [];
+  const sid = String(shopId || "").trim();
+  return list.filter((t) => t.shopId === sid && t.token);
+}
 
-  if (tokens.length === 0) return { ok: true, sent: 0 };
+// ---- Push sending ----
+export async function pushShopChange(shopId, payload, opts = {}) {
+  const init = ensureFcm();
+  if (!init.ok) return { ok: false, error: init.reason || "FCM init failed" };
+  if (init.disabled) return { ok: true, skipped: true, reason: init.reason || "FCM disabled" };
 
-  const msg = {
-    tokens,
-    notification: {
-      title: title || "StayMasterNG",
-      body: body || "New update available",
-    },
-    data: {
-      shopId: String(shopId),
-      type: String(data.type || "stmn_changed"),
-      at: String(data.at || now()),
-      ...Object.fromEntries(Object.entries(data).map(([k, v]) => [String(k), String(v)])),
-    },
+  const tokens = getShopTokens(shopId).map((t) => t.token).filter(Boolean);
+  const uniqueTokens = Array.from(new Set(tokens));
+
+  if (!uniqueTokens.length) return { ok: true, skipped: true, reason: "No device tokens" };
+
+  const title = opts.title || "New update";
+  const body = opts.body || "Data synced successfully";
+  const data = {};
+  if (payload && typeof payload === "object") {
+    // Only allow string values in FCM data payload
+    for (const [k, v] of Object.entries(payload)) {
+      data[String(k)] = typeof v === "string" ? v : JSON.stringify(v);
+    }
+  }
+
+  const message = {
+    tokens: uniqueTokens,
+    notification: { title, body },
+    data,
     android: {
       priority: "high",
     },
   };
 
   try {
-    const resp = await messaging.sendEachForMulticast(msg);
-    // Remove invalid tokens
-    const bad = [];
-    resp.responses.forEach((r, i) => {
-      if (!r.success) {
-        const code = r.error?.code || "";
-        if (String(code).includes("registration-token-not-registered") || String(code).includes("invalid-argument")) {
-          bad.push(tokens[i]);
+    const res = await admin.messaging().sendEachForMulticast(message);
+
+    // Remove invalid tokens to keep db clean
+    if (res?.responses?.length) {
+      const bad = [];
+      res.responses.forEach((r, i) => {
+        if (!r.success) {
+          const err = r.error?.code || r.error?.message || "";
+          // Typical invalid token codes
+          if (
+            String(err).includes("registration-token-not-registered") ||
+            String(err).includes("invalid-argument")
+          ) {
+            bad.push(uniqueTokens[i]);
+          }
         }
+      });
+      if (bad.length) {
+        // purge by token match
+        const db = readDB();
+        db.stmnFcmTokens = (Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens : []).filter(
+          (t) => !bad.includes(t.token)
+        );
+        writeDB(db);
       }
-    });
-    if (bad.length) {
-      // prune
-      const db2 = readDB();
-      db2.stmnFcmTokens = (Array.isArray(db2.stmnFcmTokens) ? db2.stmnFcmTokens : []).filter((x) => x && !bad.includes(String(x.token)));
-      writeDB(db2);
     }
-    return { ok: true, sent: resp.successCount, failed: resp.failureCount };
+
+    return {
+      ok: true,
+      successCount: res?.successCount || 0,
+      failureCount: res?.failureCount || 0,
+    };
   } catch (e) {
-    return { ok: false, error: "send_failed" };
+    return { ok: false, error: e?.message || String(e) };
   }
 }
+
+// Convenience re-export name used in some older codebases
+export const pushShopChangeNow = pushShopChange;
