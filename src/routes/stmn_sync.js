@@ -28,6 +28,30 @@ function ensureDb(db) {
   db.stmnBookings = Array.isArray(db.stmnBookings) ? db.stmnBookings : [];
 }
 
+function shortList(list, max = 3) {
+  const a = Array.isArray(list) ? list.filter(Boolean) : [];
+  if (a.length <= max) return a.join(", ");
+  return a.slice(0, max).join(", ") + ` +${a.length - max}`;
+}
+
+function normalizeStatus(s) {
+  return trim(s).toLowerCase();
+}
+
+function isCheckoutTransition(prev, next) {
+  const p = normalizeStatus(prev?.status);
+  const n = normalizeStatus(next?.status);
+  // Common patterns: active -> completed/checked_out/checkout
+  if (p && n && p !== n) {
+    if (n.includes("complete") || n.includes("checked") || n.includes("checkout") || n === "done") return true;
+  }
+  // Fallback: completed_at newly set
+  const pComp = toInt(prev?.completed_at, 0);
+  const nComp = toInt(next?.completed_at, 0);
+  if (nComp > 0 && nComp !== pComp) return true;
+  return false;
+}
+
 function roomKey(shopId, branchId, roomNumber) {
   return `${shopId}:${branchId}:${trim(roomNumber).toUpperCase()}`;
 }
@@ -58,6 +82,14 @@ r.post("/push", async (req, res) => {
     ensureDb(db);
 
     const now = Date.now();
+
+    // Collect human-friendly notifications (FCM) for key actions.
+    // We keep this conservative to avoid spamming during bulk sync.
+    const notif = {
+      roomsAdded: [],
+      checkins: [],
+      checkouts: [],
+    };
 
     // Room status-only updates (safe for non-admin roles)
     // This path ONLY touches status + updated_at and never overwrites category/price.
@@ -121,6 +153,7 @@ r.post("/push", async (req, res) => {
         if (curU >= prevU) db.stmnRooms[idx] = { ...prev, ...rec };
       } else {
         db.stmnRooms.push(rec);
+        notif.roomsAdded.push(rn);
       }
     }
 
@@ -163,9 +196,17 @@ r.post("/push", async (req, res) => {
         const prev = db.stmnBookings[idx];
         const prevU = toInt(prev?.updated_at, 0);
         const curU = toInt(rec.updated_at, 0);
-        if (curU >= prevU) db.stmnBookings[idx] = { ...prev, ...rec };
+        if (curU >= prevU) {
+          db.stmnBookings[idx] = { ...prev, ...rec };
+          if (isCheckoutTransition(prev, rec)) {
+            const g = rec.guest_name || prev.guest_name || "Guest";
+            notif.checkouts.push(`${g} (Room ${rn})`);
+          }
+        }
       } else {
         db.stmnBookings.push(rec);
+        const g = rec.guest_name || "Guest";
+        notif.checkins.push(`${g} (Room ${rn})`);
       }
     }
 
@@ -182,13 +223,36 @@ r.post("/push", async (req, res) => {
 
     // Background push (FCM) for devices that are not currently connected via SSE.
     // Optional: will no-op if FCM isn't configured.
+    // If we detected a clear user action (room added / checkin / checkout),
+    // send a friendly notification message. Otherwise keep the generic one.
     try {
-      await pushShopChange({
-        shopId,
-        title: "StayMasterNG",
-        body: "New update available",
-        data: { type: "stmn_changed", branchId, at: now }
-      });
+      const hasAction = notif.roomsAdded.length || notif.checkins.length || notif.checkouts.length;
+
+      if (hasAction) {
+        // Prefer a single, compact push to avoid spamming.
+        // Priority: Checkout > Checkin > Room Added
+        let title = "StayMasterNG";
+        let body = "New update available";
+        let dataType = "stmn_changed";
+
+        if (notif.checkouts.length) {
+          title = "Checkout";
+          body = `Checked out: ${shortList(notif.checkouts)}`;
+          dataType = "stmn_checkout";
+        } else if (notif.checkins.length) {
+          title = "New Check-in";
+          body = `Checked in: ${shortList(notif.checkins)}`;
+          dataType = "stmn_checkin";
+        } else if (notif.roomsAdded.length) {
+          title = "Room Added";
+          body = `Room added: ${shortList(notif.roomsAdded)}`;
+          dataType = "stmn_room_added";
+        }
+
+        await pushShopChange(shopId, { type: dataType, branchId: String(branchId), at: String(now) }, { title, body });
+      } else {
+        await pushShopChange(shopId, { type: "stmn_changed", branchId: String(branchId), at: String(now) }, { title: "StayMasterNG", body: "New update available" });
+      }
     } catch {}
     return res.json({ ok: true, roomsUpserted: rooms.length, bookingsUpserted: bookings.length, serverTime: now });
   } catch (e) {

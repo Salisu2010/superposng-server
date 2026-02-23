@@ -10,6 +10,7 @@ import { publish, getSince, sseHeaders, sendSse } from "./tg_events.js";
 import { stmnAddClient, stmnSseHeaders, stmnSendSse } from "./stmn_events.js";
 
 import { authMiddleware } from "./middleware/auth.js";
+import { startStmnReminderEngine } from "./stmn_reminder_engine.js";
 import shopRoutes from "./routes/shop.js";
 import pairRoutes from "./routes/pair.js";
 import syncRoutes from "./routes/sync.js";
@@ -238,3 +239,6 @@ setInterval(() => {
 
 const PORT = parseInt(process.env.PORT || "8080", 10);
 app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`));
+
+// StayMasterNG Smart Reminder Engine (WhatsApp/SMS compose via client)
+startStmnReminderEngine();
