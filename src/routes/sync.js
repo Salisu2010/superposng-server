@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { readDB, writeDB } from "../db.js";
+import { pushSpngShopChange } from "../fcm.js";
 
 const r = Router();
 
@@ -65,6 +66,13 @@ function ensureDbArrays(db) {
   if (!Array.isArray(db.shops)) db.shops = [];
 }
 
+
+function spngPing(shopId, payload) {
+  try {
+    // Fire-and-forget: do not block sync endpoints
+    pushSpngShopChange(shopId, payload || { type: "SPNG_SYNC" }).catch(() => {});
+  } catch (_e) {}
+}
 // Identify acting cashier (if this request is made with a cashier token)
 function getActor(req){
   const a = req && req.auth ? req.auth : {};
@@ -294,7 +302,8 @@ r.post("/products", (req, res) => {
     }
 
     writeDB(db);
-    return res.json({ ok: true, upserts, serverTime: now });
+    return   spngPing(shopId, { type: "SPNG_SYNC", module: "products" });
+  res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /products error", e);
     return res.status(500).json({ ok: false, error: "products_push_failed" });
@@ -364,7 +373,8 @@ r.post("/staffs", (req, res) => {
     }
 
     writeDB(db);
-    return res.json({ ok: true, upserts, serverTime: now });
+    return   spngPing(shopId, { type: "SPNG_SYNC", module: "staffs" });
+  res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /staffs error", e);
     return res.status(500).json({ ok: false, error: "staffs_push_failed" });
@@ -468,7 +478,8 @@ r.post("/shop/profile", (req, res) => {
     };
 
     writeDB(db);
-    return res.json({
+    return   spngPing(shopId, { type: "SPNG_SYNC", module: "profile" });
+  res.json({
       ok: true,
       saved: true,
       shop: db.shops[idx],
@@ -602,7 +613,8 @@ r.post(SALE_PATHS, (req, res) => {
 
     // If duplicate sale: do NOT deduct stock or add debtor again
     if (exists) {
-      return res.json({
+      return   spngPing(shopId, { type: "SPNG_SYNC", module: "sales" });
+  res.json({
         ok: true,
         saved: false,
         duplicate: true,
@@ -845,7 +857,8 @@ r.post("/debtorsFull", (req, res) => {
     }
 
     writeDB(db);
-    return res.json({ ok: true, shopId, updated: changed, serverTime: now });
+    return   spngPing(shopId, { type: "SPNG_SYNC", module: "debtors" });
+  res.json({ ok: true, shopId, updated: changed, serverTime: now });
   } catch (e) {
     console.error("debtorsFull error", e);
     return res.status(500).json({ ok: false, error: "debtorsFull_failed" });

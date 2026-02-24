@@ -166,6 +166,140 @@ export function upsertDeviceToken(shopId, deviceId, role, token) {
   return { ok: true };
 }
 
+
+
+/* =========================
+   SPNG FCM (SuperPOSNG)
+========================= */
+
+export function upsertSpngDeviceToken(shopId, deviceId, role, token) {
+  const db = readDB();
+  db.spngFcmTokens = Array.isArray(db.spngFcmTokens) ? db.spngFcmTokens : [];
+
+  const entry = {
+    shopId: String(shopId || "").trim(),
+    deviceId: String(deviceId || "").trim(),
+    role: normalizeRole(role),
+    token: String(token || "").trim(),
+    tokenHash: tokenKey(token),
+    updatedAt: nowTs(),
+  };
+
+  if (!entry.shopId || !entry.deviceId || !entry.token) {
+    return { ok: false, error: "Missing shopId/deviceId/token" };
+  }
+
+  const idx = db.spngFcmTokens.findIndex(
+    (t) => t.shopId === entry.shopId && t.deviceId === entry.deviceId
+  );
+
+  if (idx >= 0) {
+    db.spngFcmTokens[idx] = { ...db.spngFcmTokens[idx], ...entry };
+  } else {
+    db.spngFcmTokens.push(entry);
+  }
+
+  // de-dupe by tokenHash (keep newest)
+  const byHash = new Map();
+  for (const t of db.spngFcmTokens) {
+    const key = t.tokenHash || tokenKey(t.token);
+    const prev = byHash.get(key);
+    if (!prev || (t.updatedAt || 0) > (prev.updatedAt || 0)) byHash.set(key, t);
+  }
+  db.spngFcmTokens = Array.from(byHash.values());
+
+  writeDB(db);
+  return { ok: true, count: db.spngFcmTokens.length };
+}
+
+export function removeSpngDeviceToken(shopId, deviceId) {
+  const db = readDB();
+  db.spngFcmTokens = Array.isArray(db.spngFcmTokens) ? db.spngFcmTokens : [];
+  const before = db.spngFcmTokens.length;
+  db.spngFcmTokens = db.spngFcmTokens.filter(
+    (t) => !(String(t.shopId) === String(shopId) && String(t.deviceId) === String(deviceId))
+  );
+  writeDB(db);
+  return { ok: true, removed: before - db.spngFcmTokens.length };
+}
+
+export async function pushSpngShopChange(shopId, payload, opts = {}) {
+  const init = ensureFcm();
+  if (!init.ok) return { ok: false, error: init.reason || "FCM init failed" };
+  if (init.disabled) {
+    fcmLog("skip SPNG push (disabled)", init.reason || "FCM disabled");
+    return { ok: true, skipped: true };
+  }
+
+  const db = readDB();
+  db.spngFcmTokens = Array.isArray(db.spngFcmTokens) ? db.spngFcmTokens : [];
+
+  const tokens = db.spngFcmTokens
+    .filter((t) => String(t.shopId) === String(shopId))
+    .map((t) => String(t.token || "").trim())
+    .filter(Boolean);
+
+  const uniqueTokens = Array.from(new Set(tokens));
+  if (!uniqueTokens.length) return { ok: true, skipped: true, reason: "no_tokens" };
+
+  const data = {};
+  if (payload && typeof payload === "object") {
+    for (const [k, v] of Object.entries(payload)) {
+      data[String(k)] = typeof v === "string" ? v : JSON.stringify(v);
+    }
+  }
+
+  // Ensure the sync type is always present
+  if (!data.type) data.type = "SPNG_SYNC";
+
+  const message = {
+    tokens: uniqueTokens,
+    data,
+    android: { priority: "high" },
+  };
+
+  try {
+    fcmLog("sending SPNG", {
+      shopId: String(shopId || ""),
+      tokens: uniqueTokens.length,
+      type: data?.type || "(none)",
+    });
+    const res = await admin.messaging().sendEachForMulticast(message);
+
+    // purge bad tokens
+    if (res?.responses?.length) {
+      const bad = [];
+      res.responses.forEach((r, i) => {
+        if (!r.success) {
+          const err = r.error?.code || r.error?.message || "";
+          if (
+            String(err).includes("registration-token-not-registered") ||
+            String(err).includes("invalid-argument")
+          ) {
+            bad.push(uniqueTokens[i]);
+          }
+        }
+      });
+      if (bad.length) {
+        const db2 = readDB();
+        db2.spngFcmTokens = (Array.isArray(db2.spngFcmTokens) ? db2.spngFcmTokens : []).filter(
+          (t) => !bad.includes(t.token)
+        );
+        writeDB(db2);
+      }
+    }
+
+    return {
+      ok: true,
+      successCount: res?.successCount || 0,
+      failureCount: res?.failureCount || 0,
+    };
+  } catch (e) {
+    fcmLog("SPNG send error", e?.message || String(e));
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
 export function removeDeviceToken(shopId, deviceId) {
   const db = readDB();
   const before = Array.isArray(db.stmnFcmTokens) ? db.stmnFcmTokens.length : 0;
