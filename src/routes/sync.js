@@ -302,7 +302,7 @@ r.post("/products", (req, res) => {
     }
 
     writeDB(db);
-    return   spngPing(shopId, { type: "SPNG_SYNC", module: "products" });
+    spngPing(shopId, { type: "SPNG_SYNC", module: "products" });
   res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /products error", e);
@@ -373,7 +373,7 @@ r.post("/staffs", (req, res) => {
     }
 
     writeDB(db);
-    return   spngPing(shopId, { type: "SPNG_SYNC", module: "staffs" });
+    spngPing(shopId, { type: "SPNG_SYNC", module: "staffs" });
   res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /staffs error", e);
@@ -478,7 +478,7 @@ r.post("/shop/profile", (req, res) => {
     };
 
     writeDB(db);
-    return   spngPing(shopId, { type: "SPNG_SYNC", module: "profile" });
+    spngPing(shopId, { type: "SPNG_SYNC", module: "profile" });
   res.json({
       ok: true,
       saved: true,
@@ -613,7 +613,7 @@ r.post(SALE_PATHS, (req, res) => {
 
     // If duplicate sale: do NOT deduct stock or add debtor again
     if (exists) {
-      return   spngPing(shopId, { type: "SPNG_SYNC", module: "sales" });
+      spngPing(shopId, { type: "SPNG_SYNC", module: "sales" });
   res.json({
         ok: true,
         saved: false,
@@ -857,7 +857,7 @@ r.post("/debtorsFull", (req, res) => {
     }
 
     writeDB(db);
-    return   spngPing(shopId, { type: "SPNG_SYNC", module: "debtors" });
+    spngPing(shopId, { type: "SPNG_SYNC", module: "debtors" });
   res.json({ ok: true, shopId, updated: changed, serverTime: now });
   } catch (e) {
     console.error("debtorsFull error", e);
