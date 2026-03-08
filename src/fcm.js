@@ -399,3 +399,36 @@ export async function pushShopChange(shopId, payload, opts = {}) {
 
 // Convenience re-export name used in some older codebases
 export const pushShopChangeNow = pushShopChange;
+
+
+export async function pushStmnChatMessage(shopId, payload, filter = {}) {
+  const init = ensureFcm();
+  if (!init.ok) return { ok:false, error:init.reason || "FCM init failed" };
+  if (init.disabled) return { ok:true, skipped:true, reason:init.reason || "FCM disabled" };
+
+  const sid = String(shopId || "").trim();
+  const branchId = String(filter.branchId || "1").trim();
+  const excludeDeviceId = String(filter.excludeDeviceId || "").trim();
+  const targetRole = String(filter.targetRole || "").trim().toLowerCase();
+
+  const entries = getShopTokens(sid).filter((t) => {
+    if (excludeDeviceId && String(t.deviceId || "") === excludeDeviceId) return false;
+    if (targetRole && String(t.role || "").toLowerCase() !== targetRole) return false;
+    return true;
+  });
+  const uniqueTokens = Array.from(new Set(entries.map((t) => String(t.token || "").trim()).filter(Boolean)));
+  if (!uniqueTokens.length) return { ok:true, skipped:true, reason:"No device tokens" };
+
+  const data = {};
+  for (const [k, v] of Object.entries(payload || {})) data[String(k)] = typeof v === "string" ? v : JSON.stringify(v);
+  if (!data.type) data.type = "stmn_chat";
+  if (!data.branchId) data.branchId = branchId;
+
+  const message = { tokens: uniqueTokens, data, android: { priority: "high" } };
+  try {
+    const res = await admin.messaging().sendEachForMulticast(message);
+    return { ok:true, successCount: res?.successCount || 0, failureCount: res?.failureCount || 0 };
+  } catch (e) {
+    return { ok:false, error:e?.message || String(e) };
+  }
+}

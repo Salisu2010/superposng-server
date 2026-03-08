@@ -38,7 +38,10 @@ function initDB() {
       tgPairCodes: [],
 
       // StayMasterNG FCM device tokens (background push notifications)
-      stmnFcmTokens: []
+      stmnFcmTokens: [],
+      // StayMasterNG internal messaging
+      stmnChatMessages: [],
+      stmnChatSeen: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -103,6 +106,8 @@ function readDB() {
     if (!Array.isArray(db.shopAliases)) db.shopAliases = []
     if (!Array.isArray(db.trials)) db.trials = []
     if (!Array.isArray(db.stmnFcmTokens)) db.stmnFcmTokens = []
+    if (!Array.isArray(db.stmnChatMessages)) db.stmnChatMessages = []
+    if (!Array.isArray(db.stmnChatSeen)) db.stmnChatSeen = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -136,7 +141,10 @@ function readDB() {
       tgPairCodes: [],
 
       // StayMasterNG FCM device tokens (background push notifications)
-      stmnFcmTokens: []
+      stmnFcmTokens: [],
+      // StayMasterNG internal messaging
+      stmnChatMessages: [],
+      stmnChatSeen: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData
