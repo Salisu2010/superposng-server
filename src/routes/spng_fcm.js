@@ -34,7 +34,7 @@ r.post("/register", async (req, res) => {
   const out = upsertSpngDeviceToken(shopId, deviceId, role, token);
 
   const init = ensureFcm();
-    return res.json({
+  res.json({
     ok: true,
     stored: out,
     fcm: init,
@@ -53,7 +53,7 @@ r.post("/unregister", (req, res) => {
   if (!deviceId) return res.status(400).json({ ok: false, error: "missing_deviceId" });
 
   const out = removeSpngDeviceToken(shopId, deviceId);
-    return res.json({ ok: true, removed: out });
+  res.json({ ok: true, removed: out });
 });
 
 export default r;

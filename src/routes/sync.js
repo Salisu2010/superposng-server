@@ -8,16 +8,10 @@ const r = Router();
    Helpers
 ========================= */
 
-
-function reply(res, statusCode, payload) {
-  if (res.headersSent || res.writableEnded) return res;
-  return res.status(statusCode).json(payload);
-}
-
 function requireShop(req, res) {
   const raw = req.auth?.shopId ? String(req.auth.shopId) : "";
   if (!raw) {
-    reply(res, 401, { ok: false, error: "Missing auth shopId" });
+    res.status(401).json({ ok: false, error: "Missing auth shopId" });
     return null;
   }
 
@@ -252,7 +246,7 @@ r.get("/products", (req, res) => {
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /products error", e);
-    return reply(res, 500, { ok: false, error: "products_fetch_failed" });
+    return res.status(500).json({ ok: false, error: "products_fetch_failed" });
   }
 });
 
@@ -263,7 +257,7 @@ r.post("/products", (req, res) => {
 
     const items = req.body?.items;
     if (!Array.isArray(items)) {
-      return reply(res, 400, { ok: false, error: "items[] required" });
+      return res.status(400).json({ ok: false, error: "items[] required" });
     }
 
     const db = readDB();
@@ -309,10 +303,10 @@ r.post("/products", (req, res) => {
 
     writeDB(db);
     spngPing(shopId, { type: "SPNG_SYNC", module: "products" });
-    return res.json({ ok: true, upserts, serverTime: now });
+  res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /products error", e);
-    return reply(res, 500, { ok: false, error: "products_push_failed" });
+    return res.status(500).json({ ok: false, error: "products_push_failed" });
   }
 });
 
@@ -338,7 +332,7 @@ r.get("/staffs", (req, res) => {
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /staffs error", e);
-    return reply(res, 500, { ok: false, error: "staffs_fetch_failed" });
+    return res.status(500).json({ ok: false, error: "staffs_fetch_failed" });
   }
 });
 
@@ -349,7 +343,7 @@ r.post("/staffs", (req, res) => {
 
     const items = req.body?.items;
     if (!Array.isArray(items)) {
-      return reply(res, 400, { ok: false, error: "items[] required" });
+      return res.status(400).json({ ok: false, error: "items[] required" });
     }
 
     const db = readDB();
@@ -380,10 +374,10 @@ r.post("/staffs", (req, res) => {
 
     writeDB(db);
     spngPing(shopId, { type: "SPNG_SYNC", module: "staffs" });
-    return res.json({ ok: true, upserts, serverTime: now });
+  res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /staffs error", e);
-    return reply(res, 500, { ok: false, error: "staffs_push_failed" });
+    return res.status(500).json({ ok: false, error: "staffs_push_failed" });
   }
 });
 
@@ -437,7 +431,7 @@ r.get("/shop/profile", (req, res) => {
     });
   } catch (e) {
     console.error("GET /shop/profile error", e);
-    return reply(res, 500, { ok: false, error: "shop_profile_fetch_failed" });
+    return res.status(500).json({ ok: false, error: "shop_profile_fetch_failed" });
   }
 });
 
@@ -485,7 +479,7 @@ r.post("/shop/profile", (req, res) => {
 
     writeDB(db);
     spngPing(shopId, { type: "SPNG_SYNC", module: "profile" });
-    return res.json({
+  res.json({
       ok: true,
       saved: true,
       shop: db.shops[idx],
@@ -498,7 +492,7 @@ r.post("/shop/profile", (req, res) => {
     });
   } catch (e) {
     console.error("POST /shop/profile error", e);
-    return reply(res, 500, { ok: false, error: "shop_profile_save_failed" });
+    return res.status(500).json({ ok: false, error: "shop_profile_save_failed" });
   }
 });
 
@@ -538,7 +532,7 @@ r.post(SALE_PATHS, (req, res) => {
     if (!shopId) return;
 
     const sale = extractSaleFromBody(req.body);
-    if (!sale) return reply(res, 400, { ok: false, error: "sale required" });
+    if (!sale) return res.status(400).json({ ok: false, error: "sale required" });
 
     const db = readDB();
     ensureDbArrays(db);
@@ -605,7 +599,7 @@ r.post(SALE_PATHS, (req, res) => {
     }
 
     if (expiredItems.length > 0) {
-      return reply(res, 409, {
+      return res.status(409).json({
         ok: false,
         code: "EXPIRED_BLOCK",
         messageEn:
@@ -620,7 +614,7 @@ r.post(SALE_PATHS, (req, res) => {
     // If duplicate sale: do NOT deduct stock or add debtor again
     if (exists) {
       spngPing(shopId, { type: "SPNG_SYNC", module: "sales" });
-    return res.json({
+  res.json({
         ok: true,
         saved: false,
         duplicate: true,
@@ -735,7 +729,7 @@ r.post(SALE_PATHS, (req, res) => {
     });
   } catch (e) {
     console.error("POST /sales error", e);
-    return reply(res, 500, { ok: false, error: "sale_push_failed" });
+    return res.status(500).json({ ok: false, error: "sale_push_failed" });
   }
 });
 
@@ -764,7 +758,7 @@ r.get("/sales", (req, res) => {
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /sales error", e);
-    return reply(res, 500, { ok: false, error: "sales_fetch_failed" });
+    return res.status(500).json({ ok: false, error: "sales_fetch_failed" });
   }
 });
 
@@ -808,7 +802,7 @@ r.get("/debtors", (req, res) => {
     return res.json({ ok: true, items, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /debtors error", e);
-    return reply(res, 500, { ok: false, error: "debtors_fetch_failed" });
+    return res.status(500).json({ ok: false, error: "debtors_fetch_failed" });
   }
 });
 
@@ -864,10 +858,10 @@ r.post("/debtorsFull", (req, res) => {
 
     writeDB(db);
     spngPing(shopId, { type: "SPNG_SYNC", module: "debtors" });
-    return res.json({ ok: true, shopId, updated: changed, serverTime: now });
+  res.json({ ok: true, shopId, updated: changed, serverTime: now });
   } catch (e) {
     console.error("debtorsFull error", e);
-    return reply(res, 500, { ok: false, error: "debtorsFull_failed" });
+    return res.status(500).json({ ok: false, error: "debtorsFull_failed" });
   }
 });
 

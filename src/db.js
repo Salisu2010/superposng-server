@@ -43,22 +43,16 @@ function initDB() {
       stmnChatMessages: [],
       stmnChatSeen: [],
 
-      // Clinic Pro NG / Multi-hospital enterprise SaaS
-      hospitals: [],
-      hospitalBranches: [],
-      hospitalUsers: [],
-      hospitalDevices: [],
-      hospitalBackups: [],
-      hospitalNotifications: [],
-      hospitalSyncLog: [],
-      hospitalPatients: [],
-      hospitalVisits: [],
-      hospitalBills: [],
-      hospitalPharmacySales: [],
-      hospitalLabs: [],
-      hospitalAdmissions: [],
-      hospitalAiSummaries: [],
-      clinicSnapshots: []
+      // Clinic Pro NG cloud
+      clinics: [],
+      clinicDevices: [],
+      clinicUsers: [],
+      clinicSnapshots: [],
+      clinicBackups: [],
+      clinicNotifications: [],
+      clinicEvents: [],
+      clinicBranches: [],
+      clinicSyncCursor: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -125,21 +119,15 @@ function readDB() {
     if (!Array.isArray(db.stmnFcmTokens)) db.stmnFcmTokens = []
     if (!Array.isArray(db.stmnChatMessages)) db.stmnChatMessages = []
     if (!Array.isArray(db.stmnChatSeen)) db.stmnChatSeen = []
-    if (!Array.isArray(db.hospitals)) db.hospitals = []
-    if (!Array.isArray(db.hospitalBranches)) db.hospitalBranches = []
-    if (!Array.isArray(db.hospitalUsers)) db.hospitalUsers = []
-    if (!Array.isArray(db.hospitalDevices)) db.hospitalDevices = []
-    if (!Array.isArray(db.hospitalBackups)) db.hospitalBackups = []
-    if (!Array.isArray(db.hospitalNotifications)) db.hospitalNotifications = []
-    if (!Array.isArray(db.hospitalSyncLog)) db.hospitalSyncLog = []
-    if (!Array.isArray(db.hospitalPatients)) db.hospitalPatients = []
-    if (!Array.isArray(db.hospitalVisits)) db.hospitalVisits = []
-    if (!Array.isArray(db.hospitalBills)) db.hospitalBills = []
-    if (!Array.isArray(db.hospitalPharmacySales)) db.hospitalPharmacySales = []
-    if (!Array.isArray(db.hospitalLabs)) db.hospitalLabs = []
-    if (!Array.isArray(db.hospitalAdmissions)) db.hospitalAdmissions = []
-    if (!Array.isArray(db.hospitalAiSummaries)) db.hospitalAiSummaries = []
+    if (!Array.isArray(db.clinics)) db.clinics = []
+    if (!Array.isArray(db.clinicDevices)) db.clinicDevices = []
+    if (!Array.isArray(db.clinicUsers)) db.clinicUsers = []
     if (!Array.isArray(db.clinicSnapshots)) db.clinicSnapshots = []
+    if (!Array.isArray(db.clinicBackups)) db.clinicBackups = []
+    if (!Array.isArray(db.clinicNotifications)) db.clinicNotifications = []
+    if (!Array.isArray(db.clinicEvents)) db.clinicEvents = []
+    if (!Array.isArray(db.clinicBranches)) db.clinicBranches = []
+    if (!Array.isArray(db.clinicSyncCursor)) db.clinicSyncCursor = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -178,22 +166,16 @@ function readDB() {
       stmnChatMessages: [],
       stmnChatSeen: [],
 
-      // Clinic Pro NG / Multi-hospital enterprise SaaS
-      hospitals: [],
-      hospitalBranches: [],
-      hospitalUsers: [],
-      hospitalDevices: [],
-      hospitalBackups: [],
-      hospitalNotifications: [],
-      hospitalSyncLog: [],
-      hospitalPatients: [],
-      hospitalVisits: [],
-      hospitalBills: [],
-      hospitalPharmacySales: [],
-      hospitalLabs: [],
-      hospitalAdmissions: [],
-      hospitalAiSummaries: [],
-      clinicSnapshots: []
+      // Clinic Pro NG cloud
+      clinics: [],
+      clinicDevices: [],
+      clinicUsers: [],
+      clinicSnapshots: [],
+      clinicBackups: [],
+      clinicNotifications: [],
+      clinicEvents: [],
+      clinicBranches: [],
+      clinicSyncCursor: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData

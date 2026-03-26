@@ -5,8 +5,14 @@ module.exports = {
       cwd: "/opt/superposng-server",
       script: "src/index.js",
       env: {
+        NODE_ENV: "production",
+        PORT: "8080",
+        DB_FILE: "/opt/superposng-server/db.json",
+        JWT_SECRET: "change_me_to_long_random_secret",
+        API_KEY: "change_me_api_key",
+        API_RATE_LIMIT_PER_MIN: "240",
+
         // Firebase Admin SDK service account JSON (server-side only)
-        // Recommended path (matches the deploy steps below):
         GOOGLE_APPLICATION_CREDENTIALS: "/opt/superposng-server/secrets/firebase-admin.json",
 
         // Optional: enable extra FCM logs in pm2 logs (set to 0 to silence)
@@ -14,7 +20,6 @@ module.exports = {
 
         // Smart Reminder Engine
         STMN_REMINDER_ENABLED: "1",
-        // Default: 120000 (2 mins)
         STMN_REMINDER_INTERVAL_MS: "120000"
       }
     }

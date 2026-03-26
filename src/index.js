@@ -8,10 +8,10 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 import { publish, getSince, sseHeaders, sendSse } from "./tg_events.js";
 import { stmnAddClient, stmnSseHeaders, stmnSendSse } from "./stmn_events.js";
+import { clinicAddClient, clinicSseHeaders, clinicSendSse } from "./clinic_events.js";
 
 import { authMiddleware } from "./middleware/auth.js";
 import { startStmnReminderEngine } from "./stmn_reminder_engine.js";
-import { requestRuntime, notFoundHandler, errorHandler, bindProcessGuards } from "./enterprise_runtime.js";
 import shopRoutes from "./routes/shop.js";
 import pairRoutes from "./routes/pair.js";
 import syncRoutes from "./routes/sync.js";
@@ -28,16 +28,14 @@ import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
 import trialRoutes from "./routes/trial.js";
 import trackguardRoutes from "./routes/trackguard.js";
-import clinicEnterpriseRoutes from "./routes/clinic_enterprise.js";
+import clinicRoutes from "./routes/clinic.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
 
 dotenv.config();
-bindProcessGuards();
 
 const app = express();
-app.set("trust proxy", 1);
 
 // Resolve project root for serving local dashboard assets
 const __filename = fileURLToPath(import.meta.url);
@@ -64,27 +62,47 @@ app.use(helmet({
   }
 }));
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: "2mb" }));
-app.use(requestRuntime);
+app.use(express.json({ limit: "12mb" }));
 app.use(morgan("dev"));
+app.use(lightweightRateLimit);
+app.use(requestValidation);
 
-app.get("/health", (_req, res) => {
-  return res.json({ ok: true, status: "healthy", service: "superposng-cloud-sync", time: new Date().toISOString() });
-});
-
-app.get("/ready", (_req, res) => {
-  try {
-    const db = readDB();
-    return res.json({ ok: true, status: "ready", dbLoaded: !!db, time: new Date().toISOString() });
-  } catch (e) {
-    return res.status(500).json({ ok: false, status: "not_ready", error: e?.message || "db_load_failed" });
+const requestBuckets = new Map();
+function keyOf(req) {
+  return `${req.ip || 'ip'}|${req.path || 'path'}`;
+}
+function lightweightRateLimit(req, res, next) {
+  const limit = parseInt(process.env.API_RATE_LIMIT_PER_MIN || '240', 10);
+  const key = keyOf(req);
+  const t = Date.now();
+  const row = requestBuckets.get(key) || { count: 0, resetAt: t + 60000 };
+  if (t > row.resetAt) {
+    row.count = 0;
+    row.resetAt = t + 60000;
   }
-});
+  row.count += 1;
+  requestBuckets.set(key, row);
+  if (row.count > limit) {
+    return res.status(429).json({ ok:false, error:'Rate limit exceeded' });
+  }
+  return next();
+}
+function requestValidation(req, res, next) {
+  if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && req.body && typeof req.body !== 'object') {
+    return res.status(400).json({ ok:false, error:'Invalid JSON body' });
+  }
+  const clinicId = String(req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
+  if (clinicId && clinicId.length > 120) {
+    return res.status(400).json({ ok:false, error:'Invalid clinic identifier' });
+  }
+  return next();
+}
+
 
 app.get("/", (_req, res) => {
   res.json({
     ok: true,
-    name: "SuperPOSNG Cloud Sync Server",
+    name: "SuperPOSNG + Clinic Pro NG Cloud Sync Server",
     version: "1.0.0",
     time: new Date().toISOString()
   });
@@ -102,10 +120,6 @@ app.use("/dashboard/trackguard", express.static(path.join(WEB_DIR, "trackguard")
 app.use("/dev", express.static(path.join(WEB_DIR, "dev")));
 // Owner Cloud Dashboard UI
 app.use("/owner", express.static(path.join(WEB_DIR, "owner")));
-// Clinic Pro NG doctor/manager enterprise portal
-app.use("/portal", express.static(path.join(WEB_DIR, "hospital_portal")));
-app.use("/manager-portal", express.static(path.join(WEB_DIR, "hospital_portal")));
-app.use("/doctor-portal", express.static(path.join(WEB_DIR, "hospital_portal")));
 
 // Some hosts/proxies don't automatically redirect "/dev" -> "/dev/" for static mounts.
 // Guarantee that the root paths load index.html.
@@ -121,9 +135,6 @@ function sendIndex(res, dirName) {
 app.get("/dev", (_req, res) => sendIndex(res, "dev"));
 app.get("/dashboard", (_req, res) => sendIndex(res, "dashboard"));
 app.get("/owner", (_req, res) => sendIndex(res, "owner"));
-app.get("/portal", (_req, res) => sendIndex(res, "hospital_portal"));
-app.get("/manager-portal", (_req, res) => sendIndex(res, "hospital_portal"));
-app.get("/doctor-portal", (_req, res) => sendIndex(res, "hospital_portal"));
 app.get("/dashboard/trackguard", (_req, res) => sendIndex(res, "trackguard"));
 app.use("/api/dashboard", dashboardRoutes);
 
@@ -142,8 +153,6 @@ app.use("/api/trial", trialRoutes);
 
 // TrackGuard (Lite + Enterprise) Registry + Dashboard APIs
 app.use("/api/trackguard", trackguardRoutes);
-// Clinic Pro NG Enterprise SaaS / multi-hospital cloud APIs
-app.use("/api/clinic", clinicEnterpriseRoutes);
 
 // RepairMasterPro Online Licensing (RMP)
 app.use("/api/rmp", rmpRoutes);
@@ -155,6 +164,7 @@ app.use("/api/stmn/sync", authMiddleware, stmnSyncRoutes);
 app.use("/api/stmn/fcm", authMiddleware, stmnFcmRoutes);
 app.use("/api/stmn/chat", authMiddleware, stmnChatRoutes);
 app.use("/api/spng/fcm", authMiddleware, spngFcmRoutes);
+app.use("/api", clinicRoutes);
 
 /**
  * StayMasterNG Realtime Events (SSE)
@@ -179,6 +189,29 @@ app.get("/api/stmn/events", authMiddleware, (req, res) => {
     });
   } catch (e) {
     return res.status(500).json({ ok:false, error:"Server error" });
+  }
+});
+
+
+/**
+ * Clinic Pro NG Realtime Events (SSE)
+ * Auth: Bearer token from /api/auth/login
+ */
+app.get('/api/events/stream', authMiddleware, (req, res) => {
+  try {
+    const clinicId = String(req.auth?.clinicId || req.auth?.hospitalId || '').trim();
+    if (!clinicId) return res.status(401).json({ ok:false, error:'Missing auth clinicId' });
+    clinicSseHeaders(res);
+    clinicSendSse(res, 'hello', { ok:true, clinicId, at: Date.now() });
+    clinicAddClient(clinicId, res);
+    const ping = setInterval(() => {
+      try { clinicSendSse(res, 'ping', { t: Date.now() }); } catch {}
+    }, 15000);
+    req.on('close', () => {
+      try { clearInterval(ping); } catch {}
+    });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:'Server error' });
   }
 });
 
@@ -273,7 +306,3 @@ app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`))
 
 // StayMasterNG Smart Reminder Engine (WhatsApp/SMS compose via client)
 startStmnReminderEngine();
-
-
-app.use(notFoundHandler);
-app.use(errorHandler);
