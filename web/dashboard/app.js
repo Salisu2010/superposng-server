@@ -8,23 +8,19 @@ let autoTimer = null;
 
 $('base').value = qs.get('base') || localStorage.getItem('clinic_base') || location.origin;
 $('hospitalId').value = qs.get('hospitalId') || localStorage.getItem('clinic_hospital_id') || '';
-$('token').value = qs.get('token') || localStorage.getItem('clinic_token') || '';
 
 function saveConn() {
   localStorage.setItem('clinic_base', $('base').value.trim());
   localStorage.setItem('clinic_hospital_id', $('hospitalId').value.trim());
-  localStorage.setItem('clinic_token', $('token').value.trim());
 }
 
 function hasConnection() {
-  return Boolean($('base').value.trim() && $('hospitalId').value.trim() && $('token').value.trim());
+  return Boolean($('base').value.trim() && $('hospitalId').value.trim());
 }
 
 function connHeaders() {
   const hospitalId = $('hospitalId').value.trim();
-  const token = $('token').value.trim();
   return {
-    'Authorization': 'Bearer ' + token,
     'X-Clinic-Id': hospitalId,
     'X-Hospital-Id': hospitalId,
     'Content-Type': 'application/json'
