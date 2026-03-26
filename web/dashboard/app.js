@@ -1,34 +1,54 @@
-const $ = (id) => document.getElementById(id);
-const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-const ngn = (v) => 'NGN ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const qs = new URLSearchParams(location.search);
+const $ = id => document.getElementById(id);
+const storage = {
+  get base(){ return localStorage.getItem('clinic.base') || 'https://api.superpos.com.ng'; },
+  set base(v){ localStorage.setItem('clinic.base', v || ''); },
+  get hospitalId(){ return localStorage.getItem('clinic.hospitalId') || ''; },
+  set hospitalId(v){ localStorage.setItem('clinic.hospitalId', v || ''); }
+};
+
 let activeTab = 'overview';
 let feedCursor = 0;
-let autoTimer = null;
+let eventSource = null;
+let refreshTimer = null;
+let pollTimer = null;
+let dashboardState = {
+  overview: {},
+  finance: {},
+  queue: [],
+  bills: [],
+  visits: [],
+  notifications: [],
+  patients: [],
+  timeline: []
+};
 
-$('base').value = qs.get('base') || localStorage.getItem('clinic_base') || location.origin;
-$('hospitalId').value = qs.get('hospitalId') || localStorage.getItem('clinic_hospital_id') || '';
-
-function saveConn() {
-  localStorage.setItem('clinic_base', $('base').value.trim());
-  localStorage.setItem('clinic_hospital_id', $('hospitalId').value.trim());
+function esc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
+function ngn(v){ return 'NGN ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function nowText(){ return new Date().toLocaleTimeString(); }
+function fmtDate(v){ const n = Number(v || 0); return n ? new Date(n).toLocaleString() : '--'; }
+function toNum(v, d=0){ const n = Number(v); return Number.isFinite(n) ? n : d; }
+function debounceRefresh(ms = 700){ clearTimeout(refreshTimer); refreshTimer = setTimeout(() => refreshAll(false), ms); }
+function connReady(){ return $('base').value.trim() && $('hospitalId').value.trim(); }
 
-function hasConnection() {
-  return Boolean($('base').value.trim() && $('hospitalId').value.trim());
-}
-
-function connHeaders() {
-  const hospitalId = $('hospitalId').value.trim();
+function connHeaders(){
+  const clinicId = $('hospitalId').value.trim();
   return {
-    'X-Clinic-Id': hospitalId,
-    'X-Hospital-Id': hospitalId,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'X-Clinic-Id': clinicId,
+    'X-Hospital-Id': clinicId
   };
 }
 
-async function api(path, method = 'GET', body = null) {
+async function api(path, method = 'GET', body){
   const base = $('base').value.trim().replace(/\/$/, '');
+  if (!base) throw new Error('Base URL is required');
   const opts = { method, headers: connHeaders() };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(base + path, opts);
@@ -39,38 +59,24 @@ async function api(path, method = 'GET', body = null) {
   return d;
 }
 
-function fmtDate(v) {
-  const n = Number(v || 0);
-  if (!n) return '--';
-  try { return new Date(n).toLocaleString(); } catch { return '--'; }
+function setStatus(mode, text) {
+  const pill = $('livePill');
+  pill.textContent = text;
+  pill.classList.remove('connected', 'error');
+  if (mode === 'connected') pill.classList.add('connected');
+  if (mode === 'error') pill.classList.add('error');
+  $('spotStatus').textContent = text;
 }
 
-function cardClass(label, value) {
-  if (label === 'Outstanding' && Number(value) > 0) return 'kpiWarn';
-  if (label === 'Revenue') return 'kpiGood';
-  return 'kpiInfo';
-}
-
-function metricCard(label, value, sub) {
-  return `<div class="metricCard ${esc(cardClass(label, value))}"><div class="metricLabel">${esc(label)}</div><div class="metricValue">${esc(value)}</div><div class="metricSub">${esc(sub || '')}</div></div>`;
-}
-
-function item(title, lines = []) {
-  return `<div class="item"><strong>${esc(title || '--')}</strong>${lines.map(x => `<div class="muted">${esc(x)}</div>`).join('')}</div>`;
-}
-
-function emptyState(msg) {
-  return `<div class="emptyState">${esc(msg)}</div>`;
-}
-
-function formDataObject(form) {
-  const fd = new FormData(form);
-  const out = {};
-  for (const [k, v] of fd.entries()) {
-    const val = String(v == null ? '' : v).trim();
-    if (val !== '') out[k] = val;
-  }
-  return out;
+function toast(msg, bad = false){
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.borderColor = bad ? 'rgba(239,68,68,.26)' : 'rgba(34,211,238,.22)';
+  el.innerHTML = esc(msg);
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
 }
 
 function switchTab(tab) {
@@ -81,19 +87,40 @@ function switchTab(tab) {
   document.querySelectorAll('.navBtn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
 }
 
-function setStatus(mode, text) {
-  const pill = $('livePill');
-  pill.textContent = text;
-  pill.classList.remove('connected', 'error');
-  if (mode === 'connected') pill.classList.add('connected');
-  if (mode === 'error') pill.classList.add('error');
+function updateClock() {
+  $('systemClock').textContent = nowText();
 }
 
-function updateClock() {
-  $('systemClock').textContent = new Date().toLocaleTimeString();
+function metricCard(label, value, sub, mode = 'kpiInfo') {
+  return `<div class="metricCard ${esc(mode)}"><div class="metricLabel">${esc(label)}</div><div class="metricValue">${esc(value)}</div><div class="metricSub">${esc(sub || '')}</div></div>`;
 }
+function item(title, lines = [], actions = '') {
+  return `<div class="item"><strong>${esc(title || '--')}</strong>${lines.map(x => `<div class="muted">${esc(x)}</div>`).join('')}${actions}</div>`;
+}
+function emptyState(msg) { return `<div class="emptyState">${esc(msg)}</div>`; }
+function formDataObject(form) {
+  const fd = new FormData(form);
+  const out = {};
+  for (const [k, v] of fd.entries()) {
+    const val = String(v == null ? '' : v).trim();
+    if (val !== '') out[k] = val;
+  }
+  return out;
+}
+
+function openModal(title, eyebrow, templateId, setup){
+  $('modalTitle').textContent = title;
+  $('modalEyebrow').textContent = eyebrow;
+  const tpl = $(templateId);
+  $('modalBody').innerHTML = '';
+  $('modalBody').appendChild(tpl.content.cloneNode(true));
+  $('modalWrap').classList.remove('hidden');
+  if (typeof setup === 'function') setup($('modalBody'));
+}
+function closeModal(){ $('modalWrap').classList.add('hidden'); $('modalBody').innerHTML = ''; }
 
 function renderActivity(notifications = []) {
+  dashboardState.notifications = notifications;
   $('activityFeed').innerHTML = notifications.length
     ? notifications.slice(0, 20).map(n => {
         const type = n.type || 'activity';
@@ -104,7 +131,7 @@ function renderActivity(notifications = []) {
 
 function renderAiSummary(summary) {
   if (!summary) {
-    $('patientAiSummary').innerHTML = emptyState('Enter a Patient ID to load AI summary.');
+    $('patientAiSummary').innerHTML = emptyState('Search and select a patient to load AI summary.');
     return;
   }
   $('patientAiSummary').innerHTML = `
@@ -117,35 +144,243 @@ function renderAiSummary(summary) {
     </div>`;
 }
 
+function groupByDay(rows, field, valField){
+  const map = new Map();
+  rows.forEach(r => {
+    const dt = new Date(Number(r[field] || r.createdAt || Date.now()));
+    const key = isNaN(dt) ? 'Unknown' : dt.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    map.set(key, (map.get(key) || 0) + Number(r[valField] || 0));
+  });
+  return Array.from(map.entries()).slice(-7);
+}
+
+function drawBarChart(canvasId, pairs, yPrefix = 'NGN '){
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 600;
+  const height = Number(canvas.getAttribute('height') || 220);
+  canvas.width = width * ratio; canvas.height = height * ratio;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.clearRect(0,0,width,height);
+  const pad = { l:44, r:16, t:18, b:32 };
+  const vals = pairs.map(x => Number(x[1] || 0));
+  const max = Math.max(1, ...vals);
+  ctx.strokeStyle = 'rgba(123,160,214,.18)';
+  ctx.lineWidth = 1;
+  for (let i=0;i<4;i++) {
+    const y = pad.t + ((height - pad.t - pad.b) / 3) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(width - pad.r, y); ctx.stroke();
+  }
+  const plotW = width - pad.l - pad.r;
+  const barW = Math.max(22, Math.min(48, plotW / Math.max(1,pairs.length) - 12));
+  pairs.forEach((p, idx) => {
+    const x = pad.l + (plotW / Math.max(1,pairs.length)) * idx + 10;
+    const v = Number(p[1] || 0);
+    const barH = (v / max) * (height - pad.t - pad.b - 12);
+    const y = height - pad.b - barH;
+    const g = ctx.createLinearGradient(0, y, 0, height - pad.b);
+    g.addColorStop(0, '#22d3ee');
+    g.addColorStop(1, '#2563eb');
+    ctx.fillStyle = g;
+    roundRect(ctx, x, y, barW, barH, 12, true);
+    ctx.fillStyle = '#9bb0cf';
+    ctx.font = '12px Inter, Segoe UI, Arial';
+    ctx.fillText(String(p[0]), x, height - 10);
+  });
+  ctx.fillStyle = '#9bb0cf';
+  ctx.font = '12px Inter, Segoe UI, Arial';
+  ctx.fillText(yPrefix + Math.round(max).toLocaleString(), 6, pad.t + 4);
+}
+
+function drawMixChart(canvasId, stats){
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 340;
+  const height = Number(canvas.getAttribute('height') || 220);
+  canvas.width = width * ratio; canvas.height = height * ratio;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.clearRect(0,0,width,height);
+  const items = [
+    ['Patients', Number(stats.patients || 0)],
+    ['Visits', Number(stats.visits || 0)],
+    ['Bills', Number(stats.bills || 0)],
+    ['Queue', Number(stats.queue || 0)],
+    ['Admissions', Number(stats.admissions || 0)],
+    ['Pharmacy', Number(stats.pharmacy || 0)]
+  ];
+  const max = Math.max(1, ...items.map(x => x[1]));
+  const cx = width/2, cy = height/2 - 8, radius = Math.min(width, height) * .30;
+  ctx.strokeStyle = 'rgba(123,160,214,.18)';
+  for (let i=1;i<=4;i++) { ctx.beginPath(); ctx.arc(cx, cy, radius * i/4, 0, Math.PI * 2); ctx.stroke(); }
+  items.forEach((it, i) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 / items.length) * i;
+    const x = cx + Math.cos(angle) * radius;
+    const y = cy + Math.sin(angle) * radius;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke();
+    ctx.fillStyle = '#9bb0cf'; ctx.font = '12px Inter, Segoe UI, Arial';
+    ctx.fillText(it[0], cx + Math.cos(angle) * (radius + 18) - 18, cy + Math.sin(angle) * (radius + 18));
+  });
+  ctx.beginPath();
+  items.forEach((it, i) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 / items.length) * i;
+    const r = radius * (it[1] / max);
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(34,211,238,.18)';
+  ctx.strokeStyle = '#22d3ee';
+  ctx.lineWidth = 2;
+  ctx.fill(); ctx.stroke();
+}
+
+function drawTimelineChart(canvasId, rows){
+  const canvas = $(canvasId);
+  if (!canvas) return;
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 700;
+  const height = Number(canvas.getAttribute('height') || 220);
+  canvas.width = width * ratio; canvas.height = height * ratio;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.clearRect(0,0,width,height);
+  const pad = { l:42, r:16, t:18, b:34 };
+  const labels = rows.map(x => (x.day || '').slice(5));
+  const series = [
+    { key:'patients', color:'#22d3ee' },
+    { key:'visits', color:'#2563eb' },
+    { key:'queueAdded', color:'#22c55e' }
+  ];
+  const max = Math.max(1, ...rows.flatMap(r => series.map(s => Number(r[s.key] || 0))));
+  ctx.strokeStyle = 'rgba(123,160,214,.18)';
+  for (let i=0;i<4;i++) {
+    const y = pad.t + ((height - pad.t - pad.b) / 3) * i;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(width - pad.r, y); ctx.stroke();
+  }
+  const plotW = width - pad.l - pad.r;
+  const plotH = height - pad.t - pad.b;
+  series.forEach((s, idx) => {
+    ctx.beginPath();
+    rows.forEach((r, i) => {
+      const x = pad.l + (plotW * (rows.length === 1 ? .5 : i / Math.max(1, rows.length - 1)));
+      const y = pad.t + plotH - ((Number(r[s.key] || 0) / max) * plotH);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = s.color; ctx.lineWidth = 2.5; ctx.stroke();
+    rows.forEach((r, i) => {
+      const x = pad.l + (plotW * (rows.length === 1 ? .5 : i / Math.max(1, rows.length - 1)));
+      const y = pad.t + plotH - ((Number(r[s.key] || 0) / max) * plotH);
+      ctx.beginPath(); ctx.fillStyle = s.color; ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
+    });
+  });
+  ctx.fillStyle = '#9bb0cf'; ctx.font = '12px Inter, Segoe UI, Arial';
+  labels.forEach((label, i) => {
+    const x = pad.l + (plotW * (rows.length === 1 ? .5 : i / Math.max(1, rows.length - 1)));
+    ctx.fillText(label || '--', x - 12, height - 10);
+  });
+}
+
+function renderRealtimeBoard(){
+  const queueOpen = (dashboardState.queue || []).filter(x => !['served','completed','cancelled'].includes(String(x.status || '').toLowerCase())).length;
+  $('realtimeBoard').innerHTML = `<div class="realtimePulse">`
+    + item('Transport', [$('transportText').textContent || '--', 'Last Sync: ' + ($('lastSyncText').textContent || '--')])
+    + item('Hospital Scope', [$('hospitalId').value.trim() || '--', 'Open Queue: ' + queueOpen])
+    + item('Live Feed Buffer', ['Notifications: ' + ((dashboardState.notifications || []).length || 0), 'Timeline Points: ' + ((dashboardState.timeline || []).length || 0)])
+    + `</div>`;
+}
+
+function roundRect(ctx, x, y, w, h, r, fill){
+  const rr = Math.min(r, w/2, h/2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+  if (fill) ctx.fill(); else ctx.stroke();
+}
+
+function renderOverviewCards(o){
+  $('cards').innerHTML = [
+    metricCard('Patients', o.patients || 0, 'registered', 'kpiInfo'),
+    metricCard('Visits', o.visits || 0, 'overall', 'kpiInfo'),
+    metricCard('Queue', o.queue || 0, 'live', o.queue > 0 ? 'kpiWarn' : 'kpiInfo'),
+    metricCard('Revenue', ngn(o.totalPaid || 0), 'paid', 'kpiGood'),
+    metricCard('Outstanding', ngn(o.outstanding || 0), 'pending', Number(o.outstanding || 0) > 0 ? 'kpiWarn' : 'kpiGood'),
+    metricCard('Bills', o.bills || 0, 'created', 'kpiInfo'),
+    metricCard('Admissions', o.admissions || 0, 'active', 'kpiInfo'),
+    metricCard('Low Stock', (o.lowStock || []).length, 'pharmacy', (o.lowStock || []).length ? 'kpiWarn' : 'kpiGood')
+  ].join('');
+}
+
+function renderPatients(patients = []){
+  dashboardState.patients = patients;
+  $('patientsList').innerHTML = patients.slice(0, 20).map(x => item(x.fullName || 'Patient', [
+    'Patient ID: ' + (x.patientId || '--'),
+    'MRN: ' + (x.mrn || '--'),
+    'Phone: ' + (x.phone || '--')
+  ], `<div class="quickActionGroup"><button class="inlineAction" data-patient-bill="${esc(x.patientId)}" data-patient-name="${esc(x.fullName || '')}" type="button">Direct Bill</button><button class="inlineAction" data-patient-visit="${esc(x.patientId)}" type="button">New Visit</button><button class="inlineAction" data-patient-queue="${esc(x.patientId)}" type="button">Queue</button></div>`)).join('') || emptyState('No patient yet.');
+}
+
+function renderBills(bills = []){
+  dashboardState.bills = bills;
+  $('billsList').innerHTML = bills.slice(0, 20).map(x => item(x.patientName || 'Bill', [
+    'Bill ID: ' + (x.billId || '--'),
+    'Total: ' + ngn(x.total || 0),
+    'Paid: ' + ngn(x.paid || 0),
+    'Balance: ' + ngn(x.balance || 0)
+  ])).join('') || emptyState('No bill yet.');
+}
+
+function renderQueueCard(x){
+  const status = String(x.status || 'waiting');
+  return item(x.patientName || 'Queue', [
+    'Queue ID: ' + (x.queueId || '--'),
+    'Doctor: ' + (x.doctorName || '--'),
+    'Priority: ' + (x.priority || '--'),
+    'Status: ' + status
+  ], `<div class="queueActionRow">
+      <button class="queueActionBtn" data-queue-action="served" data-queue-id="${esc(x.queueId)}" type="button">Serve</button>
+      <button class="queueActionBtn warn" data-queue-action="completed" data-queue-id="${esc(x.queueId)}" type="button">Complete</button>
+      <button class="queueActionBtn danger" data-queue-action="cancelled" data-queue-id="${esc(x.queueId)}" type="button">Cancel</button>
+    </div>`);
+}
+
+function renderSimpleList(targetId, rows, mapper, emptyText){
+  $(targetId).innerHTML = rows.slice(0, 20).map(mapper).join('') || emptyState(emptyText);
+}
+
 async function loadOverview() {
-  const [overview, finance, queue, ai, risks, notifications] = await Promise.all([
+  const days = (($('timelineDays') && $('timelineDays').value) || '14');
+  const [overview, finance, queue, ai, risks, notifications, bills, visits, timeline] = await Promise.all([
     api('/api/portal/overview'),
     api('/api/portal/finance'),
     api('/api/portal/queue'),
     api('/api/ai/clinic_overview'),
     api('/api/ai/risk_analysis'),
-    api('/api/notifications?since=' + encodeURIComponent(feedCursor || 0))
+    api('/api/notifications?since=' + encodeURIComponent(feedCursor || 0)),
+    api('/api/bills'),
+    api('/api/visits'),
+    api('/api/portal/timeline?days=' + encodeURIComponent(days))
   ]);
 
   const clinic = overview.clinic || {};
   const o = overview.overview || {};
+  dashboardState.overview = o;
+  dashboardState.finance = finance.finance || {};
+  dashboardState.queue = queue.queue || [];
+  dashboardState.visits = visits.visits || [];
   $('clinicTitle').textContent = clinic.clinicName || clinic.hospitalName || 'Clinic Pro NG Enterprise Portal';
-  $('cards').innerHTML = [
-    metricCard('Patients', o.patients || 0, 'registered'),
-    metricCard('Visits', o.visits || 0, 'overall'),
-    metricCard('Queue', o.queue || 0, 'live'),
-    metricCard('Revenue', ngn(o.totalPaid || 0), 'paid'),
-    metricCard('Outstanding', ngn(o.outstanding || 0), 'pending'),
-    metricCard('Bills', o.bills || 0, 'created'),
-    metricCard('Admissions', o.admissions || 0, 'active'),
-    metricCard('Low Stock', (o.lowStock || []).length, 'pharmacy')
-  ].join('');
+  $('spotHospital').textContent = clinic.clinicName || clinic.hospitalName || $('hospitalId').value.trim() || '--';
+  renderOverviewCards(o);
 
-  $('queue').innerHTML = (queue.queue || []).slice(0, 12).map(x => item(x.patientName || 'Patient', [
-    'Doctor: ' + (x.doctorName || 'Unassigned'),
-    'Priority: ' + (x.priority || 'normal'),
-    'Status: ' + (x.status || 'waiting')
-  ])).join('') || emptyState('No live queue right now.');
+  $('queue').innerHTML = (queue.queue || []).slice(0, 12).map(renderQueueCard).join('') || emptyState('No live queue right now.');
 
   $('alerts').innerHTML = (ai.alerts || []).map(x => item(x.type || 'Alert', [x.message || '', 'Severity: ' + (x.severity || '--')])).join('') || emptyState('No AI alerts right now.');
   $('doctors').innerHTML = (o.doctorWorkload || []).map(x => item(x.doctor || 'Doctor', ['Open load: ' + (x.count || 0)])).join('') || emptyState('No doctor workload yet.');
@@ -162,10 +397,14 @@ async function loadOverview() {
   ].join('');
 
   const incoming = notifications.notifications || [];
-  if (incoming.length) {
-    feedCursor = Math.max(feedCursor, ...incoming.map(n => Number(n.createdAt || 0)));
-  }
+  if (incoming.length) feedCursor = Math.max(feedCursor, ...incoming.map(n => Number(n.createdAt || 0)));
   renderActivity(incoming);
+  renderBills(bills.bills || []);
+  dashboardState.timeline = timeline.timeline || [];
+  drawBarChart('revenueChart', groupByDay(bills.bills || [], 'createdAt', 'paid'), 'NGN ');
+  drawMixChart('mixChart', o);
+  drawTimelineChart('operationsChart', dashboardState.timeline || []);
+  renderRealtimeBoard();
 }
 
 async function refreshLists() {
@@ -183,188 +422,293 @@ async function refreshLists() {
     api('/api/doctor_queue')
   ]);
 
-  $('patientsList').innerHTML = (patients.patients || []).slice(0, 20).map(x => item(x.fullName || 'Patient', [
-    'Patient ID: ' + (x.patientId || '--'),
-    'MRN: ' + (x.mrn || '--'),
-    'Phone: ' + (x.phone || '--')
-  ])).join('') || emptyState('No patient yet.');
-
-  $('billsList').innerHTML = (bills.bills || []).slice(0, 20).map(x => item(x.patientName || 'Bill', [
-    'Bill ID: ' + (x.billId || '--'),
-    'Total: ' + ngn(x.total || 0),
-    'Paid: ' + ngn(x.paid || 0),
-    'Balance: ' + ngn(x.balance || 0)
-  ])).join('') || emptyState('No bill yet.');
-
-  $('visitsList').innerHTML = (visits.visits || []).slice(0, 20).map(x => item(x.patientName || 'Visit', [
+  renderPatients(patients.patients || []);
+  renderBills(bills.bills || []);
+  renderSimpleList('visitsList', visits.visits || [], x => item(x.patientName || 'Visit', [
     'Visit ID: ' + (x.visitId || '--'),
     'Doctor: ' + (x.doctorName || '--'),
     'Reason: ' + (x.reason || '--'),
     'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No visit yet.');
-
-  $('admissionsList').innerHTML = (admissions.admissions || []).slice(0, 20).map(x => item(x.patientName || 'Admission', [
+  ]), 'No visit yet.');
+  renderSimpleList('admissionsList', admissions.admissions || [], x => item(x.patientName || 'Admission', [
     'Admission ID: ' + (x.admissionId || '--'),
     'Ward: ' + (x.ward || '--'),
     'Bed: ' + (x.bed || '--'),
     'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No admission yet.');
-
-  $('appointmentsList').innerHTML = (appointments.appointments || []).slice(0, 20).map(x => item(x.patientName || 'Appointment', [
+  ]), 'No admission yet.');
+  renderSimpleList('appointmentsList', appointments.appointments || [], x => item(x.patientName || 'Appointment', [
     'Appointment ID: ' + (x.appointmentId || '--'),
     'Doctor: ' + (x.doctorName || '--'),
     'Date: ' + (x.appointmentDate || '--'),
     'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No appointment yet.');
-
-  $('pharmacyList').innerHTML = (dispenses.dispenses || []).slice(0, 20).map(x => item(x.patientName || 'Dispense', [
+  ]), 'No appointment yet.');
+  renderSimpleList('pharmacyList', dispenses.dispenses || [], x => item(x.patientName || 'Dispense', [
     'Drug: ' + (x.drugName || '--'),
     'Qty: ' + (x.quantity || 0),
     'Total: ' + ngn(x.total || 0),
     'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No pharmacy dispense yet.');
-
-  $('labList').innerHTML = (labRequests.labRequests || []).slice(0, 20).map(x => item(x.patientName || 'Lab Request', [
+  ]), 'No pharmacy dispense yet.');
+  renderSimpleList('labList', labRequests.labRequests || [], x => item(x.patientName || 'Lab Request', [
     'Test: ' + (x.testName || '--'),
     'Requested By: ' + (x.requestedBy || '--'),
     'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No lab request yet.');
-
-  $('prescriptionsList').innerHTML = (prescriptions.prescriptions || []).slice(0, 20).map(x => item(x.patientName || 'Prescription', [
+  ]), 'No lab request yet.');
+  renderSimpleList('prescriptionsList', prescriptions.prescriptions || [], x => item(x.patientName || 'Prescription', [
     'Drug: ' + (x.drugName || '--'),
     'Dosage: ' + (x.dosage || '--'),
     'Doctor: ' + (x.doctorName || '--'),
     'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No prescription yet.');
-
-  $('nurseList').innerHTML = (nurseDesk.nurseDesk || []).slice(0, 20).map(x => item(x.patientName || 'Nurse Desk', [
+  ]), 'No prescription yet.');
+  renderSimpleList('nurseList', nurseDesk.nurseDesk || [], x => item(x.patientName || 'Nurse Desk', [
     'Temp: ' + (x.temperature || '--'),
     'BP: ' + (x.bp || '--'),
     'Pulse: ' + (x.pulse || '--'),
     'SpO2: ' + (x.spo2 || '--')
-  ])).join('') || emptyState('No nurse desk entry yet.');
-
-  $('staffList').innerHTML = (staff.staff || []).slice(0, 20).map(x => item(x.fullName || x.email || 'Staff', [
+  ]), 'No nurse desk entry yet.');
+  renderSimpleList('staffList', staff.staff || [], x => item(x.fullName || x.email || 'Staff', [
     'Email: ' + (x.email || '--'),
     'Role: ' + (x.role || '--'),
     'Phone: ' + (x.phone || '--')
-  ])).join('') || emptyState('No staff yet.');
-
-  $('queueList').innerHTML = (doctorQueue.queue || []).slice(0, 20).map(x => item(x.patientName || 'Queue', [
-    'Queue ID: ' + (x.queueId || '--'),
-    'Doctor: ' + (x.doctorName || '--'),
-    'Priority: ' + (x.priority || '--'),
-    'Status: ' + (x.status || '--')
-  ])).join('') || emptyState('No doctor queue yet.');
+  ]), 'No staff yet.');
+  renderSimpleList('queueList', doctorQueue.queue || [], renderQueueCard, 'No doctor queue yet.');
 }
 
-async function loadAll() {
-  saveConn();
-  if (!hasConnection()) {
-    setStatus('error', 'Missing Connection');
-    $('sub').textContent = 'Fill Base URL, Hospital ID and Bearer Token first.';
-    return;
-  }
+async function refreshAll(showToast = false){
   try {
-    $('realtimeText').textContent = 'Loading';
-    await loadOverview();
-    await refreshLists();
-    setStatus('connected', 'Connected');
-    $('realtimeText').textContent = 'Live';
-    $('sub').textContent = `Connected to hospital ${$('hospitalId').value.trim()} • Android-like enterprise portal active`;
+    if (!connReady()) {
+      setStatus('error', 'Missing Connection');
+      $('sub').textContent = 'Fill Base URL and Hospital ID first.';
+      $('realtimeText').textContent = 'Idle';
+      return;
+    }
+    await Promise.all([loadOverview(), refreshLists()]);
+    $('sub').textContent = 'Connected to live clinic workflow. Direct billing and realtime updates active.';
+    $('lastSyncText').textContent = nowText();
+    $('spotRealtime').textContent = eventSource ? 'SSE live channel' : 'Polling active';
+    if (showToast) toast('Dashboard refreshed');
   } catch (e) {
-    setStatus('error', 'Connection Failed');
-    $('realtimeText').textContent = 'Offline';
-    $('sub').textContent = 'Connection failed: ' + e.message;
+    setStatus('error', e.message || 'Connection failed');
+    $('realtimeText').textContent = 'Degraded';
+    $('spotRealtime').textContent = 'Retrying via polling';
+    if (showToast) toast(e.message || 'Connection failed', true);
+    console.error(e);
   }
 }
 
-async function submitForm(formId, path, successMessage, transform = (x) => x) {
+function openSse(){
+  try { if (eventSource) eventSource.close(); } catch {}
+  eventSource = null;
+  if (!connReady()) return;
+  const base = $('base').value.trim().replace(/\/$/, '');
+  const hospitalId = encodeURIComponent($('hospitalId').value.trim());
+  const url = `${base}/api/events/stream?hospitalId=${hospitalId}`;
+  $('transportText').textContent = 'SSE Realtime';
+  const es = new EventSource(url);
+  eventSource = es;
+  es.onopen = () => {
+    setStatus('connected', 'Realtime Connected');
+    $('realtimeText').textContent = 'SSE Live';
+    $('spotRealtime').textContent = 'Realtime SSE connected';
+  };
+  es.onerror = () => {
+    setStatus('error', 'Realtime reconnecting');
+    $('realtimeText').textContent = 'Reconnect';
+    $('spotRealtime').textContent = 'SSE reconnecting';
+  };
+  ['hello','ping','notification','patient_registered','bill_created','visit_created','admission_created','appointment_created','pharmacy_dispensed','lab_request_created','prescription_created','nurse_desk_created','doctor_queue_created','doctor_queue_updated','staff_created'].forEach(name => {
+    es.addEventListener(name, (evt) => {
+      if (name !== 'ping' && name !== 'hello') {
+        try { const data = evt?.data ? JSON.parse(evt.data) : null; if (data?.title || data?.message) toast((data.title || data.type || 'Live update') + (data.message ? ': ' + data.message : '')); } catch {}
+      }
+      debounceRefresh(500);
+    });
+  });
+  es.onmessage = () => debounceRefresh(500);
+}
+
+function startPolling(){
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => refreshAll(false), 15000);
+}
+
+function bindForm(formId, path, successText, after){
   const form = $(formId);
   if (!form) return;
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
     try {
-      const data = transform(formDataObject(form));
-      const result = await api(path, 'POST', data);
+      const body = formDataObject(form);
+      const result = await api(path, 'POST', body);
       form.reset();
-      $('sub').textContent = successMessage + ' • ' + (result?.message || 'Saved successfully');
-      await loadAll();
-    } catch (e) {
-      $('sub').textContent = 'Action failed: ' + e.message;
-      alert(e.message);
+      toast(successText);
+      closeModal();
+      await refreshAll(false);
+      if (typeof after === 'function') after(result, body);
+    } catch (err) {
+      toast(err.message || 'Save failed', true);
     }
   });
 }
 
-async function doSearch(q) {
-  if (!q) {
-    $('searchResults').innerHTML = emptyState('Type something to search.');
-    return;
-  }
-  try {
-    const result = await api('/api/search/patient?q=' + encodeURIComponent(q));
-    $('searchResults').innerHTML = (result.patients || []).map(x => item(x.fullName || 'Patient', [
-      'Patient ID: ' + (x.patientId || '--'),
-      'MRN: ' + (x.mrn || '--'),
-      'Phone: ' + (x.phone || '--'),
-      'Email: ' + (x.email || '--')
-    ])).join('') || emptyState('No patient matched your search.');
-  } catch (e) {
-    $('searchResults').innerHTML = emptyState('Search failed: ' + e.message);
-  }
+function openPatientModal(){
+  openModal('Register New Patient', 'Patient registration modal', 'patientModalTemplate', root => {
+    bindForm('modalPatientForm', '/api/patient/register', 'Patient registered');
+  });
 }
 
-async function loadPatientAi(patientId) {
-  if (!patientId) {
-    renderAiSummary(null);
-    return;
-  }
-  try {
-    const result = await api('/api/ai/patient_summary?patientId=' + encodeURIComponent(patientId));
-    renderAiSummary(result);
-  } catch (e) {
-    $('patientAiSummary').innerHTML = emptyState('AI summary failed: ' + e.message);
-  }
+function openBillModal(patientId = '', patientName = ''){
+  openModal('Direct Billing Workflow', 'Billing modal', 'billModalTemplate', root => {
+    const form = root.querySelector('#modalBillForm');
+    if (patientId) form.patientId.value = patientId;
+    if (patientName) form.patientName.value = patientName;
+    const finderBtn = root.querySelector('#billFinderBtn');
+    const finderInput = root.querySelector('#billFinderInput');
+    finderBtn?.addEventListener('click', () => runBillFinder(root));
+    finderInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runBillFinder(root); } });
+    root.addEventListener('click', (e) => {
+      const pick = e.target.closest('[data-bill-select]');
+      if (!pick) return;
+      form.patientId.value = pick.getAttribute('data-bill-select') || '';
+      form.patientName.value = pick.getAttribute('data-bill-patient-name') || '';
+      const results = root.querySelector('#billFinderResults');
+      if (results) results.innerHTML = emptyState('Patient selected for direct billing.');
+    });
+    bindForm('modalBillForm', '/api/bill/create', 'Bill created');
+  });
 }
 
-function scheduleAutoRefresh() {
-  clearInterval(autoTimer);
-  autoTimer = setInterval(() => {
-    if (hasConnection()) loadAll();
-  }, 15000);
-}
+function quickFillVisit(patientId){ switchTab('visits'); $('visitForm').patientId.value = patientId || ''; }
+function quickFillQueue(patientId){ switchTab('queue'); $('queueForm').patientId.value = patientId || ''; }
 
-$('saveBtn').addEventListener('click', loadAll);
-$('refreshBtn').addEventListener('click', loadAll);
-$('manualFeedBtn').addEventListener('click', loadAll);
-document.querySelectorAll('.navBtn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-
-submitForm('patientForm', '/api/patient/register', 'Patient saved');
-submitForm('billForm', '/api/bill/create', 'Bill saved');
-submitForm('visitForm', '/api/visit/create', 'Visit saved');
-submitForm('admissionForm', '/api/admission/create', 'Admission saved');
-submitForm('appointmentForm', '/api/appointment/create', 'Appointment saved');
-submitForm('pharmacyForm', '/api/pharmacy/dispense', 'Pharmacy dispense saved');
-submitForm('labForm', '/api/lab/request', 'Lab request saved');
-submitForm('prescriptionForm', '/api/prescription/create', 'Prescription saved');
-submitForm('nurseForm', '/api/nurse_desk/create', 'Nurse desk saved');
-submitForm('staffForm', '/api/staff/create', 'Staff saved');
-submitForm('queueForm', '/api/doctor_queue/create', 'Queue saved');
-
-$('searchForm').addEventListener('submit', (e) => {
+async function handleSearch(e){
   e.preventDefault();
-  doSearch(($('searchQuery').value || '').trim());
+  const q = new FormData(e.target).get('q');
+  if (!q) return;
+  try {
+    const res = await api('/api/search/patient?q=' + encodeURIComponent(q));
+    const rows = res.patients || res.results || [];
+    $('searchResults').innerHTML = rows.length ? rows.map(x => `
+      <div class="searchCard">
+        <strong>${esc(x.fullName || x.patientName || 'Patient')}</strong>
+        <div class="muted">Patient ID: ${esc(x.patientId || '--')}</div>
+        <div class="muted">Phone: ${esc(x.phone || '--')} • MRN: ${esc(x.mrn || '--')}</div>
+        <div class="quickActionGroup">
+          <button class="inlineAction" data-patient-bill="${esc(x.patientId)}" data-patient-name="${esc(x.fullName || '')}" type="button">Direct Bill</button>
+          <button class="inlineAction" data-patient-visit="${esc(x.patientId)}" type="button">New Visit</button>
+          <button class="inlineAction" data-ai-patient="${esc(x.patientId)}" type="button">AI Summary</button>
+        </div>
+      </div>`).join('') : emptyState('No patient found.');
+  } catch (err) {
+    toast(err.message || 'Search failed', true);
+  }
+}
+
+async function loadPatientAi(patientId){
+  try {
+    const res = await api('/api/ai/patient_summary?patientId=' + encodeURIComponent(patientId));
+    renderAiSummary(res);
+  } catch (err) {
+    toast(err.message || 'AI summary failed', true);
+  }
+}
+
+async function updateQueueStatus(queueId, status){
+  if (!queueId) return;
+  try {
+    await api('/api/doctor_queue/update', 'POST', { queueId, status });
+    toast('Queue moved to ' + status);
+    await refreshAll(false);
+  } catch (err) {
+    toast(err.message || 'Queue update failed', true);
+  }
+}
+
+async function runBillFinder(root){
+  const input = root.querySelector('#billFinderInput');
+  const box = root.querySelector('#billFinderResults');
+  const q = String(input?.value || '').trim();
+  if (!q) return box.innerHTML = emptyState('Type patient name, phone, MRN or ID.');
+  try {
+    const res = await api('/api/search/patient?q=' + encodeURIComponent(q));
+    const rows = res.patients || [];
+    box.innerHTML = rows.length ? rows.slice(0, 8).map(x => `<div class="searchCard"><strong>${esc(x.fullName || 'Patient')}</strong><div class="muted">${esc(x.patientId || '--')} • ${esc(x.phone || '--')}</div><div class="quickActionGroup"><button type="button" class="inlineAction" data-bill-select="${esc(x.patientId)}" data-bill-patient-name="${esc(x.fullName || '')}">Use For Billing</button></div></div>`).join('') : emptyState('No patient found for billing workflow.');
+  } catch (err) {
+    box.innerHTML = emptyState(err.message || 'Search failed.');
+  }
+}
+
+function saveConnection(){
+  storage.base = $('base').value.trim();
+  storage.hospitalId = $('hospitalId').value.trim();
+  setStatus('connected', 'Connecting...');
+  $('spotHospital').textContent = $('hospitalId').value.trim() || '--';
+  refreshAll(true);
+  openSse();
+}
+
+function restoreConnection(){
+  $('base').value = storage.base;
+  $('hospitalId').value = storage.hospitalId;
+  $('spotHospital').textContent = storage.hospitalId || '--';
+}
+
+function bindGlobalClicks(){
+  document.querySelectorAll('.navBtn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  document.addEventListener('click', (e) => {
+    const billBtn = e.target.closest('[data-patient-bill]');
+    if (billBtn) return openBillModal(billBtn.getAttribute('data-patient-bill'), billBtn.getAttribute('data-patient-name') || '');
+    const visitBtn = e.target.closest('[data-patient-visit]');
+    if (visitBtn) return quickFillVisit(visitBtn.getAttribute('data-patient-visit'));
+    const queueBtn = e.target.closest('[data-patient-queue]');
+    if (queueBtn) return quickFillQueue(queueBtn.getAttribute('data-patient-queue'));
+    const aiBtn = e.target.closest('[data-ai-patient]');
+    if (aiBtn) return loadPatientAi(aiBtn.getAttribute('data-ai-patient'));
+    const qBtn = e.target.closest('[data-queue-action]');
+    if (qBtn) return updateQueueStatus(qBtn.getAttribute('data-queue-id'), qBtn.getAttribute('data-queue-action'));
+    if (e.target.closest('.openPatientModal')) return openPatientModal();
+    if (e.target.closest('.openBillModal')) return openBillModal();
+  });
+}
+
+window.addEventListener('resize', () => {
+  drawBarChart('revenueChart', groupByDay(dashboardState.bills || [], 'createdAt', 'paid'), 'NGN ');
+  drawMixChart('mixChart', dashboardState.overview || {});
+  drawTimelineChart('operationsChart', dashboardState.timeline || []);
 });
 
-$('patientAiForm').addEventListener('submit', (e) => {
-  e.preventDefault();
-  loadPatientAi(($('patientAiId').value || '').trim());
-});
-
+restoreConnection();
 updateClock();
 setInterval(updateClock, 1000);
-scheduleAutoRefresh();
-renderAiSummary(null);
-switchTab(activeTab);
-if (hasConnection()) loadAll();
+bindGlobalClicks();
+$('saveBtn').addEventListener('click', saveConnection);
+$('refreshBtn').addEventListener('click', () => refreshAll(true));
+$('manualFeedBtn').addEventListener('click', () => refreshAll(true));
+$('quickPatientBtn').addEventListener('click', openPatientModal);
+$('quickBillBtn').addEventListener('click', () => openBillModal());
+$('quickVisitBtn').addEventListener('click', () => switchTab('visits'));
+$('quickQueueBtn').addEventListener('click', () => switchTab('queue'));
+$('modalCloseBtn').addEventListener('click', closeModal);
+$('modalWrap').addEventListener('click', (e) => { if (e.target === $('modalWrap')) closeModal(); });
+$('searchForm').addEventListener('submit', handleSearch);
+$('timelineDays')?.addEventListener('change', () => refreshAll(false));
+
+bindForm('patientForm', '/api/patient/register', 'Patient registered');
+bindForm('visitForm', '/api/visit/create', 'Visit saved');
+bindForm('billForm', '/api/bill/create', 'Bill saved');
+bindForm('admissionForm', '/api/admission/create', 'Admission saved');
+bindForm('appointmentForm', '/api/appointment/create', 'Appointment saved');
+bindForm('pharmacyForm', '/api/pharmacy/dispense', 'Dispense saved');
+bindForm('labForm', '/api/lab/request', 'Lab request saved');
+bindForm('prescriptionForm', '/api/prescription/create', 'Prescription saved');
+bindForm('nurseForm', '/api/nurse_desk/create', 'Nurse desk saved');
+bindForm('staffForm', '/api/staff/create', 'Staff saved');
+bindForm('queueForm', '/api/doctor_queue/create', 'Queue saved');
+
+startPolling();
+if (connReady()) {
+  refreshAll(false);
+  openSse();
+} else {
+  setStatus('error', 'Missing Connection');
+  $('sub').textContent = 'Fill Base URL and Hospital ID first.';
+}

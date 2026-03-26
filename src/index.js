@@ -90,13 +90,39 @@ function lightweightRateLimit(req, res, next) {
 function requestValidation(req, res, next) {
   const requiredKey = String(process.env.API_KEY || '').trim();
   const sentKey = String(req.headers['x-api-key'] || '').trim();
-  if (requiredKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
+  const clinicId = String(req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || req.query?.clinicId || req.query?.hospitalId || '').trim();
+  const clinicPortalPath = (
+    req.path.startsWith('/api/portal/') ||
+    req.path.startsWith('/api/ai/') ||
+    req.path.startsWith('/api/notifications') ||
+    req.path.startsWith('/api/events/stream') ||
+    req.path.startsWith('/api/clinic/events') ||
+    req.path.startsWith('/api/patient/') ||
+    req.path === '/api/patients' ||
+    req.path.startsWith('/api/bill/') ||
+    req.path === '/api/bills' ||
+    req.path.startsWith('/api/visit/') ||
+    req.path === '/api/visits' ||
+    req.path.startsWith('/api/admission/') ||
+    req.path === '/api/admissions' ||
+    req.path.startsWith('/api/appointment/') ||
+    req.path === '/api/appointments' ||
+    req.path.startsWith('/api/pharmacy/') ||
+    req.path.startsWith('/api/lab/') ||
+    req.path.startsWith('/api/prescription/') ||
+    req.path === '/api/prescriptions' ||
+    req.path.startsWith('/api/nurse_desk') ||
+    req.path.startsWith('/api/staff/') ||
+    req.path.startsWith('/api/doctor_queue') ||
+    req.path.startsWith('/api/search/patient')
+  );
+  const allowClinicScopedWithoutApiKey = clinicPortalPath && !!clinicId;
+  if (requiredKey && !allowClinicScopedWithoutApiKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
     if (sentKey !== requiredKey) return res.status(401).json({ ok:false, error:'Invalid API key' });
   }
   if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && req.body && typeof req.body !== 'object') {
     return res.status(400).json({ ok:false, error:'Invalid JSON body' });
   }
-  const clinicId = String(req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
   if (clinicId && clinicId.length > 120) {
     return res.status(400).json({ ok:false, error:'Invalid clinic identifier' });
   }
@@ -206,10 +232,28 @@ app.get("/api/stmn/events", authMiddleware, (req, res) => {
  * Clinic Pro NG Realtime Events (SSE)
  * Auth: Bearer token from /api/auth/login
  */
-app.get('/api/events/stream', authMiddleware, (req, res) => {
+app.get('/api/events/stream', (req, res) => {
   try {
-    const clinicId = String(req.auth?.clinicId || req.auth?.hospitalId || '').trim();
-    if (!clinicId) return res.status(401).json({ ok:false, error:'Missing auth clinicId' });
+    const clinicId = String(req.auth?.clinicId || req.auth?.hospitalId || req.query?.hospitalId || req.query?.clinicId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
+    if (!clinicId) return res.status(401).json({ ok:false, error:'Missing clinicId or hospitalId' });
+    clinicSseHeaders(res);
+    clinicSendSse(res, 'hello', { ok:true, clinicId, at: Date.now() });
+    clinicAddClient(clinicId, res);
+    const ping = setInterval(() => {
+      try { clinicSendSse(res, 'ping', { t: Date.now() }); } catch {}
+    }, 15000);
+    req.on('close', () => {
+      try { clearInterval(ping); } catch {}
+    });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:'Server error' });
+  }
+});
+
+app.get('/api/clinic/events', (req, res) => {
+  try {
+    const clinicId = String(req.query?.hospitalId || req.query?.clinicId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
+    if (!clinicId) return res.status(401).json({ ok:false, error:'Missing clinicId or hospitalId' });
     clinicSseHeaders(res);
     clinicSendSse(res, 'hello', { ok:true, clinicId, at: Date.now() });
     clinicAddClient(clinicId, res);

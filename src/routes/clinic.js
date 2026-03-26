@@ -983,6 +983,62 @@ r.get('/doctor_queue', (req, res) => {
   return res.json({ ok:true, queue: sortRecent(rows).slice(0, 500), queueCount: rows.length });
 });
 
+r.post('/doctor_queue/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const queueId = toStr(req.body?.queueId || req.body?.id);
+    if (!queueId) return res.status(400).json({ ok:false, error:'queueId is required' });
+    const db = readDB(); ensureArrays(db);
+    const row = db.clinicDoctorQueue.find(x => String(x.clinicId) === clinicId && String(x.queueId) === queueId);
+    if (!row) return res.status(404).json({ ok:false, error:'Queue entry not found' });
+    const prevStatus = toStr(row.status || 'waiting');
+    const nextStatus = toStr(req.body?.status || prevStatus) || prevStatus;
+    row.status = nextStatus;
+    if (req.body?.priority != null) row.priority = toStr(req.body.priority || row.priority);
+    if (req.body?.doctorName != null) row.doctorName = toStr(req.body.doctorName || row.doctorName || 'Unassigned');
+    if (req.body?.note != null) row.note = toStr(req.body.note);
+    row.updatedAt = now();
+    const actionWord = nextStatus === prevStatus ? 'updated' : `moved to ${nextStatus}`;
+    const summary = finalizeWrite(db, clinicId, 'doctor_queue_updated', 'Doctor Queue Updated', `${row.patientName || 'Patient'} ${actionWord}.`, { queueId: row.queueId, patientId: row.patientId, doctorName: row.doctorName, status: row.status, previousStatus: prevStatus }, req);
+    return res.json({ ok:true, queue: row, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'doctor queue update failed' });
+  }
+});
+
+r.get('/portal/timeline', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const days = Math.max(7, Math.min(90, toNum(req.query?.days, 14)));
+  const db = readDB(); ensureArrays(db);
+  const start = now() - (days * 86400000);
+  const dayKey = ts => {
+    const d = new Date(toNum(ts));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  };
+  const buckets = new Map();
+  const ensure = k => {
+    if (!buckets.has(k)) buckets.set(k, { day: k, revenuePaid: 0, revenueTotal: 0, bills: 0, visits: 0, patients: 0, queueAdded: 0 });
+    return buckets.get(k);
+  };
+  for (let i = days - 1; i >= 0; i--) {
+    const d = Date.now() - (i * 86400000);
+    ensure(dayKey(d));
+  }
+  db.clinicBills.filter(x => String(x.clinicId) === clinicId && toNum(x.createdAt) >= start).forEach(x => {
+    const b = ensure(dayKey(x.createdAt));
+    b.revenuePaid += toNum(x.paid || x.amount_paid);
+    b.revenueTotal += toNum(x.total || x.amount || x.paid);
+    b.bills += 1;
+  });
+  db.clinicVisits.filter(x => String(x.clinicId) === clinicId && toNum(x.createdAt) >= start).forEach(x => { ensure(dayKey(x.createdAt)).visits += 1; });
+  db.clinicPatients.filter(x => String(x.clinicId) === clinicId && toNum(x.createdAt) >= start).forEach(x => { ensure(dayKey(x.createdAt)).patients += 1; });
+  db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && toNum(x.createdAt) >= start).forEach(x => { ensure(dayKey(x.createdAt)).queueAdded += 1; });
+  return res.json({ ok:true, days, timeline: Array.from(buckets.values()) });
+});
+
 r.get('/search/patient', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
   const db = readDB(); ensureArrays(db);
