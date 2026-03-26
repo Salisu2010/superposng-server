@@ -9,7 +9,6 @@ module.exports = {
         PORT: "8080",
         DB_FILE: "/opt/superposng-server/db.json",
         JWT_SECRET: "change_me_to_long_random_secret",
-        API_KEY: "change_me_api_key",
         API_RATE_LIMIT_PER_MIN: "240",
 
         // Firebase Admin SDK service account JSON (server-side only)

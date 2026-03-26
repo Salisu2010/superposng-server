@@ -52,7 +52,17 @@ function initDB() {
       clinicNotifications: [],
       clinicEvents: [],
       clinicBranches: [],
-      clinicSyncCursor: []
+      clinicSyncCursor: [],
+      clinicPatients: [],
+      clinicBills: [],
+      clinicVisits: [],
+      clinicAdmissions: [],
+      clinicAppointments: [],
+      clinicPharmacyDispenses: [],
+      clinicLabRequests: [],
+      clinicPrescriptions: [],
+      clinicNurseDesk: [],
+      clinicDoctorQueue: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -128,6 +138,16 @@ function readDB() {
     if (!Array.isArray(db.clinicEvents)) db.clinicEvents = []
     if (!Array.isArray(db.clinicBranches)) db.clinicBranches = []
     if (!Array.isArray(db.clinicSyncCursor)) db.clinicSyncCursor = []
+    if (!Array.isArray(db.clinicPatients)) db.clinicPatients = []
+    if (!Array.isArray(db.clinicBills)) db.clinicBills = []
+    if (!Array.isArray(db.clinicVisits)) db.clinicVisits = []
+    if (!Array.isArray(db.clinicAdmissions)) db.clinicAdmissions = []
+    if (!Array.isArray(db.clinicAppointments)) db.clinicAppointments = []
+    if (!Array.isArray(db.clinicPharmacyDispenses)) db.clinicPharmacyDispenses = []
+    if (!Array.isArray(db.clinicLabRequests)) db.clinicLabRequests = []
+    if (!Array.isArray(db.clinicPrescriptions)) db.clinicPrescriptions = []
+    if (!Array.isArray(db.clinicNurseDesk)) db.clinicNurseDesk = []
+    if (!Array.isArray(db.clinicDoctorQueue)) db.clinicDoctorQueue = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -175,7 +195,17 @@ function readDB() {
       clinicNotifications: [],
       clinicEvents: [],
       clinicBranches: [],
-      clinicSyncCursor: []
+      clinicSyncCursor: [],
+      clinicPatients: [],
+      clinicBills: [],
+      clinicVisits: [],
+      clinicAdmissions: [],
+      clinicAppointments: [],
+      clinicPharmacyDispenses: [],
+      clinicLabRequests: [],
+      clinicPrescriptions: [],
+      clinicNurseDesk: [],
+      clinicDoctorQueue: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData
