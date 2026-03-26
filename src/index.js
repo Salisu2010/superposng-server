@@ -11,6 +11,7 @@ import { stmnAddClient, stmnSseHeaders, stmnSendSse } from "./stmn_events.js";
 
 import { authMiddleware } from "./middleware/auth.js";
 import { startStmnReminderEngine } from "./stmn_reminder_engine.js";
+import { requestRuntime, notFoundHandler, errorHandler, bindProcessGuards } from "./enterprise_runtime.js";
 import shopRoutes from "./routes/shop.js";
 import pairRoutes from "./routes/pair.js";
 import syncRoutes from "./routes/sync.js";
@@ -33,8 +34,10 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 dotenv.config();
+bindProcessGuards();
 
 const app = express();
+app.set("trust proxy", 1);
 
 // Resolve project root for serving local dashboard assets
 const __filename = fileURLToPath(import.meta.url);
@@ -62,7 +65,21 @@ app.use(helmet({
 }));
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "2mb" }));
+app.use(requestRuntime);
 app.use(morgan("dev"));
+
+app.get("/health", (_req, res) => {
+  return res.json({ ok: true, status: "healthy", service: "superposng-cloud-sync", time: new Date().toISOString() });
+});
+
+app.get("/ready", (_req, res) => {
+  try {
+    const db = readDB();
+    return res.json({ ok: true, status: "ready", dbLoaded: !!db, time: new Date().toISOString() });
+  } catch (e) {
+    return res.status(500).json({ ok: false, status: "not_ready", error: e?.message || "db_load_failed" });
+  }
+});
 
 app.get("/", (_req, res) => {
   res.json({
@@ -256,3 +273,7 @@ app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`))
 
 // StayMasterNG Smart Reminder Engine (WhatsApp/SMS compose via client)
 startStmnReminderEngine();
+
+
+app.use(notFoundHandler);
+app.use(errorHandler);
