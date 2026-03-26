@@ -3,33 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Clinic Pro NG Web Portal</title>
+  <title>Clinic Pro NG Enterprise Portal</title>
   <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
-<div class="wrap">
-  <div class="hero card">
-    <div>
-      <h1>Clinic Pro NG Web Portal</h1>
-      <p id="sub">Connect your hospital cloud token to view live overview and manage clinic data from the portal.</p>
+<div class="shell">
+  <aside class="sidebar card">
+    <div class="brandBlock">
+      <div class="brandGlow"></div>
+      <div>
+        <div class="eyebrow">Enterprise Hospital System</div>
+        <h1>Clinic Pro NG</h1>
+        <p class="muted">Web Portal aligned to Android workflow</p>
+      </div>
     </div>
-    <div class="toolbar">
-      <input id="base" placeholder="Base URL" />
-      <input id="hospitalId" placeholder="Hospital ID" />
-      <input id="token" placeholder="Bearer Token" />
-      <button id="saveBtn" type="button">Connect</button>
-      <button id="refreshBtn" type="button">Refresh</button>
+
+    <div class="connPanel">
+      <label>Base URL</label>
+      <input id="base" placeholder="https://api.superpos.com.ng">
+      <label>Hospital ID</label>
+      <input id="hospitalId" placeholder="cln_xxxxxxxx">
+      <label>Bearer Token</label>
+      <input id="token" placeholder="Paste token here">
+      <div class="btnRow">
+        <button id="saveBtn" type="button" class="primaryBtn">Connect</button>
+        <button id="refreshBtn" type="button" class="ghostBtn">Refresh</button>
+      </div>
     </div>
-  </div>
 
-  <div class="grid cards" id="cards"></div>
-
-  <div class="card" style="margin-top:16px">
-    <div class="toolbar" id="topActions">
-      <button class="navBtn" data-tab="overview" type="button">Overview</button>
+    <nav class="navList">
+      <button class="navBtn active" data-tab="overview" type="button">Overview</button>
       <button class="navBtn" data-tab="patients" type="button">Patients</button>
-      <button class="navBtn" data-tab="billing" type="button">Billing</button>
       <button class="navBtn" data-tab="visits" type="button">Visits</button>
+      <button class="navBtn" data-tab="billing" type="button">Billing</button>
       <button class="navBtn" data-tab="admission" type="button">Admission</button>
       <button class="navBtn" data-tab="appointment" type="button">Appointment</button>
       <button class="navBtn" data-tab="pharmacy" type="button">Pharmacy</button>
@@ -39,251 +45,317 @@
       <button class="navBtn" data-tab="staff" type="button">Manage Staff</button>
       <button class="navBtn" data-tab="queue" type="button">Doctor Queue</button>
       <button class="navBtn" data-tab="search" type="button">Search Patient</button>
-    </div>
-  </div>
+    </nav>
+  </aside>
 
-  <section class="tabSection" id="tab-overview">
-    <div class="grid two">
-      <div class="card"><h2>Live Queue</h2><div id="queue" class="list"></div></div>
-      <div class="card"><h2>AI Alerts</h2><div id="alerts" class="list"></div></div>
-    </div>
-    <div class="grid two">
-      <div class="card"><h2>Doctor Workload</h2><div id="doctors" class="list"></div></div>
-      <div class="card"><h2>Finance</h2><div id="finance" class="list"></div></div>
-    </div>
-  </section>
+  <main class="content">
+    <section class="topbar card">
+      <div>
+        <div class="eyebrow">Executive Control Bar</div>
+        <div class="headlineRow">
+          <h2 id="clinicTitle">Clinic Pro NG Web Portal</h2>
+          <span class="livePill" id="livePill">Disconnected</span>
+        </div>
+        <p id="sub">Connect your cloud server to activate Android-like live portal workflow.</p>
+      </div>
+      <div class="topStats">
+        <div class="tinyStat">
+          <span>System Time</span>
+          <strong id="systemClock">--</strong>
+        </div>
+        <div class="tinyStat">
+          <span>Current Role</span>
+          <strong id="roleText">Portal</strong>
+        </div>
+        <div class="tinyStat">
+          <span>Realtime</span>
+          <strong id="realtimeText">Idle</strong>
+        </div>
+      </div>
+    </section>
 
-  <section class="tabSection" id="tab-patients" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Register New Patient</h2>
-        <form id="patientForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="fullName" placeholder="Full Name" required>
-          <input name="phone" placeholder="Phone">
-          <input name="gender" placeholder="Gender">
-          <input name="age" placeholder="Age" type="number">
-          <input name="mrn" placeholder="MRN (optional)">
-          <input name="dob" placeholder="DOB YYYY-MM-DD">
-          <input name="email" placeholder="Email">
-          <input name="bloodGroup" placeholder="Blood Group">
-          <input name="genotype" placeholder="Genotype">
-          <input name="nextOfKin" placeholder="Next of Kin">
-          <input name="nextOfKinPhone" placeholder="Next of Kin Phone">
-          <input name="maritalStatus" placeholder="Marital Status">
-          <input name="address" placeholder="Address" style="grid-column:1/-1">
-          <textarea name="notes" placeholder="Notes" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Patient</button>
-        </form>
-      </div>
-      <div class="card">
-        <h2>Recent Patients</h2>
-        <div id="patientsList" class="list"></div>
-      </div>
-    </div>
-  </section>
+    <section class="cardsGrid" id="cards"></section>
 
-  <section class="tabSection" id="tab-billing" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Create Bill</h2>
-        <form id="billForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="category" placeholder="Category">
-          <input name="total" placeholder="Total Amount" type="number" step="0.01" required>
-          <input name="paid" placeholder="Amount Paid" type="number" step="0.01">
-          <input name="paymentMethod" placeholder="Payment Method">
-          <input name="billNo" placeholder="Bill No (optional)">
-          <textarea name="description" placeholder="Description" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Bill</button>
-        </form>
+    <section class="tabSection" id="tab-overview">
+      <div class="grid2">
+        <div class="card tallCard">
+          <div class="sectionHead">
+            <div>
+              <div class="eyebrow">Live Activity</div>
+              <h3>Operational Feed</h3>
+            </div>
+            <button id="manualFeedBtn" type="button" class="ghostBtn smallBtn">Reload Feed</button>
+          </div>
+          <div id="activityFeed" class="feedList"></div>
+        </div>
+        <div class="stackCol">
+          <div class="card">
+            <div class="sectionHead"><div><div class="eyebrow">Doctor Queue</div><h3>Live Queue</h3></div></div>
+            <div id="queue" class="list"></div>
+          </div>
+          <div class="card">
+            <div class="sectionHead"><div><div class="eyebrow">AI Layer</div><h3>AI Alerts</h3></div></div>
+            <div id="alerts" class="list"></div>
+          </div>
+        </div>
       </div>
-      <div class="card"><h2>Recent Bills</h2><div id="billsList" class="list"></div></div>
-    </div>
-  </section>
 
-  <section class="tabSection" id="tab-visits" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Create Visit</h2>
-        <form id="visitForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="doctorName" placeholder="Doctor Name">
-          <input name="reason" placeholder="Reason / Complaint">
-          <input name="diagnosis" placeholder="Diagnosis">
-          <input name="vitalSummary" placeholder="Vitals Summary">
-          <input name="priority" placeholder="Priority e.g. normal / urgent">
-          <input name="status" placeholder="Status e.g. waiting / seen">
-          <input name="queueStatus" placeholder="Queue Status">
-          <button type="submit">Save Visit</button>
-        </form>
+      <div class="grid2 mt16">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Doctors</div><h3>Workload</h3></div></div>
+          <div id="doctors" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Finance</div><h3>Financial Pulse</h3></div></div>
+          <div id="finance" class="list"></div>
+        </div>
       </div>
-      <div class="card"><h2>Recent Visits</h2><div id="visitsList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-admission" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Create Admission</h2>
-        <form id="admissionForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="ward" placeholder="Ward">
-          <input name="bed" placeholder="Bed">
-          <input name="doctorName" placeholder="Doctor Name">
-          <input name="status" placeholder="Status e.g. admitted">
-          <input name="admittedAt" placeholder="Admitted At timestamp (optional)">
-          <textarea name="note" placeholder="Admission Note" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Admission</button>
-        </form>
+    <section class="tabSection hidden" id="tab-patients">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div></div>
+          <form id="patientForm" class="formGrid">
+            <input name="fullName" placeholder="Full Name" required>
+            <input name="phone" placeholder="Phone Number">
+            <select name="gender"><option value="">Gender</option><option>Male</option><option>Female</option></select>
+            <input name="age" placeholder="Age" type="number">
+            <input name="mrn" placeholder="MRN optional">
+            <input name="dob" placeholder="DOB YYYY-MM-DD">
+            <input name="email" placeholder="Email">
+            <input name="bloodGroup" placeholder="Blood Group">
+            <input name="genotype" placeholder="Genotype">
+            <input name="maritalStatus" placeholder="Marital Status">
+            <input name="nextOfKin" placeholder="Next of Kin">
+            <input name="nextOfKinPhone" placeholder="Next of Kin Phone">
+            <textarea name="address" placeholder="Address" class="span2"></textarea>
+            <textarea name="notes" placeholder="Notes" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Patient</button></div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div></div>
+          <div id="patientsList" class="list"></div>
+        </div>
       </div>
-      <div class="card"><h2>Recent Admissions</h2><div id="admissionsList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-appointment" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Create Appointment</h2>
-        <form id="appointmentForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="doctorName" placeholder="Doctor Name">
-          <input name="appointmentDate" placeholder="Appointment Date">
-          <input name="status" placeholder="Status">
-          <textarea name="note" placeholder="Appointment Note" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Appointment</button>
-        </form>
+    <section class="tabSection hidden" id="tab-visits">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Consultation</div><h3>Create Visit</h3></div></div>
+          <form id="visitForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="reason" placeholder="Reason / Complaint">
+            <input name="diagnosis" placeholder="Diagnosis">
+            <input name="vitalSummary" placeholder="Vitals Summary">
+            <select name="priority"><option value="normal">Priority normal</option><option value="urgent">Urgent</option><option value="critical">Critical</option></select>
+            <select name="status"><option value="waiting">Status waiting</option><option value="seen">Seen</option><option value="completed">Completed</option></select>
+            <select name="queueStatus"><option value="waiting">Queue waiting</option><option value="served">Served</option><option value="cancelled">Cancelled</option></select>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Visit</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Visits</div><h3>Recent Visits</h3></div></div><div id="visitsList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Recent Appointments</h2><div id="appointmentsList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-pharmacy" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Pharmacy Dispense</h2>
-        <form id="pharmacyForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="drugName" placeholder="Drug Name" required>
-          <input name="quantity" placeholder="Quantity" type="number" step="0.01">
-          <input name="unitPrice" placeholder="Unit Price" type="number" step="0.01">
-          <input name="total" placeholder="Total Amount" type="number" step="0.01">
-          <input name="status" placeholder="Status">
-          <textarea name="note" placeholder="Dispense Note" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Dispense</button>
-        </form>
+    <section class="tabSection hidden" id="tab-billing">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Billing Desk</div><h3>Create Bill</h3></div></div>
+          <form id="billForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="category" placeholder="Category">
+            <input name="total" placeholder="Total Amount" type="number" step="0.01" required>
+            <input name="paid" placeholder="Amount Paid" type="number" step="0.01">
+            <select name="paymentMethod"><option value="">Payment Method</option><option>Cash</option><option>Transfer</option><option>POS</option><option>Insurance</option></select>
+            <input name="billNo" placeholder="Bill No optional">
+            <textarea name="description" placeholder="Description" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Bill</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Billing</div><h3>Recent Bills</h3></div></div><div id="billsList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Recent Dispenses</h2><div id="pharmacyList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-lab" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Create Lab Request</h2>
-        <form id="labForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="testName" placeholder="Test Name" required>
-          <input name="requestedBy" placeholder="Requested By">
-          <input name="status" placeholder="Status">
-          <textarea name="result" placeholder="Result" style="grid-column:1/-1;min-height:80px"></textarea>
-          <textarea name="note" placeholder="Lab Note" style="grid-column:1/-1;min-height:80px"></textarea>
-          <button type="submit">Save Lab Request</button>
-        </form>
+    <section class="tabSection hidden" id="tab-admission">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Ward Control</div><h3>Create Admission</h3></div></div>
+          <form id="admissionForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="ward" placeholder="Ward">
+            <input name="bed" placeholder="Bed">
+            <input name="doctorName" placeholder="Doctor Name">
+            <select name="status"><option value="admitted">Admitted</option><option value="active">Active</option><option value="discharged">Discharged</option></select>
+            <input name="admittedAt" placeholder="Admitted timestamp optional">
+            <textarea name="note" placeholder="Admission Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Admission</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Admissions</div><h3>Recent Admissions</h3></div></div><div id="admissionsList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Recent Lab Requests</h2><div id="labList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-prescription" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Create Prescription</h2>
-        <form id="prescriptionForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="doctorName" placeholder="Doctor Name">
-          <input name="drugName" placeholder="Drug Name" required>
-          <input name="dosage" placeholder="Dosage">
-          <input name="frequency" placeholder="Frequency">
-          <input name="duration" placeholder="Duration">
-          <input name="route" placeholder="Route">
-          <input name="status" placeholder="Status">
-          <textarea name="note" placeholder="Prescription Note" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Prescription</button>
-        </form>
+    <section class="tabSection hidden" id="tab-appointment">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Scheduling</div><h3>Create Appointment</h3></div></div>
+          <form id="appointmentForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="appointmentDate" placeholder="Appointment Date">
+            <select name="status"><option value="scheduled">Scheduled</option><option value="confirmed">Confirmed</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>
+            <textarea name="note" placeholder="Appointment Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Appointment</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Appointments</div><h3>Recent Appointments</h3></div></div><div id="appointmentsList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Recent Prescriptions</h2><div id="prescriptionsList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-nurse" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Nurse Desk Entry</h2>
-        <form id="nurseForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="nurseName" placeholder="Nurse Name">
-          <input name="temperature" placeholder="Temperature">
-          <input name="bp" placeholder="Blood Pressure">
-          <input name="pulse" placeholder="Pulse">
-          <input name="spo2" placeholder="SpO2">
-          <input name="status" placeholder="Status">
-          <textarea name="note" placeholder="Nurse Note" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Nurse Desk</button>
-        </form>
+    <section class="tabSection hidden" id="tab-pharmacy">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Pharmacy Desk</div><h3>Pharmacy Dispense</h3></div></div>
+          <form id="pharmacyForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="drugName" placeholder="Drug Name" required>
+            <input name="quantity" placeholder="Quantity" type="number" step="0.01">
+            <input name="unitPrice" placeholder="Unit Price" type="number" step="0.01">
+            <input name="total" placeholder="Total Amount" type="number" step="0.01">
+            <select name="status"><option value="dispensed">Dispensed</option><option value="pending">Pending</option></select>
+            <textarea name="note" placeholder="Dispense Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Dispense</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Pharmacy</div><h3>Recent Dispenses</h3></div></div><div id="pharmacyList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Recent Nurse Desk Entries</h2><div id="nurseList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-staff" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Manage Staff</h2>
-        <form id="staffForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="fullName" placeholder="Full Name">
-          <input name="email" placeholder="Email" required>
-          <input name="phone" placeholder="Phone">
-          <input name="role" placeholder="Role e.g. Admin/Doctor/Nurse" required>
-          <input name="password" placeholder="Password">
-          <input name="branchId" placeholder="Branch ID">
-          <button type="submit">Save Staff</button>
-        </form>
-        <p style="margin-top:10px">Note: server ya sa wannan endpoint Admin-only.</p>
+    <section class="tabSection hidden" id="tab-lab">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Lab Desk</div><h3>Create Lab Request</h3></div></div>
+          <form id="labForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="testName" placeholder="Test Name" required>
+            <input name="requestedBy" placeholder="Requested By">
+            <select name="status"><option value="requested">Requested</option><option value="pending">Pending</option><option value="processing">Processing</option><option value="completed">Completed</option></select>
+            <textarea name="result" placeholder="Result" class="span2"></textarea>
+            <textarea name="note" placeholder="Lab Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Lab Request</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Laboratory</div><h3>Recent Lab Requests</h3></div></div><div id="labList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Staff List</h2><div id="staffList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-queue" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Doctor Queue Entry</h2>
-        <form id="queueForm" class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-          <input name="patientId" placeholder="Patient ID" required>
-          <input name="doctorName" placeholder="Doctor Name">
-          <input name="visitId" placeholder="Visit ID">
-          <input name="priority" placeholder="Priority">
-          <input name="status" placeholder="Status">
-          <textarea name="note" placeholder="Queue Note" style="grid-column:1/-1;min-height:90px"></textarea>
-          <button type="submit">Save Queue</button>
-        </form>
+    <section class="tabSection hidden" id="tab-prescription">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Prescription Desk</div><h3>Create Prescription</h3></div></div>
+          <form id="prescriptionForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="drugName" placeholder="Drug Name" required>
+            <input name="dosage" placeholder="Dosage">
+            <input name="doctorName" placeholder="Doctor Name">
+            <select name="status"><option value="prescribed">Prescribed</option><option value="active">Active</option><option value="stopped">Stopped</option></select>
+            <textarea name="note" placeholder="Prescription Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Prescription</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Prescription</div><h3>Recent Prescriptions</h3></div></div><div id="prescriptionsList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Doctor Queue</h2><div id="queueList" class="list"></div></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="tabSection" id="tab-search" style="display:none">
-    <div class="grid two">
-      <div class="card">
-        <h2>Search Patient</h2>
-        <form id="searchForm" class="toolbar">
-          <input id="searchQuery" placeholder="Search by Patient ID, MRN, Name, Phone, Email" style="min-width:320px;flex:1">
-          <button type="submit">Search</button>
-        </form>
+    <section class="tabSection hidden" id="tab-nurse">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Nurse Desk</div><h3>Nurse Observation Entry</h3></div></div>
+          <form id="nurseForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="nurseName" placeholder="Nurse Name">
+            <input name="temperature" placeholder="Temperature">
+            <input name="bp" placeholder="Blood Pressure">
+            <input name="pulse" placeholder="Pulse">
+            <input name="spo2" placeholder="SpO2">
+            <select name="status"><option value="recorded">Recorded</option><option value="reviewed">Reviewed</option></select>
+            <textarea name="note" placeholder="Nurse Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Nurse Desk</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Nursing</div><h3>Recent Nurse Entries</h3></div></div><div id="nurseList" class="list"></div></div>
       </div>
-      <div class="card"><h2>Search Results</h2><div id="searchResults" class="list"></div></div>
-    </div>
-  </section>
+    </section>
+
+    <section class="tabSection hidden" id="tab-staff">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Administration</div><h3>Manage Staff</h3></div></div>
+          <form id="staffForm" class="formGrid">
+            <input name="fullName" placeholder="Full Name">
+            <input name="email" placeholder="Email" required>
+            <input name="phone" placeholder="Phone">
+            <select name="role">
+              <option value="Admin">Admin</option>
+              <option value="Doctor">Doctor</option>
+              <option value="Nurse">Nurse</option>
+              <option value="Cashier">Cashier</option>
+              <option value="Receptionist">Receptionist</option>
+              <option value="Pharmacy">Pharmacy</option>
+              <option value="Lab">Lab</option>
+            </select>
+            <input name="password" placeholder="Password">
+            <input name="branchId" placeholder="Branch ID">
+            <div class="span2 noteLine">Note: server endpoint remains Admin-only.</div>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Staff</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Staff</div><h3>Staff List</h3></div></div><div id="staffList" class="list"></div></div>
+      </div>
+    </section>
+
+    <section class="tabSection hidden" id="tab-queue">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Queue Desk</div><h3>Doctor Queue Entry</h3></div></div>
+          <form id="queueForm" class="formGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="visitId" placeholder="Visit ID">
+            <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critical">Critical</option></select>
+            <select name="status"><option value="waiting">Waiting</option><option value="served">Served</option><option value="cancelled">Cancelled</option></select>
+            <textarea name="note" placeholder="Queue Note" class="span2"></textarea>
+            <div class="span2 formActions"><button type="submit" class="primaryBtn">Save Queue</button></div>
+          </form>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Queue</div><h3>Doctor Queue</h3></div></div><div id="queueList" class="list"></div></div>
+      </div>
+    </section>
+
+    <section class="tabSection hidden" id="tab-search">
+      <div class="grid2">
+        <div class="card">
+          <div class="sectionHead"><div><div class="eyebrow">Search Engine</div><h3>Search Patient</h3></div></div>
+          <form id="searchForm" class="toolbarWide">
+            <input id="searchQuery" placeholder="Search by Patient ID, MRN, Name, Phone or Email">
+            <button type="submit" class="primaryBtn">Search</button>
+          </form>
+          <div class="divider"></div>
+          <div class="sectionHead compact"><div><div class="eyebrow">AI Summary</div><h3>Patient AI Summary</h3></div></div>
+          <form id="patientAiForm" class="toolbarWide">
+            <input id="patientAiId" placeholder="Enter Patient ID for AI summary">
+            <button type="submit" class="ghostBtn">Load Summary</button>
+          </form>
+          <div id="patientAiSummary" class="list mt16"></div>
+        </div>
+        <div class="card"><div class="sectionHead"><div><div class="eyebrow">Results</div><h3>Search Results</h3></div></div><div id="searchResults" class="list"></div></div>
+      </div>
+    </section>
+  </main>
 </div>
 <script src="/dashboard/app.js"></script>
 </body>
