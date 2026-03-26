@@ -27,6 +27,7 @@ import ownerRoutes from "./routes/owner.js";
 import rmpRoutes from "./routes/rmp.js";
 import trialRoutes from "./routes/trial.js";
 import trackguardRoutes from "./routes/trackguard.js";
+import clinicEnterpriseRoutes from "./routes/clinic_enterprise.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -84,6 +85,10 @@ app.use("/dashboard/trackguard", express.static(path.join(WEB_DIR, "trackguard")
 app.use("/dev", express.static(path.join(WEB_DIR, "dev")));
 // Owner Cloud Dashboard UI
 app.use("/owner", express.static(path.join(WEB_DIR, "owner")));
+// Clinic Pro NG doctor/manager enterprise portal
+app.use("/portal", express.static(path.join(WEB_DIR, "hospital_portal")));
+app.use("/manager-portal", express.static(path.join(WEB_DIR, "hospital_portal")));
+app.use("/doctor-portal", express.static(path.join(WEB_DIR, "hospital_portal")));
 
 // Some hosts/proxies don't automatically redirect "/dev" -> "/dev/" for static mounts.
 // Guarantee that the root paths load index.html.
@@ -99,6 +104,9 @@ function sendIndex(res, dirName) {
 app.get("/dev", (_req, res) => sendIndex(res, "dev"));
 app.get("/dashboard", (_req, res) => sendIndex(res, "dashboard"));
 app.get("/owner", (_req, res) => sendIndex(res, "owner"));
+app.get("/portal", (_req, res) => sendIndex(res, "hospital_portal"));
+app.get("/manager-portal", (_req, res) => sendIndex(res, "hospital_portal"));
+app.get("/doctor-portal", (_req, res) => sendIndex(res, "hospital_portal"));
 app.get("/dashboard/trackguard", (_req, res) => sendIndex(res, "trackguard"));
 app.use("/api/dashboard", dashboardRoutes);
 
@@ -117,6 +125,8 @@ app.use("/api/trial", trialRoutes);
 
 // TrackGuard (Lite + Enterprise) Registry + Dashboard APIs
 app.use("/api/trackguard", trackguardRoutes);
+// Clinic Pro NG Enterprise SaaS / multi-hospital cloud APIs
+app.use("/api/clinic", clinicEnterpriseRoutes);
 
 // RepairMasterPro Online Licensing (RMP)
 app.use("/api/rmp", rmpRoutes);

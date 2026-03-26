@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clinic Pro NG Enterprise Portal</title>
+  <style>
+    :root{--bg:#0b1220;--panel:rgba(255,255,255,.08);--line:rgba(255,255,255,.1);--text:#eaf1ff;--muted:#9fb1d1;--good:#4ade80;--bad:#f87171;--accent:#60a5fa}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,Arial,sans-serif;background:linear-gradient(135deg,#0b1220,#11192d 60%,#0e1726);color:var(--text)}
+    .wrap{max-width:1320px;margin:0 auto;padding:24px}.glass{background:var(--panel);backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:20px;box-shadow:0 12px 30px rgba(0,0,0,.2)}
+    .header{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:20px}.title h1{margin:0;font-size:28px}.title p{margin:6px 0 0;color:var(--muted)}
+    .controls{display:flex;gap:12px;flex-wrap:wrap}.controls input,.controls button{border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:#fff;padding:12px 14px}
+    .controls button{background:linear-gradient(135deg,#2563eb,#60a5fa);cursor:pointer;border:none;font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:18px}.card{padding:18px}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.value{font-size:28px;font-weight:800;margin-top:8px}
+    .section{margin-top:18px;padding:20px}.section h2{margin:0 0 12px;font-size:20px}.two{display:grid;grid-template-columns:1.3fr .7fr;gap:18px}.list{display:grid;gap:10px}.item{padding:14px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+    .good{color:var(--good)} .bad{color:var(--bad)} canvas{width:100%;height:280px;background:rgba(255,255,255,.03);border-radius:14px}
+    @media (max-width: 980px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}} @media (max-width: 640px){.grid{grid-template-columns:1fr}.header{flex-direction:column;align-items:stretch}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="glass header">
+    <div class="title">
+      <h1>Clinic Pro NG Enterprise Portal</h1>
+      <p>Doctor and Manager control center for multi-hospital cloud operations.</p>
+    </div>
+    <div class="controls">
+      <input id="base" placeholder="API base e.g. https://api.superpos.com.ng" />
+      <input id="token" placeholder="Bearer token" style="min-width:320px" />
+      <input id="hospitalId" placeholder="Hospital ID" />
+      <button id="loadBtn">Load Portal</button>
+    </div>
+  </div>
+
+  <div class="grid" id="kpis"></div>
+
+  <div class="two">
+    <div class="glass section">
+      <h2>Revenue Trend</h2>
+      <canvas id="chart" width="900" height="280"></canvas>
+    </div>
+    <div class="glass section">
+      <h2>Live Activity Feed</h2>
+      <div id="feed" class="list"></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="glass section">
+      <h2>Doctor Performance</h2>
+      <div id="doctorList" class="list"></div>
+    </div>
+    <div class="glass section">
+      <h2>AI Watchpoints</h2>
+      <div id="aiBox" class="list"></div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = (id)=>document.getElementById(id);
+function fmt(v){ return new Intl.NumberFormat('en-NG',{maximumFractionDigits:0}).format(Number(v||0)); }
+function money(v){ return 'NGN ' + fmt(v); }
+function card(label,value){ return `<div class="glass card"><div class="label">${label}</div><div class="value">${value}</div></div>`; }
+function authHeaders(){ return { 'Authorization':'Bearer '+$('token').value.trim() }; }
+function api(path){ const base=$('base').value.trim().replace(/\/$/,''); return base+path; }
+async function loadPortal(){
+  const hospitalId = $('hospitalId').value.trim();
+  const [overview, ai] = await Promise.all([
+    fetch(api(`/api/clinic/portal/overview?hospitalId=${encodeURIComponent(hospitalId)}`),{headers:authHeaders()}).then(r=>r.json()),
+    fetch(api(`/api/clinic/ai/overview?hospitalId=${encodeURIComponent(hospitalId)}`),{headers:authHeaders()}).then(r=>r.json())
+  ]);
+  if(!overview.ok){ alert(overview.error||'Failed to load portal'); return; }
+  const m=overview.metrics||{};
+  $('kpis').innerHTML = [
+    card('Total Patients',fmt(m.totalPatients)), card('Active Visits',fmt(m.activeVisits)), card('Queue Count',fmt(m.queueCount)), card('Revenue Today',money(m.revenueToday)),
+    card('Outstanding',money(m.outstandingPayments)), card('Pharmacy Today',money(m.pharmacySalesToday)), card('Admissions Active',fmt(m.admissionsActive)), card('Lab Pending',fmt(m.labPending))
+  ].join('');
+  $('feed').innerHTML = (overview.feed||[]).map(x=>`<div class="item"><strong>${x.title}</strong><div>${x.message}</div><div class="label">${new Date(x.createdAt).toLocaleString()}</div></div>`).join('') || '<div class="item">No recent activity</div>';
+  $('doctorList').innerHTML = (overview.doctorPerformance?.ranking||[]).map(x=>`<div class="item"><strong>${x.doctorName}</strong><div>Patients: ${fmt(x.totalPatients)} · Queue: ${fmt(x.activeQueueLoad)} · Completed: ${fmt(x.completed)}</div></div>`).join('') || '<div class="item">No doctor analytics yet</div>';
+  $('aiBox').innerHTML = (ai.watchlist||[]).map(x=>`<div class="item"><strong>${x.patientName}</strong><div>Risk: ${x.riskBand.toUpperCase()} (${fmt(x.riskScore)})</div><div>${x.recommendedNextStep}</div></div>`).join('') || '<div class="item">No AI watchpoints yet</div>';
+  drawChart(overview.financeSeries||[]);
+  connectEvents(hospitalId);
+}
+let es;
+function connectEvents(hospitalId){
+  try{ if(es) es.close(); }catch{}
+  const url = api(`/api/clinic/events/stream?hospitalId=${encodeURIComponent(hospitalId)}&token=`);
+  es = new EventSource(url.replace('token=','') + ``, { withCredentials:false });
+}
+function drawChart(series){
+  const c=$('chart'), x=c.getContext('2d'); x.clearRect(0,0,c.width,c.height); const pad=28; const arr=series.slice(-14); if(!arr.length){x.fillText('No finance data',20,30);return;}
+  const vals=arr.map(v=>Number(v.payments||0)+Number(v.pharmacyIncome||0)); const max=Math.max(1,...vals); const step=(c.width-pad*2)/Math.max(1,arr.length-1);
+  x.beginPath(); arr.forEach((p,i)=>{ const vx=pad+i*step, vy=c.height-pad-(vals[i]/max)*(c.height-pad*2); if(i===0)x.moveTo(vx,vy); else x.lineTo(vx,vy); }); x.strokeStyle='#60a5fa'; x.lineWidth=3; x.stroke();
+  arr.forEach((p,i)=>{ const vx=pad+i*step, vy=c.height-pad-(vals[i]/max)*(c.height-pad*2); x.beginPath(); x.arc(vx,vy,4,0,Math.PI*2); x.fillStyle='#93c5fd'; x.fill(); x.fillStyle='#9fb1d1'; x.fillText(p.date.slice(5), vx-12, c.height-10); });
+}
+$('loadBtn').addEventListener('click', loadPortal);
+</script>
+</body>
+</html>
