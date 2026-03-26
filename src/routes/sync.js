@@ -8,10 +8,16 @@ const r = Router();
    Helpers
 ========================= */
 
+
+function reply(res, statusCode, payload) {
+  if (res.headersSent || res.writableEnded) return res;
+  return res.status(statusCode).json(payload);
+}
+
 function requireShop(req, res) {
   const raw = req.auth?.shopId ? String(req.auth.shopId) : "";
   if (!raw) {
-    res.status(401).json({ ok: false, error: "Missing auth shopId" });
+    reply(res, 401, { ok: false, error: "Missing auth shopId" });
     return null;
   }
 
@@ -246,7 +252,7 @@ r.get("/products", (req, res) => {
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /products error", e);
-    return res.status(500).json({ ok: false, error: "products_fetch_failed" });
+    return reply(res, 500, { ok: false, error: "products_fetch_failed" });
   }
 });
 
@@ -257,7 +263,7 @@ r.post("/products", (req, res) => {
 
     const items = req.body?.items;
     if (!Array.isArray(items)) {
-      return res.status(400).json({ ok: false, error: "items[] required" });
+      return reply(res, 400, { ok: false, error: "items[] required" });
     }
 
     const db = readDB();
@@ -306,7 +312,7 @@ r.post("/products", (req, res) => {
     return res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /products error", e);
-    return res.status(500).json({ ok: false, error: "products_push_failed" });
+    return reply(res, 500, { ok: false, error: "products_push_failed" });
   }
 });
 
@@ -332,7 +338,7 @@ r.get("/staffs", (req, res) => {
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /staffs error", e);
-    return res.status(500).json({ ok: false, error: "staffs_fetch_failed" });
+    return reply(res, 500, { ok: false, error: "staffs_fetch_failed" });
   }
 });
 
@@ -343,7 +349,7 @@ r.post("/staffs", (req, res) => {
 
     const items = req.body?.items;
     if (!Array.isArray(items)) {
-      return res.status(400).json({ ok: false, error: "items[] required" });
+      return reply(res, 400, { ok: false, error: "items[] required" });
     }
 
     const db = readDB();
@@ -377,7 +383,7 @@ r.post("/staffs", (req, res) => {
     return res.json({ ok: true, upserts, serverTime: now });
   } catch (e) {
     console.error("POST /staffs error", e);
-    return res.status(500).json({ ok: false, error: "staffs_push_failed" });
+    return reply(res, 500, { ok: false, error: "staffs_push_failed" });
   }
 });
 
@@ -431,7 +437,7 @@ r.get("/shop/profile", (req, res) => {
     });
   } catch (e) {
     console.error("GET /shop/profile error", e);
-    return res.status(500).json({ ok: false, error: "shop_profile_fetch_failed" });
+    return reply(res, 500, { ok: false, error: "shop_profile_fetch_failed" });
   }
 });
 
@@ -492,7 +498,7 @@ r.post("/shop/profile", (req, res) => {
     });
   } catch (e) {
     console.error("POST /shop/profile error", e);
-    return res.status(500).json({ ok: false, error: "shop_profile_save_failed" });
+    return reply(res, 500, { ok: false, error: "shop_profile_save_failed" });
   }
 });
 
@@ -532,7 +538,7 @@ r.post(SALE_PATHS, (req, res) => {
     if (!shopId) return;
 
     const sale = extractSaleFromBody(req.body);
-    if (!sale) return res.status(400).json({ ok: false, error: "sale required" });
+    if (!sale) return reply(res, 400, { ok: false, error: "sale required" });
 
     const db = readDB();
     ensureDbArrays(db);
@@ -599,7 +605,7 @@ r.post(SALE_PATHS, (req, res) => {
     }
 
     if (expiredItems.length > 0) {
-      return res.status(409).json({
+      return reply(res, 409, {
         ok: false,
         code: "EXPIRED_BLOCK",
         messageEn:
@@ -729,7 +735,7 @@ r.post(SALE_PATHS, (req, res) => {
     });
   } catch (e) {
     console.error("POST /sales error", e);
-    return res.status(500).json({ ok: false, error: "sale_push_failed" });
+    return reply(res, 500, { ok: false, error: "sale_push_failed" });
   }
 });
 
@@ -758,7 +764,7 @@ r.get("/sales", (req, res) => {
     return res.json({ ok: true, items: list, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /sales error", e);
-    return res.status(500).json({ ok: false, error: "sales_fetch_failed" });
+    return reply(res, 500, { ok: false, error: "sales_fetch_failed" });
   }
 });
 
@@ -802,7 +808,7 @@ r.get("/debtors", (req, res) => {
     return res.json({ ok: true, items, serverTime: Date.now() });
   } catch (e) {
     console.error("GET /debtors error", e);
-    return res.status(500).json({ ok: false, error: "debtors_fetch_failed" });
+    return reply(res, 500, { ok: false, error: "debtors_fetch_failed" });
   }
 });
 
@@ -861,7 +867,7 @@ r.post("/debtorsFull", (req, res) => {
     return res.json({ ok: true, shopId, updated: changed, serverTime: now });
   } catch (e) {
     console.error("debtorsFull error", e);
-    return res.status(500).json({ ok: false, error: "debtorsFull_failed" });
+    return reply(res, 500, { ok: false, error: "debtorsFull_failed" });
   }
 });
 
