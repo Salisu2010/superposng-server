@@ -88,6 +88,11 @@ function lightweightRateLimit(req, res, next) {
   return next();
 }
 function requestValidation(req, res, next) {
+  const requiredKey = String(process.env.API_KEY || '').trim();
+  const sentKey = String(req.headers['x-api-key'] || '').trim();
+  if (requiredKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
+    if (sentKey !== requiredKey) return res.status(401).json({ ok:false, error:'Invalid API key' });
+  }
   if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && req.body && typeof req.body !== 'object') {
     return res.status(400).json({ ok:false, error:'Invalid JSON body' });
   }
@@ -98,6 +103,10 @@ function requestValidation(req, res, next) {
   return next();
 }
 
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok:true, status:'healthy', uptime: process.uptime(), time: new Date().toISOString() });
+});
 
 app.get("/", (_req, res) => {
   res.json({

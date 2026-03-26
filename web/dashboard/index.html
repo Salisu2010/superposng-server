@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Clinic Pro NG Web Portal</title><link rel="stylesheet" href="/dashboard/style.css"></head><body>
+<div class="wrap">
+  <div class="hero card">
+    <div>
+      <h1>Clinic Pro NG Web Portal</h1>
+      <p id="sub">Connect your hospital cloud token to view live overview, finance, queue, and AI risk.</p>
+    </div>
+    <div class="toolbar">
+      <input id="base" placeholder="Base URL" />
+      <input id="hospitalId" placeholder="Hospital ID" />
+      <input id="token" placeholder="Bearer Token" />
+      <button id="saveBtn">Connect</button>
+    </div>
+  </div>
+  <div class="grid cards" id="cards"></div>
+  <div class="grid two">
+    <div class="card"><h2>Live Queue</h2><div id="queue" class="list"></div></div>
+    <div class="card"><h2>AI Alerts</h2><div id="alerts" class="list"></div></div>
+  </div>
+  <div class="grid two">
+    <div class="card"><h2>Doctor Workload</h2><div id="doctors" class="list"></div></div>
+    <div class="card"><h2>Finance</h2><div id="finance" class="list"></div></div>
+  </div>
+</div>
+<script src="/dashboard/app.js"></script>
+</body></html>
