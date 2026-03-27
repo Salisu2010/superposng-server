@@ -62,7 +62,7 @@
     <div class="controlBar">
       <div class="controlLeft">
         <div class="miniGrid">
-          <div class="miniChip"><div class="miniLabel">Clinic</div><div class="miniValue">Clinic Pro NG</div></div>
+          <div class="miniChip"><div class="miniLabel">Clinic</div><div class="miniValue" id="clinicIdentity">Clinic Pro NG</div></div>
           <div class="miniChip"><div class="miniLabel">Hub URL</div><div class="miniValue" id="hubUrl">Cloud Portal</div></div>
           <div class="miniChip"><div class="miniLabel">Current Role</div><div class="miniValue" id="currentRole">Admin</div></div>
           <div class="miniChip"><div class="miniLabel">Current Branch</div><div class="miniValue" id="currentBranch">Main Branch</div></div>
@@ -71,6 +71,13 @@
         </div>
       </div>
       <div class="controlRight">
+
+        <div class="toolbar" style="background:rgba(255,255,255,.10);padding:12px;border-radius:18px;border:1px solid rgba(255,255,255,.16)">
+          <input id="baseUrlInput" placeholder="Server Base URL" style="flex:1;min-width:180px" />
+          <input id="hospitalIdInput" placeholder="Hospital ID / Clinic ID" style="flex:1;min-width:180px" />
+          <button class="btn dark" onclick="connectHospital()">Connect Hospital</button>
+          <button class="btn alt" onclick="disconnectHospital()">Disconnect</button>
+        </div>
         <div class="toolbar">
           <input id="operatorName" placeholder="Operator name" value="Admin-PC" />
           <select id="branchSwitch"><option>Main Branch</option><option>Future Branch A</option><option>Future Branch B</option></select>
@@ -269,13 +276,48 @@
 
 <script>
 const SYNC_TABLES=['patients','visits','bills','prescriptions','pharmacy_items','pharmacy_dispenses','audit_logs'];
+const PORTAL_STATE={baseUrl:'',hospitalId:''};
 let es=null,reconnectTimer=null,pollTimer=null,lastBillId=0,lastSearchTimer=null,lastEventAt=0;
 function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ngn(v){const n=Number(v||0);return 'NGN '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
 function fmt(ts){if(!ts)return '--';try{return new Date(Number(ts)).toLocaleString()}catch(e){return '--'}}
 function setRealtime(live,text){const pill=document.getElementById('realtimePill'),dot=document.getElementById('realtimeDot');pill.className='pill '+(live?'live':'off');dot.className='dot '+(live?'live':'off');document.getElementById('realtimeText').textContent=text||''}
-async function jget(url){const r=await fetch(url);const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){d={error:t||'Invalid response'}}if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-async function jpost(url,payload){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload||{})});const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){d={error:t||'Invalid response'}}if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+function normBase(v){v=String(v||'').trim();if(!v)return window.location.origin;return v.replace(/\/$/,'')}
+function scopedUrl(path){
+  const base = normBase(PORTAL_STATE.baseUrl || localStorage.getItem('clinicPortalBaseUrl') || window.location.origin);
+  const full = /^https?:\/\//i.test(path) ? path : base + path;
+  const hid = (PORTAL_STATE.hospitalId || localStorage.getItem('clinicPortalHospitalId') || '').trim();
+  if (!hid) return full;
+  const u = new URL(full, window.location.origin);
+  if (!u.searchParams.get('hospitalId')) u.searchParams.set('hospitalId', hid);
+  if (!u.searchParams.get('clinicId')) u.searchParams.set('clinicId', hid);
+  return u.toString();
+}
+function scopedHeaders(extra){
+  const hid = (PORTAL_STATE.hospitalId || localStorage.getItem('clinicPortalHospitalId') || '').trim();
+  return Object.assign({}, extra||{}, hid ? {'X-Hospital-Id':hid,'X-Clinic-Id':hid} : {});
+}
+function currentHospitalId(){ return (PORTAL_STATE.hospitalId || localStorage.getItem('clinicPortalHospitalId') || '').trim(); }
+async function jget(url){const r=await fetch(scopedUrl(url),{headers:scopedHeaders()});const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){d={error:t||'Invalid response'}}if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+async function jpost(url,payload){const r=await fetch(scopedUrl(url),{method:'POST',headers:scopedHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload||{})});const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){d={error:t||'Invalid response'}}if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
+function connectHospital(){
+  PORTAL_STATE.baseUrl = normBase(document.getElementById('baseUrlInput').value || window.location.origin);
+  PORTAL_STATE.hospitalId = String(document.getElementById('hospitalIdInput').value || '').trim();
+  if(!PORTAL_STATE.hospitalId){ alert('Shigar da Hospital ID / Clinic ID da aka create.'); return; }
+  localStorage.setItem('clinicPortalBaseUrl', PORTAL_STATE.baseUrl);
+  localStorage.setItem('clinicPortalHospitalId', PORTAL_STATE.hospitalId);
+  document.getElementById('hubUrl').textContent = PORTAL_STATE.baseUrl;
+  document.getElementById('clinicIdentity').textContent = PORTAL_STATE.hospitalId;
+  loadDashboard(true);
+  connectRealtime();
+}
+function disconnectHospital(){
+  PORTAL_STATE.hospitalId='';
+  localStorage.removeItem('clinicPortalHospitalId');
+  if(es) try{es.close()}catch(e){}
+  setRealtime(false,'Disconnected • set Hospital ID to continue');
+  document.getElementById('kpiGrid').innerHTML = '<div class="empty">Connect Hospital ID first.</div>';
+}
 function clockTick(){document.getElementById('liveClock').textContent=new Date().toLocaleString()}
 function renderKpis(status){const cards=[
 ['Total Patients',status.patients,'Master patient records'],['Active Visits',status.visits,'All visit rows'],['Queue Count',status.open_queue,'Live doctor queue'],['Revenue Today',ngn(status.revenue_today),'Cash received today'],['Outstanding Payments',ngn(status.outstanding),'Pending balance'],['Pharmacy Sales Today',ngn(status.pharmacy_sales),'Drug revenue'],['Admissions Active',status.admissions,'Current admissions'],['Lab Pending',status.lab_requests,'Lab requests in system']
@@ -330,7 +372,7 @@ function clearGlobalSearch(){document.getElementById('globalSearchInput').value=
 async function printSummary(type){try{await jpost('/api/dashboard/print_summary_report',{type,actor:actor()});document.getElementById('printResult').textContent=(type==='cashier'?'Cashier':'Daily')+' summary sent to hub printer'}catch(e){document.getElementById('printResult').textContent=e.message}}
 async function printPatientSlip(){try{const pid=document.getElementById('patientSlipId').value.trim();if(!pid)throw new Error('Enter patient ID first');await jpost('/api/dashboard/print_patient_slip',{patient_id:pid,actor:actor()});document.getElementById('printResult').textContent='Patient slip sent to hub printer'}catch(e){document.getElementById('printResult').textContent=e.message}}
 function openPrintableReport(type){window.open('/api/report_printable?type='+encodeURIComponent(type),'_blank')}
-function connectRealtime(){try{if(es)es.close();setRealtime(false,'Connecting realtime engine…');es=new EventSource('/api/events?role=Admin&device_id=pc-dashboard&device_name=PC%20Dashboard&last_event_at='+encodeURIComponent(lastEventAt||0));es.addEventListener('hello',()=>setRealtime(true,'Connected • realtime stream live'));es.addEventListener('heartbeat',()=>setRealtime(true,'Connected • heartbeat active'));es.addEventListener('sync',ev=>{lastEventAt=Date.now();setRealtime(true,'Connected • sync event received');loadFeed();loadDashboard(false)});es.onerror=()=>{setRealtime(false,'Disconnected • reconnecting automatically');try{es.close()}catch(e){};if(!reconnectTimer)reconnectTimer=setTimeout(()=>{reconnectTimer=null;connectRealtime()},3500)}}catch(e){setRealtime(false,'Realtime unavailable • polling active')}}
+function connectRealtime(){try{if(es)es.close();setRealtime(false,'Connecting realtime engine…');const hid=currentHospitalId(); if(!hid){ setRealtime(false,'Hospital ID not connected'); return; } const esUrl=scopedUrl('/api/events?role=Admin&device_id=pc-dashboard&device_name=PC%20Dashboard&last_event_at='+encodeURIComponent(lastEventAt||0)); es=new EventSource(esUrl);es.addEventListener('hello',()=>setRealtime(true,'Connected • realtime stream live'));es.addEventListener('heartbeat',()=>setRealtime(true,'Connected • heartbeat active'));es.addEventListener('sync',ev=>{lastEventAt=Date.now();setRealtime(true,'Connected • sync event received');loadFeed();loadDashboard(false)});es.onerror=()=>{setRealtime(false,'Disconnected • reconnecting automatically');try{es.close()}catch(e){};if(!reconnectTimer)reconnectTimer=setTimeout(()=>{reconnectTimer=null;connectRealtime()},3500)}}catch(e){setRealtime(false,'Realtime unavailable • polling active')}}
 
 async function loadOnlineCloudPhase(){
   try{
@@ -364,9 +406,10 @@ async function loadPatientAiSummary(){
 async function runCloudBackup(){try{const d=await jpost('/api/cloud_backup',{});document.getElementById('printResult').textContent='Cloud backup saved: '+(d.file_name||'backup.json');await loadCloudAi();await loadOnlineCloudPhase()}catch(e){document.getElementById('printResult').textContent=e.message}}
 async function runCloudRestore(){try{const d=await jpost('/api/cloud_restore',{});document.getElementById('printResult').textContent='Cloud restore completed • rows '+(d.restored_rows||0);await loadDashboard(false)}catch(e){document.getElementById('printResult').textContent=e.message}}
 
-async function loadDashboard(full){try{await Promise.all([loadStatus(),loadTables(),loadDoctors(),loadFinance(),loadFeed(),loadReports(),loadCloudAi(),loadOnlineCloudPhase(),refreshLookups()])}catch(e){setRealtime(false,'Dashboard load error • polling active')}}
+async function loadDashboard(full){ if(!currentHospitalId()){ setRealtime(false,'Hospital ID not connected'); document.getElementById('kpiGrid').innerHTML='<div class="empty">Ka saka Hospital ID domin portal ya hade da asibitin da ka create.</div>'; return; } try{await Promise.all([loadStatus(),loadTables(),loadDoctors(),loadFinance(),loadFeed(),loadReports(),loadCloudAi(),loadOnlineCloudPhase(),refreshLookups()])}catch(e){setRealtime(false,'Dashboard load error • polling active')}}
 function startPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>loadDashboard(false),10000)}
-clockTick();setInterval(clockTick,1000);loadDashboard(true);connectRealtime();startPolling();
+(function initPortalConnection(){ const qs = new URLSearchParams(window.location.search); PORTAL_STATE.baseUrl = normBase(qs.get('base') || localStorage.getItem('clinicPortalBaseUrl') || window.location.origin); PORTAL_STATE.hospitalId = String(qs.get('hospitalId') || qs.get('clinicId') || localStorage.getItem('clinicPortalHospitalId') || '').trim(); const b=document.getElementById('baseUrlInput'); const h=document.getElementById('hospitalIdInput'); if(b) b.value = PORTAL_STATE.baseUrl; if(h) h.value = PORTAL_STATE.hospitalId; document.getElementById('hubUrl').textContent = PORTAL_STATE.baseUrl; if(PORTAL_STATE.hospitalId){ document.getElementById('clinicIdentity').textContent = PORTAL_STATE.hospitalId; } })();
+clockTick();setInterval(clockTick,1000);if(currentHospitalId()){loadDashboard(true);connectRealtime()}else{setRealtime(false,'Connect Hospital ID first')}startPolling();
 </script>
 </body>
 </html>
