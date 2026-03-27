@@ -1,415 +1,364 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Clinic Pro NG Enterprise Hub</title>
-  <style>
-    :root{
-      --bg:#f5f8fc;--panel:#ffffffcc;--panel-solid:#fff;--text:#0f172a;--muted:#64748b;--line:#e5edf5;
-      --brand:#0f766e;--brand2:#2563eb;--good:#16a34a;--bad:#dc2626;--warn:#d97706;--shadow:0 10px 40px rgba(15,23,42,.08);
-      --radius:24px;
-    }
-    *{box-sizing:border-box}html,body{margin:0;padding:0;background:linear-gradient(180deg,#f8fbff 0,#f3f7fb 100%);color:var(--text);font-family:Inter,Arial,sans-serif}
-    button,input,select,textarea{font:inherit}button{cursor:pointer}
-    .page{max-width:1750px;margin:0 auto;padding:20px}
-    .glass{background:var(--panel);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.6);box-shadow:var(--shadow)}
-    .hero{border-radius:32px;padding:24px;background:linear-gradient(135deg,#0f172a 0,#0f766e 48%,#2563eb 100%);color:#fff;position:relative;overflow:hidden}
-    .hero:before,.hero:after{content:"";position:absolute;border-radius:999px;background:rgba(255,255,255,.08)}
-    .hero:before{width:300px;height:300px;right:-90px;top:-90px}.hero:after{width:220px;height:220px;left:-60px;bottom:-60px}
-    .heroTop{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap;position:relative;z-index:1}
-    .title{margin:0;font-size:34px;font-weight:900;letter-spacing:-.03em}.sub{margin-top:8px;max-width:920px;line-height:1.7;opacity:.92}
-    .controlBar{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:18px;position:relative;z-index:1}.controlLeft,.controlRight{display:grid;gap:14px}
-    .miniGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.miniChip{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18)}
-    .miniLabel{font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.8;font-weight:700}.miniValue{margin-top:8px;font-size:16px;font-weight:800}
-    .statusBar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.pill{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;font-size:13px;font-weight:800;background:#e2e8f0;color:#0f172a;border:0}
-    .pill.live{background:#dcfce7;color:#166534}.pill.off{background:#fee2e2;color:#991b1b}.pill.warn{background:#fef3c7;color:#92400e}.dot{width:10px;height:10px;border-radius:999px;background:#cbd5e1}.dot.live{background:var(--good)}.dot.off{background:var(--bad)}
-    .row{display:grid;gap:16px;margin-top:18px}.row.two{grid-template-columns:1.4fr .9fr}.row.three{grid-template-columns:1fr 1fr 1fr}.row.four{grid-template-columns:repeat(4,1fr)}
-    .section{border-radius:28px;padding:18px;background:var(--panel-solid);border:1px solid #eef3f8;box-shadow:var(--shadow)}
-    .sectionHead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.sectionTitle{margin:0;font-size:22px;font-weight:900;letter-spacing:-.02em}.muted{color:var(--muted)}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.toolbar input,.toolbar select,.toolbar textarea{border:1px solid #dbe7f2;background:#f9fbfd;border-radius:16px;padding:12px 14px;min-height:46px;color:var(--text)}
-    .toolbar textarea{min-height:90px;resize:vertical}.btn{border:0;border-radius:16px;padding:12px 16px;font-weight:800;background:var(--brand);color:#fff;box-shadow:0 10px 24px rgba(15,118,110,.18)}
-    .btn.alt{background:#e2e8f0;color:#0f172a;box-shadow:none}.btn.blue{background:var(--brand2)}.btn.dark{background:#0f172a}.btn.warn{background:#b45309}
-    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}.kpi{padding:18px;border-radius:22px;background:linear-gradient(180deg,#fff,#f8fbff);border:1px solid #edf3f8;box-shadow:0 10px 30px rgba(15,23,42,.05)}
-    .kpi .k{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800}.kpi .v{margin-top:10px;font-size:28px;font-weight:900;letter-spacing:-.03em}.kpi .s{margin-top:6px;color:var(--muted);font-size:13px}
-    .gridCards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}.card{border-radius:24px;padding:16px;background:#fbfdff;border:1px solid #eaf0f7}
-    .canvasWrap{height:220px;border-radius:20px;background:linear-gradient(180deg,#f8fafc,#f1f5f9);overflow:hidden;border:1px solid #e8eef5}
-    canvas{width:100%;height:100%}
-    .rankList,.feed,.searchResults{display:grid;gap:10px}.feedItem,.rankItem,.resultCard{display:flex;justify-content:space-between;gap:12px;padding:13px 14px;border-radius:18px;background:#f8fbfd;border:1px solid #e9eff6;align-items:flex-start}
-    .leftMeta{display:grid;gap:4px}.feedTitle,.rankTitle,.resultTitle{font-weight:800}.tiny{font-size:12px;color:var(--muted)}
-    .metric{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.metric .m{padding:14px;border-radius:18px;background:#f8fafc;border:1px solid #e4ebf3}.metric .m b{display:block;font-size:24px;margin-top:6px}.metric .m.good{background:#ecfdf5;border-color:#d1fae5}.metric .m.warn{background:#fff7ed;border-color:#fed7aa}.metric .m.bad{background:#fef2f2;border-color:#fecaca}
-    .tableWrap{overflow:auto;border-radius:22px;border:1px solid #e8eef5;background:#fff}.table{width:100%;border-collapse:collapse;min-width:760px}.table th,.table td{padding:12px;border-bottom:1px solid #edf2f7;text-align:left;font-size:13px;vertical-align:top}.table th{position:sticky;top:0;background:#f8fafc;color:#475569;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
-    .formGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.formGrid .span2{grid-column:span 2}.empty{padding:18px;color:var(--muted);text-align:center}
-    .footerNote{margin-top:16px;color:var(--muted);font-size:13px}
-    @media (max-width:1200px){.row.two,.row.three,.row.four,.controlBar{grid-template-columns:1fr}}
-    @media (max-width:700px){.title{font-size:28px}.page{padding:12px}}
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Clinic Pro NG Enterprise Command Center</title>
+  <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
-<div class="page">
-  <section class="hero glass">
-    <div class="heroTop">
+<div class="shell">
+  <aside class="sidebar glass">
+    <div class="brandBlock">
+      <div class="brandAura"></div>
+      <div class="eyebrow">Clinic Pro NG</div>
+      <h1>Enterprise Command Center</h1>
+      <p class="muted">Android style hospital ERP portal with realtime operations, queue intelligence and direct workflow control.</p>
+    </div>
+
+    <section class="panel stack10">
+      <div class="sectionTitle">Connection</div>
+      <label class="fieldLabel">Base URL</label>
+      <input id="baseUrl" placeholder="https://api.superpos.com.ng">
+      <label class="fieldLabel">Hospital ID</label>
+      <input id="hospitalId" placeholder="cln_xxxxxxxx">
+      <div class="row split2">
+        <button id="connectBtn" class="btn btnPrimary" type="button">Connect</button>
+        <button id="refreshBtn" class="btn btnGhost" type="button">Refresh</button>
+      </div>
+      <div class="miniStats compactStats">
+        <div><span>Transport</span><strong id="transportText">Polling</strong></div>
+        <div><span>Last Sync</span><strong id="lastSyncText">--</strong></div>
+      </div>
+    </section>
+
+    <section class="panel stack8">
+      <div class="sectionTitle">Navigation</div>
+      <nav class="navList">
+        <button class="navBtn active" data-tab="overview" type="button"><span>Executive Overview</span><small>KPIs, trends, board</small></button>
+        <button class="navBtn" data-tab="operations" type="button"><span>Operations Board</span><small>Queue, feed, finance</small></button>
+        <button class="navBtn" data-tab="analytics" type="button"><span>Analytics Suite</span><small>Signals, AI, insights</small></button>
+        <button class="navBtn" data-tab="patients" type="button"><span>Patients</span><small>Registry and profiles</small></button>
+        <button class="navBtn" data-tab="workflow" type="button"><span>Workflow Desk</span><small>Visits, bills, lab, staff</small></button>
+        <button class="navBtn" data-tab="search" type="button"><span>Patient Search</span><small>Find and bill instantly</small></button>
+      </nav>
+    </section>
+
+    <section class="panel stack8">
+      <div class="sectionTitle">Quick Launch</div>
+      <button id="quickPatientBtn" class="quickBtn" type="button">New Patient Registration</button>
+      <button id="quickBillBtn" class="quickBtn" type="button">Direct Billing</button>
+      <button id="quickVisitBtn" class="quickBtn" type="button">New Visit</button>
+      <button id="quickQueueBtn" class="quickBtn" type="button">Doctor Queue</button>
+    </section>
+
+    <section class="panel stack8">
+      <div class="sectionTitle">Command Snapshot</div>
+      <div id="sideSummary" class="stack8">
+        <div class="miniPanel"><div class="itemTitle">Status</div><div>Connect portal to start live mode.</div></div>
+      </div>
+    </section>
+  </aside>
+
+  <main class="content">
+    <section class="topbar glass">
       <div>
-        <h1 class="title">Clinic Pro NG — Enterprise Cloud Portal</h1>
-        <div class="sub">World-class hospital cloud control center mirroring the Local Dashboard layout, with hybrid Android, Local Hub, and Web Portal data alignment.</div>
-      </div>
-      <div class="statusBar">
-        <span id="realtimePill" class="pill"><span id="realtimeDot" class="dot"></span><span id="realtimeText">Starting realtime engine…</span></span>
-        <span class="pill warn">Trusted Device • PC Dashboard</span>
-        <span class="pill">Session UI Hook • Ready</span>
-      </div>
-    </div>
-    <div class="controlBar">
-      <div class="controlLeft">
-        <div class="miniGrid">
-          <div class="miniChip"><div class="miniLabel">Clinic</div><div class="miniValue" id="clinicIdentity">Clinic Pro NG</div></div>
-          <div class="miniChip"><div class="miniLabel">Hub URL</div><div class="miniValue" id="hubUrl">Cloud Portal</div></div>
-          <div class="miniChip"><div class="miniLabel">Current Role</div><div class="miniValue" id="currentRole">Admin</div></div>
-          <div class="miniChip"><div class="miniLabel">Current Branch</div><div class="miniValue" id="currentBranch">Main Branch</div></div>
-          <div class="miniChip"><div class="miniLabel">Live Time</div><div class="miniValue" id="liveClock">--</div></div>
-          <div class="miniChip"><div class="miniLabel">System Status</div><div class="miniValue" id="systemHealth">Healthy</div></div>
+        <div class="eyebrow">Executive Control Bar</div>
+        <div class="headlineRow">
+          <h2 id="clinicTitle">Clinic Pro NG Web Portal</h2>
+          <span class="livePill" id="livePill">Disconnected</span>
         </div>
+        <p id="heroSub" class="heroSub">Full analytics enterprise suite for revenue intelligence, patient growth, doctor workload, queue pressure and realtime operations.</p>
       </div>
-      <div class="controlRight">
-
-        <div class="toolbar" style="background:rgba(255,255,255,.10);padding:12px;border-radius:18px;border:1px solid rgba(255,255,255,.16)">
-          <input id="baseUrlInput" placeholder="Server Base URL" style="flex:1;min-width:180px" />
-          <input id="hospitalIdInput" placeholder="Hospital ID / Clinic ID" style="flex:1;min-width:180px" />
-          <button class="btn dark" onclick="connectHospital()">Connect Hospital</button>
-          <button class="btn alt" onclick="disconnectHospital()">Disconnect</button>
-        </div>
-        <div class="toolbar">
-          <input id="operatorName" placeholder="Operator name" value="Admin-PC" />
-          <select id="branchSwitch"><option>Main Branch</option><option>Future Branch A</option><option>Future Branch B</option></select>
-          <button class="btn blue" onclick="loadDashboard(true)">Refresh Executive View</button>
-        </div>
-        <div class="toolbar">
-          <input id="globalSearchInput" placeholder="Global Search — patient, visit, bill" oninput="doGlobalSearch()" style="flex:1;min-width:240px" />
-          <button class="btn alt" onclick="clearGlobalSearch()">Clear</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="sectionHead"><h2 class="sectionTitle">Advanced KPI Cards</h2><div class="muted">Executive Control Bar + Live hospital performance</div></div>
-    <div id="kpiGrid" class="kpis"></div>
-  </section>
-
-
-  <div class="row two">
-    <section class="section">
-      <div class="sectionHead"><h2 class="sectionTitle">AI Command Layer</h2><div class="muted">Rule-based AI triage, operational intelligence, and patient watchlist</div></div>
-      <div id="aiInsightCards" class="metric"></div>
-      <div class="card" style="margin-top:14px">
-        <div class="sectionHead" style="margin-bottom:10px"><div class="tiny">AI Watchlist</div><div id="aiInsightSummary" class="tiny">Loading AI signals…</div></div>
-        <div id="aiWatchlist" class="rankList"></div>
-      </div>
-    </section>
-    <section class="section">
-      <div class="sectionHead"><h2 class="sectionTitle">Cloud Enterprise Layer</h2><div class="muted">Hybrid sync readiness, trusted clients, and cloud promotion status</div></div>
-      <div id="cloudMetrics" class="metric"></div>
-      <div class="card" style="margin-top:14px">
-        <div class="sectionHead" style="margin-bottom:10px"><div class="tiny">Cloud Sync Queue</div><div id="cloudRecommendation" class="tiny">Preparing cloud layer…</div></div>
-        <div id="cloudQueue" class="rankList"></div>
-      </div>
-    </section>
-  </div>
-
-
-  <div class="row two">
-    <section class="section">
-      <div class="sectionHead"><h2 class="sectionTitle">Financial Analytics Pro</h2><div class="toolbar"><button class="btn alt" onclick="loadFinance(true)">Reload Finance</button><button class="btn alt" onclick="openPrintableReport('daily')">Daily Printable HTML</button></div></div>
-      <div class="gridCards">
-        <div class="card"><div class="tiny">Revenue Breakdown • Daily / Weekly</div><div class="canvasWrap"><canvas id="financeBillingChart"></canvas></div></div>
-        <div class="card"><div class="tiny">Pharmacy Income</div><div class="canvasWrap"><canvas id="financePharmacyChart"></canvas></div></div>
-        <div class="card"><div class="tiny">Payment vs Outstanding</div><div class="canvasWrap"><canvas id="paymentMixChart"></canvas></div></div>
-        <div class="card"><div class="tiny">Pharmacy vs Billing</div><div class="canvasWrap"><canvas id="incomeMixChart"></canvas></div></div>
+      <div class="topMeta">
+        <div class="metaCard"><span>System Time</span><strong id="systemClock">--</strong></div>
+        <div class="metaCard"><span>Hospital</span><strong id="spotHospital">--</strong></div>
+        <div class="metaCard"><span>Realtime</span><strong id="realtimeText">Idle</strong></div>
+        <div class="metaCard"><span>Mode</span><strong id="modeText">Analytics</strong></div>
       </div>
     </section>
 
-    <section class="section">
-      <div class="sectionHead"><h2 class="sectionTitle">Doctor Performance Panel</h2><div class="muted">Patients per doctor • Queue load • Busiest doctor</div></div>
-      <div class="metric" id="doctorStats"></div>
-      <div class="card" style="margin-top:14px"><div class="canvasWrap"><canvas id="doctorPerformanceChart"></canvas></div></div>
-      <div class="rankList" id="doctorRanking" style="margin-top:14px"></div>
+    <section class="heroGrid">
+      <article class="heroPanel glass">
+        <div class="heroCopy">
+          <div class="eyebrow">Hospital ERP Command Center</div>
+          <h3>Monitor revenue, care delivery, doctor workload, queue risk and patient growth in one live command screen</h3>
+          <p>Designed in the spirit of your Android LocalHub flow, but restructured into a world class web portal with analytics center, operations board, smart workflow desk and live command actions.</p>
+        </div>
+        <div class="heroBadges" id="heroBadges">
+          <span>SSE Live</span>
+          <span>Revenue Analytics</span>
+          <span>AI Watchlist</span>
+          <span>Doctor Queue</span>
+          <span>Direct Billing</span>
+        </div>
+      </article>
+      <article class="heroRight glass">
+        <div class="cardHead compact"><div><div class="eyebrow">Realtime Board</div><h3>Live Command Pulse</h3></div></div>
+        <div id="realtimeBoard" class="stack10"></div>
+      </article>
     </section>
-  </div>
 
-  <div class="row two">
-    <section class="section">
-      <div class="sectionHead"><h2 class="sectionTitle">Live Activity Feed</h2><div class="muted">Patient registered • Bill created • Drug dispensed • Visit created • Receipt print</div></div>
-      <div id="activityFeed" class="feed"></div>
+    <section id="kpiGrid" class="kpiGrid"></section>
+
+    <section id="tab-overview" class="tabPane">
+      <div class="executiveShell">
+        <div class="overviewMain stack16">
+          <article class="glass card">
+            <div class="cardHead">
+              <div>
+                <div class="eyebrow">Revenue Intelligence</div>
+                <h3>Collections Trend</h3>
+              </div>
+              <div class="row alignCenter">
+                <span class="legend"><i class="dot dotCyan"></i>Paid Revenue</span>
+                <select id="timelineDays" class="select compact">
+                  <option value="7">7d</option>
+                  <option value="14" selected>14d</option>
+                  <option value="30">30d</option>
+                  <option value="60">60d</option>
+                </select>
+              </div>
+            </div>
+            <div id="revenueChart" class="chartHost"></div>
+          </article>
+
+          <div class="dualAnalyticsRow">
+            <article class="glass card">
+              <div class="cardHead compact"><div><div class="eyebrow">Operational Trend</div><h3>Patients, Visits and Queue Growth</h3></div></div>
+              <div id="operationsChart" class="chartHost smallTall"></div>
+            </article>
+            <article class="glass card">
+              <div class="cardHead compact"><div><div class="eyebrow">Performance Mix</div><h3>Operational Balance</h3></div></div>
+              <div id="mixChart" class="chartHost smallTall"></div>
+            </article>
+          </div>
+
+          <article class="glass card">
+            <div class="cardHead"><div><div class="eyebrow">Operations Theater</div><h3>Doctor Queue Board</h3></div></div>
+            <div id="queueBoard" class="queueBoard"></div>
+          </article>
+        </div>
+
+        <div class="overviewRail stack16">
+          <article class="glass card railCard">
+            <div class="cardHead compact"><div><div class="eyebrow">Action Center</div><h3>Quick Actions</h3></div></div>
+            <div class="actionGrid">
+              <button class="actionCard openPatientModal" type="button">Register Patient</button>
+              <button class="actionCard openBillModal" type="button">Create Bill</button>
+              <button class="actionCard" id="railVisitBtn" type="button">Open Visit Desk</button>
+              <button class="actionCard" id="railSearchBtn" type="button">Find Patient</button>
+            </div>
+          </article>
+
+          <article class="glass card railCard">
+            <div class="cardHead compact"><div><div class="eyebrow">AI Layer</div><h3>Risk Watchlist</h3></div></div>
+            <div id="alerts" class="stack10"></div>
+          </article>
+
+          <article class="glass card railCard">
+            <div class="cardHead compact"><div><div class="eyebrow">Doctor Load</div><h3>Top Doctors</h3></div></div>
+            <div id="doctorBars" class="stack10"></div>
+          </article>
+        </div>
+      </div>
     </section>
 
-    <section class="section">
-      <div class="sectionHead"><h2 class="sectionTitle">Global Search System</h2><div class="muted">Instant results like Google</div></div>
-      <div id="searchResults" class="searchResults">
-        <div class="empty">Type into the Global Search box above to search patients, visits, and bills instantly.</div>
+    <section id="tab-operations" class="tabPane hidden">
+      <div class="operationsShell">
+        <article class="glass card spanWide">
+          <div class="cardHead">
+            <div><div class="eyebrow">Live Activity</div><h3>Operational Feed</h3></div>
+            <button id="manualFeedBtn" class="btn btnGhost small" type="button">Reload</button>
+          </div>
+          <div id="activityFeed" class="stack10"></div>
+        </article>
+
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Financial Pulse</div><h3>Collections and Exposure</h3></div></div>
+          <div id="finance" class="stack10"></div>
+        </article>
+
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Doctor Coverage</div><h3>Operational Load</h3></div></div>
+          <div id="doctors" class="stack10"></div>
+        </article>
+
+        <article class="glass card spanWide">
+          <div class="cardHead compact"><div><div class="eyebrow">Queue Control</div><h3>Doctor Queue Pipeline</h3></div></div>
+          <div id="queue" class="stack10"></div>
+        </article>
       </div>
     </section>
-  </div>
 
-  <section class="section">
-    <div class="sectionHead"><h2 class="sectionTitle">Print Center (Enterprise)</h2><div class="muted">Everything routes directly to Hub printer</div></div>
-    <div class="toolbar">
-      <button class="btn dark" onclick="printLatestBill()">Print Receipt / Reprint</button>
-      <button class="btn blue" onclick="printSummary('daily')">Print Daily Summary</button>
-      <button class="btn blue" onclick="printSummary('cashier')">Print Cashier Summary</button>
-      <input id="patientSlipId" placeholder="Patient ID for slip" />
-      <button class="btn warn" onclick="printPatientSlip()">Print Patient Slip</button>
-      <button class="btn alt" onclick="openPrintableReport('cashier')">Cashier Printable HTML</button>
-    </div>
-    <div class="footerNote" id="printResult">Hub printer center ready.</div>
-  </section>
+    <section id="tab-analytics" class="tabPane hidden">
+      <div class="analyticsSuite">
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Financial Engine</div><h3>Revenue vs Outstanding</h3></div></div>
+          <div id="financeBreakdown" class="stack10"></div>
+        </article>
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Productivity</div><h3>Workflow Benchmarks</h3></div></div>
+          <div id="workflowBenchmarks" class="stack10"></div>
+        </article>
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Realtime Signals</div><h3>Signals and Alerts</h3></div></div>
+          <div id="analyticsSignals" class="stack10"></div>
+        </article>
+        <article class="glass card spanFull">
+          <div class="cardHead compact"><div><div class="eyebrow">Executive Notes</div><h3>Board Summary</h3></div></div>
+          <div id="boardSummary" class="summaryGrid"></div>
+        </article>
+      </div>
+    </section>
 
-  <section class="section">
-    <div class="sectionHead"><h2 class="sectionTitle">Full Desk Modules (PC)</h2><div class="muted">Patient Registration • Doctor Queue • Billing • Prescription • Pharmacy</div></div>
-    <div class="gridCards">
-      <div class="card">
-        <h3>Patient Registration</h3>
-        <div class="formGrid">
-          <input id="regFullName" placeholder="Full name" class="span2" />
-          <input id="regPhone" placeholder="Phone" />
-          <select id="regGender"><option>Male</option><option>Female</option></select>
-          <input id="regAge" type="number" placeholder="Age" />
-          <input id="regAddress" placeholder="Address" class="span2" />
-        </div>
-        <div class="toolbar" style="margin-top:12px"><button class="btn" onclick="registerPatient()">Register Patient</button><span id="regResult" class="muted">Ready</span></div>
+    <section id="tab-patients" class="tabPane hidden">
+      <div class="grid2 patientsShell">
+        <article class="glass card">
+          <div class="cardHead">
+            <div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div>
+            <button class="btn btnGhost small openPatientModal" type="button">Open Modal</button>
+          </div>
+          <form id="patientForm" class="formGrid">
+            <input name="fullName" placeholder="Full Name" required>
+            <input name="phone" placeholder="Phone Number">
+            <select name="gender"><option value="">Gender</option><option>Male</option><option>Female</option></select>
+            <input name="age" placeholder="Age" type="number">
+            <input name="mrn" placeholder="MRN optional">
+            <input name="dob" placeholder="DOB YYYY-MM-DD">
+            <input name="email" placeholder="Email">
+            <input name="bloodGroup" placeholder="Blood Group">
+            <input name="genotype" placeholder="Genotype">
+            <input name="maritalStatus" placeholder="Marital Status">
+            <input name="nextOfKin" placeholder="Next of Kin">
+            <input name="nextOfKinPhone" placeholder="Next of Kin Phone">
+            <textarea name="address" placeholder="Address" class="span2"></textarea>
+            <textarea name="notes" placeholder="Notes" class="span2"></textarea>
+            <div class="span2 row end"><button type="submit" class="btn btnPrimary">Save Patient</button></div>
+          </form>
+        </article>
+        <article class="glass card">
+          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div></div>
+          <div id="patientsList" class="stack10"></div>
+        </article>
       </div>
-      <div class="card">
-        <h3>Doctor Queue</h3>
-        <div class="formGrid">
-          <input id="visitPatientId" placeholder="Patient ID" />
-          <select id="visitDoctor"></select>
-          <textarea id="visitComplaint" placeholder="Complaint" class="span2"></textarea>
-        </div>
-        <div class="toolbar" style="margin-top:12px"><button class="btn" onclick="lookupPatient()">Lookup</button><button class="btn blue" onclick="createVisit()">Create Visit</button><span id="lookupResult" class="muted">Waiting</span></div>
-      </div>
-      <div class="card">
-        <h3>Billing</h3>
-        <div class="formGrid">
-          <input id="billPatientId" placeholder="Patient ID" />
-          <select id="billPaymentMethod"><option>Cash</option><option>Transfer</option><option>POS</option><option>Insurance</option></select>
-          <input id="billConsultation" type="number" step="0.01" placeholder="Consultation" />
-          <input id="billLab" type="number" step="0.01" placeholder="Lab" />
-          <input id="billDrugs" type="number" step="0.01" placeholder="Drugs" />
-          <input id="billOther" type="number" step="0.01" placeholder="Other" />
-          <input id="billPaid" type="number" step="0.01" placeholder="Paid amount" />
-          <label class="pill"><input id="billPrintNow" type="checkbox" checked style="margin-right:8px">Print now</label>
-        </div>
-        <div class="toolbar" style="margin-top:12px"><button class="btn" onclick="createBill()">Create Bill</button><button class="btn alt" onclick="printLatestBill()">Reprint Latest</button><span id="billResult" class="muted">Ready</span></div>
-      </div>
-      <div class="card">
-        <h3>Prescription Desk</h3>
-        <div class="formGrid">
-          <input id="rxPatientId" placeholder="Patient ID" />
-          <input id="rxVisitNo" placeholder="Visit No" />
-          <input id="rxMedicine" placeholder="Medicine" class="span2" />
-          <input id="rxDosage" placeholder="Dosage" />
-          <input id="rxInstructions" placeholder="Instructions" />
-        </div>
-        <div class="toolbar" style="margin-top:12px"><button class="btn" onclick="addPrescription()">Save Prescription</button><span id="rxResult" class="muted">Ready</span></div>
-      </div>
-      <div class="card">
-        <h3>Pharmacy Desk</h3>
-        <div class="formGrid">
-          <input id="stockItemName" placeholder="Stock item name" />
-          <input id="stockUnitPrice" type="number" step="0.01" placeholder="Unit price" />
-          <input id="stockQty" type="number" step="0.01" placeholder="Stock qty" />
-          <input id="dispPatientId" placeholder="Patient ID" />
-          <select id="dispItemName"></select>
-          <input id="dispQty" type="number" step="0.01" placeholder="Dispense qty" />
-        </div>
-        <div class="toolbar" style="margin-top:12px"><button class="btn" onclick="addPharmacyStock()">Add Stock</button><button class="btn blue" onclick="dispenseDrug()">Dispense Drug</button><span id="pharmResult" class="muted">Ready</span></div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <div class="row three">
-    <section class="section"><div class="sectionHead"><h2 class="sectionTitle">Patients</h2></div><div class="tableWrap"><table class="table" id="patientTable"></table></div></section>
-    <section class="section"><div class="sectionHead"><h2 class="sectionTitle">Doctor Queue</h2></div><div class="tableWrap"><table class="table" id="queueTable"></table></div></section>
-    <section class="section"><div class="sectionHead"><h2 class="sectionTitle">Billing</h2></div><div class="tableWrap"><table class="table" id="billTable"></table></div></section>
-  </div>
+    <section id="tab-workflow" class="tabPane hidden">
+      <div class="workflowGrid">
+        <article class="glass card">
+          <div class="cardHead"><div><div class="eyebrow">Billing</div><h3>Direct Billing Workflow</h3></div><button class="btn btnGhost small openBillModal" type="button">Quick Bill Modal</button></div>
+          <form id="billForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Patient ID" required>
+            <input name="patientName" placeholder="Patient Name optional">
+            <input name="serviceName" placeholder="Service Name" required>
+            <input name="amount" type="number" step="0.01" placeholder="Amount" required>
+            <input name="paid" type="number" step="0.01" placeholder="Paid amount">
+            <select name="status"><option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option></select>
+            <input name="doctorName" placeholder="Doctor Name">
+            <textarea name="note" class="span2" placeholder="Billing Note"></textarea>
+            <div class="span2 row end"><button type="submit" class="btn btnPrimary">Create Bill</button></div>
+          </form>
+        </article>
 
-  <div class="row three">
-    <section class="section"><div class="sectionHead"><h2 class="sectionTitle">Prescription</h2></div><div class="tableWrap"><table class="table" id="prescriptionTable"></table></div></section>
-    <section class="section"><div class="sectionHead"><h2 class="sectionTitle">Pharmacy</h2></div><div class="tableWrap"><table class="table" id="pharmacyTable"></table></div></section>
-    <section class="section"><div class="sectionHead"><h2 class="sectionTitle">Security / Trusted Devices</h2><div class="muted">Realtime engine polish • heartbeat • trusted devices</div></div><div class="tableWrap"><table class="table" id="trustedTable"></table></div></section>
-  </div>
+        <article class="glass card stack12">
+          <div class="cardHead"><div><div class="eyebrow">Clinical Workflow</div><h3>Visits / Appointment / Queue</h3></div></div>
+          <form id="visitForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Visit Patient ID" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="reason" placeholder="Reason">
+            <input name="diagnosis" placeholder="Diagnosis">
+            <input name="vitalSummary" placeholder="Vitals Summary">
+            <select name="status"><option value="active">Active</option><option value="completed">Completed</option></select>
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Visit</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="appointmentForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Appointment Patient ID" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="appointmentDate" placeholder="2026-03-26 14:00">
+            <input name="reason" placeholder="Reason">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Book Appointment</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="queueForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Queue Patient ID" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critical">Critical</option></select>
+            <input name="note" placeholder="Queue Note">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Add To Queue</button></div>
+          </form>
+        </article>
 
-
-  <section class="section">
-    <div class="sectionHead"><h2 class="sectionTitle">Full Online Cloud + AI API Phase</h2><div class="muted">Remote cloud database • doctor/manager portal • AI patient summary • backup/restore • cross-branch sync • online notifications</div></div>
-    <div class="toolbar">
-      <button class="btn blue" onclick="window.open('/portal','_blank')">Open Doctor / Manager Portal</button>
-      <button class="btn" onclick="runCloudBackup()">Cloud Backup</button>
-      <button class="btn warn" onclick="runCloudRestore()">Restore Latest Backup</button>
-      <input id="aiSummaryPatientId" placeholder="Patient ID for AI summary" />
-      <button class="btn dark" onclick="loadPatientAiSummary()">Generate AI Summary</button>
-    </div>
-    <div class="row two" style="margin-top:14px">
-      <div class="card">
-        <div class="sectionHead" style="margin-bottom:10px"><div class="tiny">Cross-Branch Sync Matrix</div><div class="tiny" id="branchSyncState">Loading branches…</div></div>
-        <div id="branchMatrix" class="rankList"></div>
+        <article class="glass card stack12">
+          <div class="cardHead"><div><div class="eyebrow">Care Desk</div><h3>Lab / Prescription / Nurse / Staff</h3></div></div>
+          <form id="labForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Lab Patient ID" required>
+            <input name="testName" placeholder="Test Name" required>
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="status" placeholder="pending / completed">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Create Lab Request</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="prescriptionForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Prescription Patient ID" required>
+            <input name="drugName" placeholder="Drug Name" required>
+            <input name="dosage" placeholder="Dosage">
+            <input name="frequency" placeholder="Frequency">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Prescription</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="nurseForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Nurse Desk Patient ID" required>
+            <input name="note" placeholder="Nurse Note" required>
+            <input name="vitalSummary" placeholder="Vitals Summary">
+            <input name="nurseName" placeholder="Nurse Name">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Nurse Note</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="staffForm" class="formGrid compactGrid">
+            <input name="fullName" placeholder="Staff Full Name" required>
+            <input name="role" placeholder="Role" required>
+            <input name="phone" placeholder="Phone">
+            <input name="email" placeholder="Email">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Create Staff</button></div>
+          </form>
+        </article>
       </div>
-      <div class="card">
-        <div class="sectionHead" style="margin-bottom:10px"><div class="tiny">Online Notifications</div><div class="tiny" id="onlineNotifState">Loading notifications…</div></div>
-        <div id="onlineNotifications" class="rankList"></div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:14px">
-      <div class="sectionHead" style="margin-bottom:10px"><div class="tiny">AI Patient Summary</div><div class="tiny" id="aiPatientMeta">Select a patient to analyze</div></div>
-      <div id="aiPatientSummary" class="metric"></div>
-      <div id="aiPatientHighlights" class="rankList" style="margin-top:10px"></div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section">
-    <div class="sectionHead"><h2 class="sectionTitle">Reporting System</h2><div class="toolbar"><button class="btn alt" onclick="loadReports()">Reload Reports</button></div></div>
-    <div class="gridCards">
-      <div class="card"><h3>Daily Summary</h3><div id="dailyReport" class="metric"></div></div>
-      <div class="card"><h3>Cashier Summary</h3><div id="cashierReport" class="rankList"></div></div>
-    </div>
-  </section>
+    <section id="tab-search" class="tabPane hidden">
+      <div class="grid2">
+        <article class="glass card">
+          <div class="cardHead"><div><div class="eyebrow">Patient Search</div><h3>Find Patient + AI Summary</h3></div></div>
+          <div class="finderRow">
+            <input id="searchInput" placeholder="Search by patient ID, MRN, name, phone or email">
+            <button id="searchBtn" class="btn btnPrimary" type="button">Search</button>
+          </div>
+          <div id="searchResults" class="stack10 mt16"></div>
+        </article>
+        <article class="glass card">
+          <div class="cardHead"><div><div class="eyebrow">AI Summary</div><h3>Patient Intelligence</h3></div></div>
+          <div id="patientAiSummary" class="stack10"></div>
+        </article>
+      </div>
+    </section>
+  </main>
 </div>
 
-<script>
-const SYNC_TABLES=['patients','visits','bills','prescriptions','pharmacy_items','pharmacy_dispenses','audit_logs'];
-const PORTAL_STATE={baseUrl:'',hospitalId:''};
-let es=null,reconnectTimer=null,pollTimer=null,lastBillId=0,lastSearchTimer=null,lastEventAt=0;
-function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function ngn(v){const n=Number(v||0);return 'NGN '+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
-function fmt(ts){if(!ts)return '--';try{return new Date(Number(ts)).toLocaleString()}catch(e){return '--'}}
-function setRealtime(live,text){const pill=document.getElementById('realtimePill'),dot=document.getElementById('realtimeDot');pill.className='pill '+(live?'live':'off');dot.className='dot '+(live?'live':'off');document.getElementById('realtimeText').textContent=text||''}
-function normBase(v){v=String(v||'').trim();if(!v)return window.location.origin;return v.replace(/\/$/,'')}
-function scopedUrl(path){
-  const base = normBase(PORTAL_STATE.baseUrl || localStorage.getItem('clinicPortalBaseUrl') || window.location.origin);
-  const full = /^https?:\/\//i.test(path) ? path : base + path;
-  const hid = (PORTAL_STATE.hospitalId || localStorage.getItem('clinicPortalHospitalId') || '').trim();
-  if (!hid) return full;
-  const u = new URL(full, window.location.origin);
-  if (!u.searchParams.get('hospitalId')) u.searchParams.set('hospitalId', hid);
-  if (!u.searchParams.get('clinicId')) u.searchParams.set('clinicId', hid);
-  return u.toString();
-}
-function scopedHeaders(extra){
-  const hid = (PORTAL_STATE.hospitalId || localStorage.getItem('clinicPortalHospitalId') || '').trim();
-  return Object.assign({}, extra||{}, hid ? {'X-Hospital-Id':hid,'X-Clinic-Id':hid} : {});
-}
-function currentHospitalId(){ return (PORTAL_STATE.hospitalId || localStorage.getItem('clinicPortalHospitalId') || '').trim(); }
-async function jget(url){const r=await fetch(scopedUrl(url),{headers:scopedHeaders()});const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){d={error:t||'Invalid response'}}if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-async function jpost(url,payload){const r=await fetch(scopedUrl(url),{method:'POST',headers:scopedHeaders({'Content-Type':'application/json'}),body:JSON.stringify(payload||{})});const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch(e){d={error:t||'Invalid response'}}if(!r.ok)throw new Error(d.error||('Request failed '+r.status));return d}
-function connectHospital(){
-  PORTAL_STATE.baseUrl = normBase(document.getElementById('baseUrlInput').value || window.location.origin);
-  PORTAL_STATE.hospitalId = String(document.getElementById('hospitalIdInput').value || '').trim();
-  if(!PORTAL_STATE.hospitalId){ alert('Shigar da Hospital ID / Clinic ID da aka create.'); return; }
-  localStorage.setItem('clinicPortalBaseUrl', PORTAL_STATE.baseUrl);
-  localStorage.setItem('clinicPortalHospitalId', PORTAL_STATE.hospitalId);
-  document.getElementById('hubUrl').textContent = PORTAL_STATE.baseUrl;
-  document.getElementById('clinicIdentity').textContent = PORTAL_STATE.hospitalId;
-  loadDashboard(true);
-  connectRealtime();
-}
-function disconnectHospital(){
-  PORTAL_STATE.hospitalId='';
-  localStorage.removeItem('clinicPortalHospitalId');
-  if(es) try{es.close()}catch(e){}
-  setRealtime(false,'Disconnected • set Hospital ID to continue');
-  document.getElementById('kpiGrid').innerHTML = '<div class="empty">Connect Hospital ID first.</div>';
-}
-function clockTick(){document.getElementById('liveClock').textContent=new Date().toLocaleString()}
-function renderKpis(status){const cards=[
-['Total Patients',status.patients,'Master patient records'],['Active Visits',status.visits,'All visit rows'],['Queue Count',status.open_queue,'Live doctor queue'],['Revenue Today',ngn(status.revenue_today),'Cash received today'],['Outstanding Payments',ngn(status.outstanding),'Pending balance'],['Pharmacy Sales Today',ngn(status.pharmacy_sales),'Drug revenue'],['Admissions Active',status.admissions,'Current admissions'],['Lab Pending',status.lab_requests,'Lab requests in system']
-];document.getElementById('kpiGrid').innerHTML=cards.map(c=>`<div class="kpi"><div class="k">${esc(c[0])}</div><div class="v">${esc(c[1])}</div><div class="s">${esc(c[2])}</div></div>`).join('')}
-function renderTable(elId,rows,cols,empty){const el=document.getElementById(elId);if(!rows||!rows.length){el.innerHTML=`<tbody><tr><td class="empty">${esc(empty||'No records')}</td></tr></tbody>`;return}const head='<thead><tr>'+cols.map(c=>`<th>${esc(c.replace(/_/g,' '))}</th>`).join('')+'</tr></thead>';const body='<tbody>'+rows.map(r=>'<tr>'+cols.map(c=>`<td>${formatCell(c,r[c],r)}</td>`).join('')+'</tr>').join('')+'</tbody>';el.innerHTML=head+body}
-function formatCell(k,v,row){if(k==='created_at'||k==='trusted_at')return esc(fmt(v));if(typeof v==='number'&&(k.includes('paid')||k.includes('price')||k.includes('total')||k.includes('balance')||k.includes('revenue')||k.includes('income')||k.includes('consultation')||k.includes('lab')||k.includes('drugs')||k.includes('other')))return esc(ngn(v));if(k==='status'){const cls=/completed|paid|dispensed|connected|active|healthy/i.test(v)?'live':(/pending|requested|open/i.test(v)?'warn':'off');return `<span class="pill ${cls}">${esc(v)}</span>`}if(k==='receipt_no'&&row&&row.id)return `<button class="btn alt" onclick="reprintSpecific(${Number(row.id||0)})">${esc(v||'Print')}</button>`;return esc(v==null?'--':v)}
-function lineChart(canvasId,items){const c=document.getElementById(canvasId);if(!c)return;const x=c.getContext('2d');const w=c.width=c.parentElement.clientWidth;const h=c.height=c.parentElement.clientHeight||220;x.clearRect(0,0,w,h);if(!items||!items.length)return;const vals=items.map(i=>Number(i.value||0));const max=Math.max(1,...vals),pad=24; x.beginPath(); items.forEach((it,i)=>{const px=pad+i*((w-pad*2)/Math.max(1,items.length-1)); const py=h-pad-((Number(it.value||0)/max)*(h-pad*2)); if(i===0)x.moveTo(px,py); else x.lineTo(px,py)}); x.lineWidth=3; x.stroke(); items.forEach((it,i)=>{const px=pad+i*((w-pad*2)/Math.max(1,items.length-1)); const py=h-pad-((Number(it.value||0)/max)*(h-pad*2)); x.beginPath(); x.arc(px,py,4,0,Math.PI*2); x.fill(); x.fillText(String(it.label||''),Math.max(8,px-10),h-8)}); }
-function barChart(canvasId,items){const c=document.getElementById(canvasId);if(!c)return;const x=c.getContext('2d');const w=c.width=c.parentElement.clientWidth;const h=c.height=c.parentElement.clientHeight||220;x.clearRect(0,0,w,h);if(!items||!items.length)return;const vals=items.map(i=>Number(i.value||0));const max=Math.max(1,...vals);const pad=22;const bw=Math.max(22,Math.floor((w-pad*2)/Math.max(items.length,1))-12);items.forEach((it,i)=>{const bh=((Number(it.value||0))/max)*(h-pad*2);const bx=pad+i*(bw+12);const by=h-pad-bh;x.strokeRect(bx,by,bw,bh);x.fillText(String(it.label||''),bx,Math.min(h-8,by+bh+14))})}
-function donutChart(canvasId,mapObj){const c=document.getElementById(canvasId);if(!c)return;const x=c.getContext('2d');const w=c.width=c.parentElement.clientWidth;const h=c.height=c.parentElement.clientHeight||220; x.clearRect(0,0,w,h);const entries=Object.entries(mapObj||{});const total=Math.max(1,entries.reduce((a,b)=>a+Number((b[1]&&b[1].value)||b[1]||0),0)); let start=-Math.PI/2; const cx=w/2, cy=h/2, r=Math.min(w,h)/3; entries.forEach((e,idx)=>{const raw=Number((e[1]&&e[1].value)||e[1]||0); const ang=(raw/total)*Math.PI*2; x.beginPath(); x.arc(cx,cy,r,start,start+ang); x.lineTo(cx,cy); x.closePath(); x.fill(); start+=ang}); x.clearRect(cx-r/2,cy-r/2,r,r); x.fillText('Mix',cx-10,cy+4)}
-async function loadStatus(){const s=await jget('/api/status');document.getElementById('currentRole').textContent=s.role||'Admin';document.getElementById('currentBranch').textContent=s.branch||'Main';document.getElementById('hubUrl').textContent=s.hub_url||'--';document.getElementById('systemHealth').textContent=s.auto_sync_enabled?'Healthy • Auto Sync On':'Healthy';renderKpis(s);renderTable('trustedTable',s.trusted_clients||[],['device_name','role','device_id','trusted_at'],'No trusted devices');return s}
-async function loadTables(){const [p,q,b,rx,pi,pd]=await Promise.all([jget('/api/table?name=patients&limit=12'),jget('/api/queue'),jget('/api/table?name=bills&limit=12'),jget('/api/table?name=prescriptions&limit=12'),jget('/api/table?name=pharmacy_items&limit=12'),jget('/api/table?name=pharmacy_dispenses&limit=12')]);renderTable('patientTable',p.rows||[],['patient_id','full_name','phone','gender','age','address','created_at'],'No patients');renderTable('queueTable',q.queue||[],['patient_name','visit_no','status','doctor_name','complaint','created_at'],'No queue');renderTable('billTable',b.rows||[],['id','receipt_no','patient_name','total','paid','balance','payment_method','cashier','created_at'],'No bills');renderTable('prescriptionTable',rx.rows||[],['visit_no','patient_name','medicine','dosage','instructions','prescribed_by','created_at'],'No prescriptions');const pharm=[...(pi.rows||[]).map(r=>({section:'Stock',item_name:r.item_name,qty:r.stock_qty,unit_price:r.unit_price,status:'In Stock',created_at:r.created_at})),...(pd.rows||[]).map(r=>({section:'Dispense',item_name:r.item_name,patient_name:r.patient_name,qty:r.qty,unit_price:r.unit_price,total:r.total,status:'Dispensed',staff:r.dispensed_by,created_at:r.created_at}))];renderTable('pharmacyTable',pharm,['section','item_name','patient_name','qty','unit_price','total','staff','status','created_at'],'No pharmacy activity');if((b.rows||[])[0]) lastBillId=Number(b.rows[0].id||0)}
-async function loadDoctors(){const perf=await jget('/api/doctor_performance');const rows=perf.rows||[];document.getElementById('doctorStats').innerHTML=`<div class="m"><span class="tiny">Busiest Doctor</span><b>${esc(perf.busiest_doctor||'--')}</b></div><div class="m"><span class="tiny">Busiest Count</span><b>${esc(perf.busiest_count||0)}</b></div><div class="m"><span class="tiny">Doctors Tracked</span><b>${rows.length}</b></div>`;document.getElementById('doctorRanking').innerHTML=rows.map((r,i)=>`<div class="rankItem"><div class="leftMeta"><div class="rankTitle">#${i+1} ${esc(r.doctor_name)}</div><div class="tiny">Patients: ${esc(r.patients_total)} • Active Queue: ${esc(r.active_queue)}</div></div><span class="pill ${i===0?'live':'warn'}">Load ${esc(r.active_queue)}</span></div>`).join('')||'<div class="empty">No doctor analytics yet</div>';barChart('doctorPerformanceChart',rows.map(r=>({label:r.doctor_name,value:r.patients_total})));}
-async function loadFinance(){const f=await jget('/api/financial_analytics');lineChart('financeBillingChart',f.billing_7d||[]);barChart('financePharmacyChart',f.pharmacy_7d||[]);donutChart('paymentMixChart',f.payment_vs_outstanding||{});donutChart('incomeMixChart',f.income_mix||{})}
-async function loadFeed(){const d=await jget('/api/activity_feed?limit=14');document.getElementById('activityFeed').innerHTML=(d.rows||[]).map(r=>`<div class="feedItem"><div class="leftMeta"><div class="feedTitle">[${esc(r.actor||'System')}] ${esc(r.action||'Update')}</div><div class="tiny">${esc(r.details||'')}</div></div><div class="tiny">${esc(fmt(r.created_at))}</div></div>`).join('')||'<div class="empty">No activity yet</div>'}
-async function loadReports(){const [daily,cashier]=await Promise.all([jget('/api/report_summary?type=daily'),jget('/api/report_summary?type=cashier')]);document.getElementById('dailyReport').innerHTML=`<div class="m"><span class="tiny">Patients Registered</span><b>${daily.patients_registered||0}</b></div><div class="m"><span class="tiny">Visits Created</span><b>${daily.visits_created||0}</b></div><div class="m"><span class="tiny">Bills Created</span><b>${daily.bills_created||0}</b></div><div class="m"><span class="tiny">Revenue Today</span><b>${ngn(daily.revenue_today||0)}</b></div><div class="m"><span class="tiny">Pharmacy Today</span><b>${ngn(daily.pharmacy_today||0)}</b></div><div class="m"><span class="tiny">Outstanding</span><b>${ngn(daily.outstanding_today||0)}</b></div>`;document.getElementById('cashierReport').innerHTML=(cashier.rows||[]).map(r=>`<div class="rankItem"><div class="leftMeta"><div class="rankTitle">${esc(r.cashier)}</div><div class="tiny">Bills: ${r.bills_count}</div></div><div class="leftMeta" style="text-align:right"><div class="rankTitle">${ngn(r.paid_total)}</div><div class="tiny">Outstanding ${ngn(r.outstanding_total)}</div></div></div>`).join('')||'<div class="empty">No cashier report yet</div>'}
+<div id="modalHost"></div>
+<div id="toastHost"></div>
 
-async function loadCloudAi(){
-  try{
-    const [cloud,queue,ai]=await Promise.all([jget('/api/cloud_status'),jget('/api/cloud_sync_queue'),jget('/api/ai_insights')]);
-    document.getElementById('cloudMetrics').innerHTML=
-      `<div class="m ${cloud.connected?'good':'bad'}"><span class="tiny">Cloud Status</span><b>${esc(cloud.status||'--')}</b></div>`+
-      `<div class="m"><span class="tiny">Sync Mode</span><b>${esc(cloud.mode||'--')}</b></div>`+
-      `<div class="m"><span class="tiny">Trusted Devices</span><b>${esc(cloud.trusted_devices||0)}</b></div>`+
-      `<div class="m"><span class="tiny">Tracked Rows</span><b>${esc(cloud.tracked_rows||0)}</b></div>`+
-      `<div class="m"><span class="tiny">Populated Tables</span><b>${esc(cloud.populated_tables||0)}</b></div>`+
-      `<div class="m warn"><span class="tiny">Pending Jobs</span><b>${esc(cloud.pending_jobs||0)}</b></div>`;
-    document.getElementById('cloudRecommendation').textContent=cloud.recommendation||'--';
-    document.getElementById('cloudQueue').innerHTML=(queue.rows||[]).slice(0,8).map(r=>`<div class="rankItem"><div class="leftMeta"><div class="rankTitle">${esc(r.table)}</div><div class="tiny">Rows ${esc(r.count)} • Last update ${esc(fmt(r.last_updated||0))}</div></div><span class="pill ${r.pending_cloud_sync?'warn':'live'}">${r.pending_cloud_sync?'Pending':'Synced'}</span></div>`).join('')||'<div class="empty">No cloud queue data</div>';
+<div class="fabDock" id="fabDock">
+  <button class="fabMain" id="fabMain" type="button">+</button>
+  <div class="fabMenu" id="fabMenu">
+    <button class="fabAction openPatientModal" type="button">New Patient</button>
+    <button class="fabAction openBillModal" type="button">New Bill</button>
+    <button class="fabAction" id="fabVisitBtn" type="button">Visit Desk</button>
+    <button class="fabAction" id="fabSearchBtn" type="button">Search</button>
+  </div>
+</div>
 
-    document.getElementById('aiInsightCards').innerHTML=(ai.cards||[]).map(r=>`<div class="m ${esc(r.tone||'')}"><span class="tiny">${esc(r.title||'Insight')}</span><b>${esc(r.value||'--')}</b></div>`).join('')||'<div class="empty">No AI insights yet</div>';
-    document.getElementById('aiInsightSummary').textContent=ai.insight_summary||'--';
-    document.getElementById('aiWatchlist').innerHTML=(ai.watchlist||[]).map(r=>`<div class="rankItem"><div class="leftMeta"><div class="rankTitle">${esc(r.patient_name)} <span class="tiny">(${esc(r.patient_id)})</span></div><div class="tiny">Risk ${esc(r.risk_score)} • Outstanding ${ngn(r.outstanding_total||0)} • Pending labs ${esc(r.pending_labs||0)} • Active visits ${esc(r.active_visits||0)}</div><div class="tiny">${esc(r.next_action||'')}</div></div><span class="pill ${r.risk_band==='high'?'off':(r.risk_band==='medium'?'warn':'live')}">${esc(r.risk_band||'low')}</span></div>`).join('')||'<div class="empty">No watchlist items right now</div>';
-  }catch(e){
-    document.getElementById('cloudMetrics').innerHTML=`<div class="empty">${esc(e.message)}</div>`;
-    document.getElementById('aiInsightCards').innerHTML=`<div class="empty">${esc(e.message)}</div>`;
-  }
-}
-
-async function refreshLookups(){try{const d=await jget('/api/doctors');document.getElementById('visitDoctor').innerHTML=(d.doctors||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')||'<option>General Doctor</option>'}catch(e){} try{const p=await jget('/api/pharmacy_items_list');document.getElementById('dispItemName').innerHTML=(p.items||[]).map(v=>`<option value="${esc(v.item_name)}">${esc(v.item_name)} - ${ngn(v.unit_price)} (${esc(v.stock_qty)})</option>`).join('')||'<option value="">No items</option>'}catch(e){}}
-async function lookupPatient(){try{const pid=(document.getElementById('visitPatientId').value||document.getElementById('billPatientId').value||document.getElementById('rxPatientId').value||document.getElementById('dispPatientId').value||'').trim();if(!pid)throw new Error('Enter patient ID first');const d=await jget('/api/patient_lookup?patient_id='+encodeURIComponent(pid));const p=d.patient||{};document.getElementById('lookupResult').textContent=`Patient: ${p.full_name||'--'} • Phone: ${p.phone||'--'} • Gender: ${p.gender||'--'} • Age: ${p.age||'--'}`;['billPatientId','rxPatientId','dispPatientId'].forEach(id=>{if(!document.getElementById(id).value)document.getElementById(id).value=pid});document.getElementById('patientSlipId').value=pid}catch(e){document.getElementById('lookupResult').textContent=e.message}}
-function actor(){return (document.getElementById('operatorName').value||'Admin-PC').trim()||'Admin-PC'}
-async function registerPatient(){try{const d=await jpost('/api/dashboard/register_patient',{full_name:regFullName.value,phone:regPhone.value,gender:regGender.value,age:Number(regAge.value||0),address:regAddress.value,actor:actor()});document.getElementById('regResult').textContent=`Registered ${d.patient.full_name} • ${d.patient.patient_id}`;visitPatientId.value=d.patient.patient_id;billPatientId.value=d.patient.patient_id;rxPatientId.value=d.patient.patient_id;dispPatientId.value=d.patient.patient_id;patientSlipId.value=d.patient.patient_id;await loadDashboard(false)}catch(e){document.getElementById('regResult').textContent=e.message}}
-async function createVisit(){try{await jpost('/api/dashboard/create_visit',{patient_id:visitPatientId.value,doctor_name:visitDoctor.value,complaint:visitComplaint.value,actor:actor()});document.getElementById('lookupResult').textContent='Visit queued successfully';await loadDashboard(false)}catch(e){document.getElementById('lookupResult').textContent=e.message}}
-async function createBill(){try{const d=await jpost('/api/dashboard/create_bill',{patient_id:billPatientId.value,consultation:Number(billConsultation.value||0),lab:Number(billLab.value||0),drugs:Number(billDrugs.value||0),other:Number(billOther.value||0),paid:Number(billPaid.value||0),payment_method:billPaymentMethod.value,print_now:billPrintNow.checked,actor:actor()});lastBillId=Number(d.bill_id||0);document.getElementById('billResult').textContent='Bill saved successfully'+(d.receipt_no?(' • Receipt '+d.receipt_no):'')+(d.printed?' • printed on hub':'');await loadDashboard(false)}catch(e){document.getElementById('billResult').textContent=e.message}}
-async function reprintSpecific(id){try{const d=await jpost('/api/dashboard/print_bill',{bill_id:Number(id),actor:actor()});document.getElementById('printResult').textContent='Printed receipt '+(d.receipt_no||'')+' on hub printer';lastBillId=Number(id||0)}catch(e){document.getElementById('printResult').textContent=e.message}}
-async function printLatestBill(){if(!lastBillId){document.getElementById('printResult').textContent='No recent bill selected yet';return}await reprintSpecific(lastBillId)}
-async function addPrescription(){try{await jpost('/api/dashboard/add_prescription',{patient_id:rxPatientId.value,visit_no:rxVisitNo.value,medicine:rxMedicine.value,dosage:rxDosage.value,instructions:rxInstructions.value,actor:actor()});document.getElementById('rxResult').textContent='Prescription saved successfully';await loadDashboard(false)}catch(e){document.getElementById('rxResult').textContent=e.message}}
-async function addPharmacyStock(){try{await jpost('/api/dashboard/add_pharmacy_stock',{item_name:stockItemName.value,unit_price:Number(stockUnitPrice.value||0),qty:Number(stockQty.value||0),actor:actor()});document.getElementById('pharmResult').textContent='Stock updated successfully';await refreshLookups();await loadDashboard(false)}catch(e){document.getElementById('pharmResult').textContent=e.message}}
-async function dispenseDrug(){try{await jpost('/api/dashboard/dispense_drug',{patient_id:dispPatientId.value,item_name:dispItemName.value,qty:Number(dispQty.value||0),actor:actor()});document.getElementById('pharmResult').textContent='Drug dispensed successfully';await refreshLookups();await loadDashboard(false)}catch(e){document.getElementById('pharmResult').textContent=e.message}}
-async function doGlobalSearch(){clearTimeout(lastSearchTimer);lastSearchTimer=setTimeout(async()=>{const q=document.getElementById('globalSearchInput').value.trim();if(!q){document.getElementById('searchResults').innerHTML='<div class="empty">Type into the Global Search box above to search patients, visits, and bills instantly.</div>';return}try{const d=await jget('/api/global_search?q='+encodeURIComponent(q));const chunks=[];(d.patients||[]).forEach(r=>chunks.push(`<div class="resultCard"><div class="leftMeta"><div class="resultTitle">Patient • ${esc(r.full_name)}</div><div class="tiny">${esc(r.patient_id)} • ${esc(r.phone||'--')} • ${esc(r.gender||'--')}</div></div></div>`));(d.visits||[]).forEach(r=>chunks.push(`<div class="resultCard"><div class="leftMeta"><div class="resultTitle">Visit • ${esc(r.visit_no)}</div><div class="tiny">${esc(r.patient_name)} • ${esc(r.doctor_name)} • ${esc(r.complaint||'--')}</div></div></div>`));(d.bills||[]).forEach(r=>chunks.push(`<div class="resultCard"><div class="leftMeta"><div class="resultTitle">Bill • ${esc(r.receipt_no)}</div><div class="tiny">${esc(r.patient_name)} • Paid ${ngn(r.paid)} • Balance ${ngn(r.balance)}</div></div></div>`));document.getElementById('searchResults').innerHTML=chunks.join('')||'<div class="empty">No results found</div>'}catch(e){document.getElementById('searchResults').innerHTML=`<div class="empty">${esc(e.message)}</div>`}},250)}
-function clearGlobalSearch(){document.getElementById('globalSearchInput').value='';document.getElementById('searchResults').innerHTML='<div class="empty">Type into the Global Search box above to search patients, visits, and bills instantly.</div>'}
-async function printSummary(type){try{await jpost('/api/dashboard/print_summary_report',{type,actor:actor()});document.getElementById('printResult').textContent=(type==='cashier'?'Cashier':'Daily')+' summary sent to hub printer'}catch(e){document.getElementById('printResult').textContent=e.message}}
-async function printPatientSlip(){try{const pid=document.getElementById('patientSlipId').value.trim();if(!pid)throw new Error('Enter patient ID first');await jpost('/api/dashboard/print_patient_slip',{patient_id:pid,actor:actor()});document.getElementById('printResult').textContent='Patient slip sent to hub printer'}catch(e){document.getElementById('printResult').textContent=e.message}}
-function openPrintableReport(type){window.open('/api/report_printable?type='+encodeURIComponent(type),'_blank')}
-function connectRealtime(){try{if(es)es.close();setRealtime(false,'Connecting realtime engine…');const hid=currentHospitalId(); if(!hid){ setRealtime(false,'Hospital ID not connected'); return; } const esUrl=scopedUrl('/api/events?role=Admin&device_id=pc-dashboard&device_name=PC%20Dashboard&last_event_at='+encodeURIComponent(lastEventAt||0)); es=new EventSource(esUrl);es.addEventListener('hello',()=>setRealtime(true,'Connected • realtime stream live'));es.addEventListener('heartbeat',()=>setRealtime(true,'Connected • heartbeat active'));es.addEventListener('sync',ev=>{lastEventAt=Date.now();setRealtime(true,'Connected • sync event received');loadFeed();loadDashboard(false)});es.onerror=()=>{setRealtime(false,'Disconnected • reconnecting automatically');try{es.close()}catch(e){};if(!reconnectTimer)reconnectTimer=setTimeout(()=>{reconnectTimer=null;connectRealtime()},3500)}}catch(e){setRealtime(false,'Realtime unavailable • polling active')}}
-
-async function loadOnlineCloudPhase(){
-  try{
-    const [branches,notifs]=await Promise.all([jget('/api/cloud_branch_matrix'),jget('/api/online_notifications?limit=8')]);
-    document.getElementById('branchSyncState').textContent=(branches.cross_branch_enabled?'Cross-branch sync enabled':'Cross-branch sync disabled');
-    document.getElementById('branchMatrix').innerHTML=(branches.rows||[]).map(r=>`<div class="rankItem"><div class="leftMeta"><div class="rankTitle">${esc(r.branch_name||'Branch')}</div><div class="tiny">Patients ${esc(r.patients||0)} • Visits ${esc(r.visits||0)} • Bills ${esc(r.bills||0)} • Revenue ${ngn(r.revenue||0)}</div></div><span class="pill live">${esc(r.branch_id||'--')}</span></div>`).join('')||'<div class="empty">No branch matrix data</div>';
-    document.getElementById('onlineNotifState').textContent=(notifs.cloud_status&&notifs.cloud_status.remote_configured)?'Remote cloud configured':'Local online notification mode';
-    document.getElementById('onlineNotifications').innerHTML=(notifs.rows||[]).slice(0,8).map(r=>`<div class="feedItem"><div class="leftMeta"><div class="feedTitle">${esc(r.action||'Update')}</div><div class="tiny">${esc(r.actor||'system')} • ${esc(r.details||'')}</div></div><div class="tiny">${fmt(r.created_at)}</div></div>`).join('')||'<div class="empty">No notifications yet</div>';
-  }catch(e){
-    document.getElementById('branchMatrix').innerHTML=`<div class="empty">${esc(e.message)}</div>`;
-    document.getElementById('onlineNotifications').innerHTML=`<div class="empty">${esc(e.message)}</div>`;
-  }
-}
-async function loadPatientAiSummary(){
-  try{
-    const pid=(document.getElementById('aiSummaryPatientId').value||document.getElementById('patientSlipId').value||document.getElementById('visitPatientId').value||'').trim();
-    if(!pid) throw new Error('Enter patient ID first');
-    const d=await jget('/api/ai_patient_summary?patient_id='+encodeURIComponent(pid));
-    document.getElementById('aiPatientMeta').textContent=`${d.patient_name||pid} • Risk ${d.risk_score||0} • ${d.risk_band||'low'}`;
-    document.getElementById('aiPatientSummary').innerHTML=
-      `<div class="m ${d.risk_band==='high'?'bad':(d.risk_band==='medium'?'warn':'good')}"><span class="tiny">AI Summary</span><b>${esc(d.ai_summary||'--')}</b></div>`+
-      `<div class="m"><span class="tiny">Financial</span><b>${ngn(d.total_paid||0)} paid / ${ngn(d.outstanding||0)} outstanding</b></div>`+
-      `<div class="m"><span class="tiny">Care Load</span><b>${esc(d.active_visits||0)} active visits • ${esc(d.pending_labs||0)} pending labs</b></div>`+
-      `<div class="m"><span class="tiny">Next Step</span><b>${esc(d.recommended_next_step||'--')}</b></div>`;
-    document.getElementById('aiPatientHighlights').innerHTML=(d.highlights||[]).map(v=>`<div class="rankItem"><div class="leftMeta"><div class="rankTitle">${esc(v)}</div></div></div>`).join('')||'<div class="empty">No highlights</div>';
-  }catch(e){
-    document.getElementById('aiPatientSummary').innerHTML=`<div class="empty">${esc(e.message)}</div>`;
-    document.getElementById('aiPatientHighlights').innerHTML='';
-  }
-}
-async function runCloudBackup(){try{const d=await jpost('/api/cloud_backup',{});document.getElementById('printResult').textContent='Cloud backup saved: '+(d.file_name||'backup.json');await loadCloudAi();await loadOnlineCloudPhase()}catch(e){document.getElementById('printResult').textContent=e.message}}
-async function runCloudRestore(){try{const d=await jpost('/api/cloud_restore',{});document.getElementById('printResult').textContent='Cloud restore completed • rows '+(d.restored_rows||0);await loadDashboard(false)}catch(e){document.getElementById('printResult').textContent=e.message}}
-
-async function loadDashboard(full){ if(!currentHospitalId()){ setRealtime(false,'Hospital ID not connected'); document.getElementById('kpiGrid').innerHTML='<div class="empty">Ka saka Hospital ID domin portal ya hade da asibitin da ka create.</div>'; return; } try{await Promise.all([loadStatus(),loadTables(),loadDoctors(),loadFinance(),loadFeed(),loadReports(),loadCloudAi(),loadOnlineCloudPhase(),refreshLookups()])}catch(e){setRealtime(false,'Dashboard load error • polling active')}}
-function startPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>loadDashboard(false),10000)}
-(function initPortalConnection(){ const qs = new URLSearchParams(window.location.search); PORTAL_STATE.baseUrl = normBase(qs.get('base') || localStorage.getItem('clinicPortalBaseUrl') || window.location.origin); PORTAL_STATE.hospitalId = String(qs.get('hospitalId') || qs.get('clinicId') || localStorage.getItem('clinicPortalHospitalId') || '').trim(); const b=document.getElementById('baseUrlInput'); const h=document.getElementById('hospitalIdInput'); if(b) b.value = PORTAL_STATE.baseUrl; if(h) h.value = PORTAL_STATE.hospitalId; document.getElementById('hubUrl').textContent = PORTAL_STATE.baseUrl; if(PORTAL_STATE.hospitalId){ document.getElementById('clinicIdentity').textContent = PORTAL_STATE.hospitalId; } })();
-clockTick();setInterval(clockTick,1000);if(currentHospitalId()){loadDashboard(true);connectRealtime()}else{setRealtime(false,'Connect Hospital ID first')}startPolling();
-</script>
+<script src="/dashboard/app.js"></script>
 </body>
 </html>

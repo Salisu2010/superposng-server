@@ -46,20 +46,22 @@ app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
-      "default-src": ["'self'"],
-      // Allow CDN assets used by TrackGuard dashboard (Leaflet, icons)
-      "script-src": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-      "script-src-elem": ["'self'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-      "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-      "style-src-elem": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
-      "img-src": ["'self'", "data:", "blob:", "https:"],
-      "font-src": ["'self'", "data:", "https:"],
-      "connect-src": ["'self'", "https:"],
+      "default-src": ["'self'", "data:", "blob:", "https:", "http:"],
+      // Allow local dashboard style portal scripts and CDN assets.
+      "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net", "https://unpkg.com", "http:", "https:"],
+      "script-src-elem": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com", "http:", "https:"],
+      "script-src-attr": ["'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com", "http:", "https:"],
+      "style-src-elem": ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com", "http:", "https:"],
+      "img-src": ["'self'", "data:", "blob:", "https:", "http:"],
+      "font-src": ["'self'", "data:", "https:", "http:"],
+      "connect-src": ["'self'", "https:", "http:", "ws:", "wss:"],
       "object-src": ["'none'"],
       "base-uri": ["'self'"],
       "frame-ancestors": ["'self'"]
     }
-  }
+  },
+  crossOriginEmbedderPolicy: false
 }));
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: "12mb" }));
@@ -116,39 +118,7 @@ function requestValidation(req, res, next) {
     req.path.startsWith('/api/doctor_queue') ||
     req.path.startsWith('/api/search/patient')
   );
-  const localDashboardPath = (
-    req.path.startsWith('/api/status') ||
-    req.path.startsWith('/api/table') ||
-    req.path.startsWith('/api/queue') ||
-    req.path.startsWith('/api/doctors') ||
-    req.path.startsWith('/api/pharmacy_items_list') ||
-    req.path.startsWith('/api/patient_lookup') ||
-    req.path.startsWith('/api/activity_feed') ||
-    req.path.startsWith('/api/global_search') ||
-    req.path.startsWith('/api/doctor_performance') ||
-    req.path.startsWith('/api/financial_analytics') ||
-    req.path.startsWith('/api/cloud_status') ||
-    req.path.startsWith('/api/cloud_sync_queue') ||
-    req.path.startsWith('/api/ai_insights') ||
-    req.path.startsWith('/api/ai_patients_watchlist') ||
-    req.path.startsWith('/api/ai_patient_summary') ||
-    req.path.startsWith('/api/portal_overview') ||
-    req.path.startsWith('/api/cloud_branch_matrix') ||
-    req.path.startsWith('/api/online_notifications') ||
-    req.path.startsWith('/api/report_summary') ||
-    req.path.startsWith('/api/report_printable') ||
-    req.path.startsWith('/api/dashboard/register_patient') ||
-    req.path.startsWith('/api/dashboard/create_visit') ||
-    req.path.startsWith('/api/dashboard/create_bill') ||
-    req.path.startsWith('/api/dashboard/print_bill') ||
-    req.path.startsWith('/api/dashboard/add_prescription') ||
-    req.path.startsWith('/api/dashboard/add_pharmacy_stock') ||
-    req.path.startsWith('/api/dashboard/dispense_drug') ||
-    req.path.startsWith('/api/dashboard/print_summary_report') ||
-    req.path.startsWith('/api/dashboard/print_patient_slip') ||
-    req.path.startsWith('/api/events')
-  );
-  const allowClinicScopedWithoutApiKey = (clinicPortalPath && !!clinicId) || localDashboardPath;
+  const allowClinicScopedWithoutApiKey = clinicPortalPath && !!clinicId;
   if (requiredKey && !allowClinicScopedWithoutApiKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
     if (sentKey !== requiredKey) return res.status(401).json({ ok:false, error:'Invalid API key' });
   }
