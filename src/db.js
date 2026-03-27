@@ -62,7 +62,11 @@ function initDB() {
       clinicLabRequests: [],
       clinicPrescriptions: [],
       clinicNurseDesk: [],
-      clinicDoctorQueue: []
+      clinicDoctorQueue: [],
+      clinicPharmacyItems: [],
+      clinicVitals: [],
+      clinicAuditLogs: [],
+      clinicProfiles: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
@@ -148,6 +152,10 @@ function readDB() {
     if (!Array.isArray(db.clinicPrescriptions)) db.clinicPrescriptions = []
     if (!Array.isArray(db.clinicNurseDesk)) db.clinicNurseDesk = []
     if (!Array.isArray(db.clinicDoctorQueue)) db.clinicDoctorQueue = []
+    if (!Array.isArray(db.clinicPharmacyItems)) db.clinicPharmacyItems = []
+    if (!Array.isArray(db.clinicVitals)) db.clinicVitals = []
+    if (!Array.isArray(db.clinicAuditLogs)) db.clinicAuditLogs = []
+    if (!Array.isArray(db.clinicProfiles)) db.clinicProfiles = []
     return db
   } catch (e) {
     // If db.json was corrupted or accidentally replaced with non-JSON content,
@@ -205,7 +213,11 @@ function readDB() {
       clinicLabRequests: [],
       clinicPrescriptions: [],
       clinicNurseDesk: [],
-      clinicDoctorQueue: []
+      clinicDoctorQueue: [],
+      clinicPharmacyItems: [],
+      clinicVitals: [],
+      clinicAuditLogs: [],
+      clinicProfiles: []
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData

@@ -116,7 +116,39 @@ function requestValidation(req, res, next) {
     req.path.startsWith('/api/doctor_queue') ||
     req.path.startsWith('/api/search/patient')
   );
-  const allowClinicScopedWithoutApiKey = clinicPortalPath && !!clinicId;
+  const localDashboardPath = (
+    req.path.startsWith('/api/status') ||
+    req.path.startsWith('/api/table') ||
+    req.path.startsWith('/api/queue') ||
+    req.path.startsWith('/api/doctors') ||
+    req.path.startsWith('/api/pharmacy_items_list') ||
+    req.path.startsWith('/api/patient_lookup') ||
+    req.path.startsWith('/api/activity_feed') ||
+    req.path.startsWith('/api/global_search') ||
+    req.path.startsWith('/api/doctor_performance') ||
+    req.path.startsWith('/api/financial_analytics') ||
+    req.path.startsWith('/api/cloud_status') ||
+    req.path.startsWith('/api/cloud_sync_queue') ||
+    req.path.startsWith('/api/ai_insights') ||
+    req.path.startsWith('/api/ai_patients_watchlist') ||
+    req.path.startsWith('/api/ai_patient_summary') ||
+    req.path.startsWith('/api/portal_overview') ||
+    req.path.startsWith('/api/cloud_branch_matrix') ||
+    req.path.startsWith('/api/online_notifications') ||
+    req.path.startsWith('/api/report_summary') ||
+    req.path.startsWith('/api/report_printable') ||
+    req.path.startsWith('/api/dashboard/register_patient') ||
+    req.path.startsWith('/api/dashboard/create_visit') ||
+    req.path.startsWith('/api/dashboard/create_bill') ||
+    req.path.startsWith('/api/dashboard/print_bill') ||
+    req.path.startsWith('/api/dashboard/add_prescription') ||
+    req.path.startsWith('/api/dashboard/add_pharmacy_stock') ||
+    req.path.startsWith('/api/dashboard/dispense_drug') ||
+    req.path.startsWith('/api/dashboard/print_summary_report') ||
+    req.path.startsWith('/api/dashboard/print_patient_slip') ||
+    req.path.startsWith('/api/events')
+  );
+  const allowClinicScopedWithoutApiKey = (clinicPortalPath && !!clinicId) || localDashboardPath;
   if (requiredKey && !allowClinicScopedWithoutApiKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
     if (sentKey !== requiredKey) return res.status(401).json({ ok:false, error:'Invalid API key' });
   }
