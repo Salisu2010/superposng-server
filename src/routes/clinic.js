@@ -74,7 +74,484 @@ function ensureArrays(db){
   db.clinicPrescriptions = arr(db.clinicPrescriptions);
   db.clinicNurseDesk = arr(db.clinicNurseDesk);
   db.clinicDoctorQueue = arr(db.clinicDoctorQueue);
+  ensureSyncStore(db);
 }
+
+const SYNC_TABLES = [
+  "clinic_profile","branches","audit_logs","staff","patients","visits","bills","prescriptions",
+  "lab_requests","pharmacy_items","pharmacy_dispenses","admissions","appointments","vitals",
+  "inpatient_treatment","treatment_notes","medication_schedule","medication_logs","lab_samples",
+  "pharmacy_receipts","discharge_summary","nurse_tasks","cashier_shifts"
+];
+
+function ensureSyncStore(db){
+  if (!db.clinicSyncData || typeof db.clinicSyncData !== 'object' || Array.isArray(db.clinicSyncData)) db.clinicSyncData = {};
+}
+function ensureClinicSyncData(db, clinicId){
+  ensureSyncStore(db);
+  const key = String(clinicId || '');
+  if (!db.clinicSyncData[key] || typeof db.clinicSyncData[key] !== 'object' || Array.isArray(db.clinicSyncData[key])) db.clinicSyncData[key] = {};
+  const store = db.clinicSyncData[key];
+  for (const table of SYNC_TABLES) {
+    if (!Array.isArray(store[table])) store[table] = [];
+  }
+  return store;
+}
+function syncIdentityColumns(table){
+  if (table === 'branches') return ['code'];
+  if (table === 'staff') return ['username'];
+  if (table === 'patients') return ['patient_id'];
+  if (table === 'visits') return ['visit_no'];
+  if (table === 'bills') return ['receipt_no'];
+  if (table === 'appointments') return ['appointment_no'];
+  if (table === 'lab_samples') return ['sample_id'];
+  if (table === 'pharmacy_receipts') return ['receipt_no'];
+  if (table === 'pharmacy_items') return ['item_name'];
+  return [];
+}
+function syncRowTime(row = {}, preferred = ''){
+  const keys = [preferred, 'updated_at', 'created_at', 'discharged_at', 'admitted_at', 'scheduled_time', 'collected_time', 'opened_at', 'closed_at', 'completed_time'];
+  let best = 0;
+  for (const key of keys) {
+    if (!key) continue;
+    const val = Number(row?.[key]);
+    if (Number.isFinite(val)) best = Math.max(best, val);
+  }
+  return best;
+}
+function syncTimeColumn(table){
+  if (['clinic_profile','branches','staff'].includes(table)) return '';
+  if (table === 'inpatient_treatment') return 'updated_at';
+  if (table === 'admissions') return 'admitted_at';
+  if (table === 'lab_samples') return 'completed_time';
+  if (table === 'medication_schedule') return 'scheduled_time';
+  if (table === 'medication_logs') return 'administered_time';
+  if (table === 'cashier_shifts') return 'closed_at';
+  return 'created_at';
+}
+function syncFilledScore(row = {}){
+  return Object.values(row).reduce((s, v) => {
+    if (v == null) return s;
+    if (typeof v === 'string') return s + (v.trim() ? 1 : 0);
+    return s + 1;
+  }, 0);
+}
+function normalizeSyncSnapshot(snapshot){
+  const src = snapshot && typeof snapshot === 'object' ? snapshot : {};
+  const data = src.data && typeof src.data === 'object' ? src.data : {};
+  if (!data.staff && Array.isArray(data.staffs)) data.staff = data.staffs;
+  return {
+    exported_at: toNum(src.exported_at, now()),
+    since: toNum(src.since, 0),
+    tables: Array.isArray(src.tables) ? src.tables : SYNC_TABLES,
+    data
+  };
+}
+function cloneRow(row){
+  return row && typeof row === 'object' ? JSON.parse(JSON.stringify(row)) : {};
+}
+function upsertSyncRow(store, table, row){
+  const list = Array.isArray(store[table]) ? store[table] : (store[table] = []);
+  const incoming = cloneRow(row);
+  const ids = syncIdentityColumns(table);
+  let idx = -1;
+  if (ids.length && ids.every(col => toStr(incoming[col]))) {
+    idx = list.findIndex(existing => ids.every(col => toStr(existing?.[col]) === toStr(incoming[col])));
+  }
+  if (idx < 0 && toNum(incoming.id, 0) > 0) {
+    idx = list.findIndex(existing => toNum(existing?.id, 0) === toNum(incoming.id, 0));
+  }
+  if (idx < 0) {
+    list.push(incoming);
+    return 1;
+  }
+  const existing = list[idx] || {};
+  const incomingTs = syncRowTime(incoming, syncTimeColumn(table));
+  const existingTs = syncRowTime(existing, syncTimeColumn(table));
+  const shouldReplace = incomingTs > existingTs || (incomingTs === existingTs && syncFilledScore(incoming) >= syncFilledScore(existing));
+  if (shouldReplace) {
+    list[idx] = { ...existing, ...incoming };
+    return 1;
+  }
+  return 0;
+}
+function replaceClinicRows(list, clinicId, rows){
+  const keep = arr(list).filter(x => String(x.clinicId) !== String(clinicId));
+  keep.push(...rows);
+  return keep;
+}
+function mapSyncPatientToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id || row.patientId || row.id),
+    fullName: toStr(row.full_name || row.fullName || row.patient_name || row.patientName),
+    phone: cleanPhone(row.phone),
+    gender: toStr(row.gender),
+    age: toNum(row.age, 0),
+    address: toStr(row.address),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncBillToCanonical(clinicId, row){
+  const total = toNum(row.total);
+  const paid = toNum(row.paid);
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    billNo: toStr(row.receipt_no || row.bill_no || row.billNo),
+    total,
+    paid,
+    balance: toNum(row.balance, Math.max(0, total - paid)),
+    paymentMethod: toStr(row.payment_method || row.paymentMethod),
+    cashier: toStr(row.cashier),
+    consultation: toNum(row.consultation),
+    lab: toNum(row.lab),
+    drugs: toNum(row.drugs),
+    other: toNum(row.other),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncVisitToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    visitId: toStr(row.visit_no || row.id),
+    doctorName: toStr(row.doctor_name),
+    reason: toStr(row.complaint || row.reason),
+    diagnosis: toStr(row.diagnosis),
+    status: toStr(row.status || 'waiting'),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncAdmissionToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    admissionId: toStr(row.id),
+    ward: toStr(row.ward_name),
+    bed: toStr(row.bed_no),
+    note: toStr(row.reason),
+    status: toStr(row.status || 'admitted'),
+    admittedAt: toNum(row.admitted_at),
+    dischargeAt: toNum(row.discharged_at),
+    createdAt: toNum(row.admitted_at || row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.discharged_at), toNum(row.admitted_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncAppointmentToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    appointmentId: toStr(row.appointment_no || row.id),
+    doctorName: toStr(row.doctor_name),
+    appointmentDate: toStr(row.appointment_date),
+    appointmentTime: toStr(row.appointment_time),
+    purpose: toStr(row.reason),
+    status: toStr(row.status || 'scheduled'),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncPharmacyDispenseToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    dispenseId: toStr(row.id),
+    itemName: toStr(row.item_name),
+    quantity: toNum(row.qty || row.quantity),
+    unitPrice: toNum(row.unit_price),
+    total: toNum(row.total),
+    dispensedBy: toStr(row.dispensed_by),
+    status: toStr(row.status || 'dispensed'),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncLabRequestToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    labRequestId: toStr(row.id),
+    testName: toStr(row.test_name),
+    requestedBy: toStr(row.requested_by),
+    result: toStr(row.result_text),
+    status: toStr(row.status || 'pending'),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncPrescriptionToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    prescriptionId: toStr(row.id),
+    visitNo: toStr(row.visit_no),
+    drugName: toStr(row.medicine),
+    dosage: toStr(row.dosage),
+    note: toStr(row.instructions),
+    doctorName: toStr(row.prescribed_by),
+    status: toStr(row.status || 'active'),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now()
+  };
+}
+function mapSyncNurseTaskToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    patientId: toStr(row.patient_id),
+    patientName: toStr(row.patient_name),
+    nurseDeskId: toStr(row.id),
+    note: toStr(row.notes),
+    status: toStr(row.status || 'pending'),
+    createdAt: toNum(row.created_at || row.due_time, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at), toNum(row.due_time)) || now()
+  };
+}
+function mapSyncStaffToCanonical(clinicId, row){
+  return {
+    clinicId: String(clinicId),
+    userId: toStr(row.id || row.username),
+    fullName: toStr(row.full_name),
+    username: toStr(row.username),
+    password: toStr(row.password),
+    role: normRole(row.role),
+    createdAt: toNum(row.created_at, now()),
+    updatedAt: Math.max(toNum(row.updated_at), toNum(row.created_at)) || now(),
+    active: true
+  };
+}
+function syncCanonicalArraysFromStore(db, clinicId){
+  const store = ensureClinicSyncData(db, clinicId);
+  db.clinicPatients = replaceClinicRows(db.clinicPatients, clinicId, arr(store.patients).map(x => mapSyncPatientToCanonical(clinicId, x)).filter(x => x.patientId));
+  db.clinicBills = replaceClinicRows(db.clinicBills, clinicId, arr(store.bills).map(x => mapSyncBillToCanonical(clinicId, x)).filter(x => x.patientId));
+  db.clinicVisits = replaceClinicRows(db.clinicVisits, clinicId, arr(store.visits).map(x => mapSyncVisitToCanonical(clinicId, x)).filter(x => x.patientId));
+  db.clinicAdmissions = replaceClinicRows(db.clinicAdmissions, clinicId, arr(store.admissions).map(x => mapSyncAdmissionToCanonical(clinicId, x)).filter(x => x.patientId));
+  db.clinicAppointments = replaceClinicRows(db.clinicAppointments, clinicId, arr(store.appointments).map(x => mapSyncAppointmentToCanonical(clinicId, x)).filter(x => x.patientId));
+  db.clinicPharmacyDispenses = replaceClinicRows(db.clinicPharmacyDispenses, clinicId, arr(store.pharmacy_dispenses).map(x => mapSyncPharmacyDispenseToCanonical(clinicId, x)).filter(x => x.patientId || x.itemName));
+  db.clinicLabRequests = replaceClinicRows(db.clinicLabRequests, clinicId, arr(store.lab_requests).map(x => mapSyncLabRequestToCanonical(clinicId, x)).filter(x => x.patientId || x.testName));
+  db.clinicPrescriptions = replaceClinicRows(db.clinicPrescriptions, clinicId, arr(store.prescriptions).map(x => mapSyncPrescriptionToCanonical(clinicId, x)).filter(x => x.patientId || x.drugName));
+  db.clinicNurseDesk = replaceClinicRows(db.clinicNurseDesk, clinicId, arr(store.nurse_tasks).map(x => mapSyncNurseTaskToCanonical(clinicId, x)).filter(x => x.patientId || x.note));
+  db.clinicUsers = replaceClinicRows(db.clinicUsers, clinicId, arr(store.staff).map(x => mapSyncStaffToCanonical(clinicId, x)).filter(x => x.username));
+  db.clinicBranches = replaceClinicRows(db.clinicBranches, clinicId, arr(store.branches).map(x => ({
+    clinicId: String(clinicId),
+    branchId: toStr(x.id || x.code || createId('br')),
+    name: toStr(x.name || x.code || 'Main Branch'),
+    code: toStr(x.code || x.name || 'MAIN'),
+    isMain: toNum(x.is_default, 0) === 1,
+    createdAt: toNum(x.created_at, now()),
+    updatedAt: Math.max(toNum(x.updated_at), toNum(x.created_at)) || now()
+  })).filter(x => x.code));
+}
+function mergeSnapshotIntoStore(db, clinicId, snapshot){
+  const normalized = normalizeSyncSnapshot(snapshot);
+  const store = ensureClinicSyncData(db, clinicId);
+  let applied = 0;
+  for (const table of SYNC_TABLES) {
+    const rows = arr(normalized.data[table]);
+    for (const row of rows) applied += upsertSyncRow(store, table, row);
+  }
+  syncCanonicalArraysFromStore(db, clinicId);
+  return { applied, snapshot: buildSnapshotData(db, clinicId) };
+}
+function canonicalPatientToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    full_name: toStr(row.fullName || row.patientName),
+    phone: toStr(row.phone),
+    gender: toStr(row.gender),
+    age: toNum(row.age, 0),
+    address: toStr(row.address),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalBillToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    receipt_no: toStr(row.billNo || row.receiptNo),
+    consultation: toNum(row.consultation),
+    lab: toNum(row.lab),
+    drugs: toNum(row.drugs),
+    other: toNum(row.other),
+    total: toNum(row.total),
+    paid: toNum(row.paid),
+    balance: toNum(row.balance, Math.max(0, toNum(row.total) - toNum(row.paid))),
+    payment_method: toStr(row.paymentMethod),
+    cashier: toStr(row.cashier),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalVisitToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    visit_no: toStr(row.visitId || row.visitNo),
+    complaint: toStr(row.reason || row.complaint),
+    doctor_name: toStr(row.doctorName),
+    status: toStr(row.status),
+    diagnosis: toStr(row.diagnosis),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalAdmissionToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    ward_name: toStr(row.ward),
+    bed_no: toStr(row.bed),
+    reason: toStr(row.note || row.reason),
+    status: toStr(row.status),
+    admitted_by: toStr(row.admittedBy),
+    discharged_by: toStr(row.dischargedBy),
+    admitted_at: toNum(row.admittedAt || row.createdAt, now()),
+    discharged_at: toNum(row.dischargeAt),
+    updated_at: toNum(row.updatedAt || row.dischargeAt || row.admittedAt || row.createdAt, now())
+  };
+}
+function canonicalAppointmentToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    appointment_no: toStr(row.appointmentId || row.appointmentNo),
+    doctor_name: toStr(row.doctorName),
+    appointment_date: toStr(row.appointmentDate),
+    appointment_time: toStr(row.appointmentTime),
+    reason: toStr(row.purpose || row.reason),
+    status: toStr(row.status),
+    created_by: toStr(row.createdBy),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalPharmacyDispenseToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    item_name: toStr(row.itemName),
+    qty: toNum(row.quantity || row.qty),
+    unit_price: toNum(row.unitPrice),
+    total: toNum(row.total),
+    dispensed_by: toStr(row.dispensedBy),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalLabRequestToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    visit_no: toStr(row.visitNo),
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    test_name: toStr(row.testName),
+    result_text: toStr(row.result),
+    status: toStr(row.status),
+    requested_by: toStr(row.requestedBy),
+    updated_by: toStr(row.updatedBy),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalPrescriptionToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    visit_no: toStr(row.visitNo),
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    medicine: toStr(row.drugName || row.medicine),
+    dosage: toStr(row.dosage),
+    instructions: toStr(row.note || row.instructions),
+    prescribed_by: toStr(row.doctorName || row.prescribedBy),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalNurseDeskToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    patient_id: toStr(row.patientId),
+    patient_name: toStr(row.patientName),
+    task_type: 'Round Note',
+    title: toStr(row.title || 'Nurse Desk'),
+    due_time: toNum(row.createdAt, now()),
+    status: toStr(row.status),
+    assigned_to: toStr(row.assignedTo),
+    notes: toStr(row.note || row.notes),
+    admission_id: toNum(row.admissionId, 0),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalStaffToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    full_name: toStr(row.fullName),
+    username: toStr(row.username || row.email),
+    password: toStr(row.password),
+    role: normRole(row.role),
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function canonicalBranchToSync(row){
+  return {
+    id: toNum(row.id, 0) || undefined,
+    name: toStr(row.name),
+    code: toStr(row.code),
+    is_default: row.isMain ? 1 : 0,
+    created_at: toNum(row.createdAt, now()),
+    updated_at: toNum(row.updatedAt || row.createdAt, now())
+  };
+}
+function mirrorCanonicalRowToSyncStore(db, clinicId, table, row){
+  const store = ensureClinicSyncData(db, clinicId);
+  let mapped = null;
+  if (table === 'patients') mapped = canonicalPatientToSync(row);
+  else if (table === 'bills') mapped = canonicalBillToSync(row);
+  else if (table === 'visits') mapped = canonicalVisitToSync(row);
+  else if (table === 'admissions') mapped = canonicalAdmissionToSync(row);
+  else if (table === 'appointments') mapped = canonicalAppointmentToSync(row);
+  else if (table === 'pharmacy_dispenses') mapped = canonicalPharmacyDispenseToSync(row);
+  else if (table === 'lab_requests') mapped = canonicalLabRequestToSync(row);
+  else if (table === 'prescriptions') mapped = canonicalPrescriptionToSync(row);
+  else if (table === 'nurse_tasks') mapped = canonicalNurseDeskToSync(row);
+  else if (table === 'staff') mapped = canonicalStaffToSync(row);
+  else if (table === 'branches') mapped = canonicalBranchToSync(row);
+  if (mapped) upsertSyncRow(store, table, mapped);
+}
+function ensureCanonicalMirrors(db, clinicId){
+  const store = ensureClinicSyncData(db, clinicId);
+  if (!arr(store.patients).length) arr(db.clinicPatients).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'patients', x));
+  if (!arr(store.bills).length) arr(db.clinicBills).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'bills', x));
+  if (!arr(store.visits).length) arr(db.clinicVisits).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'visits', x));
+  if (!arr(store.admissions).length) arr(db.clinicAdmissions).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'admissions', x));
+  if (!arr(store.appointments).length) arr(db.clinicAppointments).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'appointments', x));
+  if (!arr(store.pharmacy_dispenses).length) arr(db.clinicPharmacyDispenses).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'pharmacy_dispenses', x));
+  if (!arr(store.lab_requests).length) arr(db.clinicLabRequests).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'lab_requests', x));
+  if (!arr(store.prescriptions).length) arr(db.clinicPrescriptions).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'prescriptions', x));
+  if (!arr(store.nurse_tasks).length) arr(db.clinicNurseDesk).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'nurse_tasks', x));
+  if (!arr(store.staff).length) arr(db.clinicUsers).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'staff', x));
+  if (!arr(store.branches).length) arr(db.clinicBranches).filter(x => String(x.clinicId) === String(clinicId)).forEach(x => mirrorCanonicalRowToSyncStore(db, clinicId, 'branches', x));
+}
+
 function clinicPublicRow(c){
   return {
     clinicId: c.clinicId,
@@ -150,455 +627,21 @@ function clinicRows(db, clinicId){
     staff: db.clinicUsers.filter(match)
   };
 }
+
 function buildSnapshotData(db, clinicId){
-  const rows = clinicRows(db, clinicId);
-  return {
-    data: {
-      ...rows,
-      pharmacy_items: rows.pharmacy_dispenses,
-      staffs: rows.staff
-    }
-  };
-}
-
-
-function firstNonEmpty(obj, keys, fallback=''){
-  for (const key of keys) {
-    const v = obj?.[key];
-    if (v == null) continue;
-    const s = typeof v === 'string' ? v.trim() : String(v);
-    if (s !== '') return v;
+  ensureCanonicalMirrors(db, clinicId);
+  const store = ensureClinicSyncData(db, clinicId);
+  const data = {};
+  for (const table of SYNC_TABLES) {
+    data[table] = arr(store[table]).map(cloneRow);
   }
-  return fallback;
-}
-function numAny(obj, keys, fallback=0){
-  for (const key of keys) {
-    const v = obj?.[key];
-    if (v == null || v === '') continue;
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return fallback;
-}
-function timeAny(obj, keys){
-  const n = numAny(obj, keys, 0);
-  return n > 0 ? n : now();
-}
-function rowIdentityForTable(table, row){
-  if (!row || typeof row !== 'object') return '';
-  const id = (...keys) => keys.map(k => toStr(row[k])).find(Boolean) || '';
-  switch (table) {
-    case 'patients': return id('patient_id','patientId','mrn','id');
-    case 'bills': return id('receipt_no','receiptNo','billNo','billId','id');
-    case 'visits': return id('visit_no','visitNo','visitId','id');
-    case 'admissions': return id('admission_no','admissionNo','admissionId','id');
-    case 'appointments': return id('appointment_no','appointmentNo','appointmentId','id');
-    case 'pharmacy_dispenses': return id('receipt_no','receiptNo','dispense_no','dispenseNo','dispenseId','id');
-    case 'lab_requests': return id('request_no','requestNo','lab_no','labNo','sample_id','sampleId','requestId','id');
-    case 'prescriptions': return id('prescription_no','prescriptionNo','prescriptionId','id');
-    case 'nurse_desk': return id('note_id','noteId','desk_id','deskId','id');
-    case 'doctor_queue': return id('queue_no','queueNo','queueId','visit_no','visitNo','visitId','id');
-    case 'staff': return id('username','email','userId','id');
-    default: return id('id');
-  }
-}
-function normalizeSnapshotRow(table, row, clinicId){
-  const baseClinicId = toStr(clinicId || row?.clinicId || row?.clinic_id);
-  if (table === 'patients') {
-    const patientId = toStr(firstNonEmpty(row, ['patient_id','patientId','mrn','id']));
-    return {
-      patientId,
-      clinicId: baseClinicId,
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      mrn: toStr(firstNonEmpty(row, ['mrn','patient_id','patientId'])),
-      fullName: toStr(firstNonEmpty(row, ['full_name','fullName','name'])),
-      gender: toStr(firstNonEmpty(row, ['gender'])),
-      age: numAny(row, ['age'], 0),
-      dob: toStr(firstNonEmpty(row, ['dob'])),
-      phone: cleanPhone(firstNonEmpty(row, ['phone'])),
-      email: safeEmail(firstNonEmpty(row, ['email'])),
-      address: toStr(firstNonEmpty(row, ['address'])),
-      bloodGroup: toStr(firstNonEmpty(row, ['blood_group','bloodGroup'])),
-      genotype: toStr(firstNonEmpty(row, ['genotype'])),
-      nextOfKin: toStr(firstNonEmpty(row, ['next_of_kin','nextOfKin'])),
-      nextOfKinPhone: cleanPhone(firstNonEmpty(row, ['next_of_kin_phone','nextOfKinPhone'])),
-      maritalStatus: toStr(firstNonEmpty(row, ['marital_status','maritalStatus'])),
-      notes: toStr(firstNonEmpty(row, ['notes'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'active')) || 'active',
-      createdAt: timeAny(row, ['updated_at','updatedAt','created_at','createdAt']),
-      updatedAt: timeAny(row, ['updated_at','updatedAt','created_at','createdAt'])
-    };
-  }
-  if (table === 'bills') {
-    const patientId = toStr(firstNonEmpty(row, ['patient_id','patientId']));
-    const total = numAny(row, ['total','amount'], 0);
-    const paid = numAny(row, ['paid','amount_paid','amountPaid'], 0);
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      billId: toStr(firstNonEmpty(row, ['billId','bill_id','id'])),
-      clinicId: baseClinicId,
-      patientId,
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      billNo: toStr(firstNonEmpty(row, ['billNo','bill_no','receipt_no','receiptNo'])),
-      category: toStr(firstNonEmpty(row, ['category'], 'General')),
-      description: toStr(firstNonEmpty(row, ['description'])),
-      consultation: numAny(row, ['consultation'], 0),
-      lab: numAny(row, ['lab'], 0),
-      drugs: numAny(row, ['drugs'], 0),
-      other: numAny(row, ['other'], 0),
-      total,
-      paid,
-      balance: numAny(row, ['balance'], Math.max(0, total - paid)),
-      status: toStr(firstNonEmpty(row, ['status'], Math.max(0, total - paid) <= 0 ? 'paid' : 'pending')),
-      paymentMethod: toStr(firstNonEmpty(row, ['payment_method','paymentMethod'])),
-      cashier: toStr(firstNonEmpty(row, ['cashier','actor'])),
-      receiptNo: toStr(firstNonEmpty(row, ['receipt_no','receiptNo','billNo','bill_no'])),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'visits') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt','check_in_at','checkInAt']);
-    return {
-      visitId: toStr(firstNonEmpty(row, ['visitId','visit_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      visitNo: toStr(firstNonEmpty(row, ['visit_no','visitNo','visitId','visit_id'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      doctorName: toStr(firstNonEmpty(row, ['doctor_name','doctorName','doctor'])),
-      complaint: toStr(firstNonEmpty(row, ['chief_complaint','complaint'])),
-      diagnosis: toStr(firstNonEmpty(row, ['diagnosis'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'pending')),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'appointments') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt','appointment_time','appointmentTime']);
-    return {
-      appointmentId: toStr(firstNonEmpty(row, ['appointmentId','appointment_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      appointmentNo: toStr(firstNonEmpty(row, ['appointment_no','appointmentNo','appointmentId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      doctorName: toStr(firstNonEmpty(row, ['doctor_name','doctorName','doctor'])),
-      reason: toStr(firstNonEmpty(row, ['reason','notes'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'pending')),
-      appointmentTime: timeAny(row, ['appointment_time','appointmentTime','created_at','createdAt']),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'admissions') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','admitted_at','admittedAt','created_at','createdAt']);
-    return {
-      admissionId: toStr(firstNonEmpty(row, ['admissionId','admission_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      admissionNo: toStr(firstNonEmpty(row, ['admission_no','admissionNo','admissionId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      ward: toStr(firstNonEmpty(row, ['ward'])),
-      bed: toStr(firstNonEmpty(row, ['bed'])),
-      doctorName: toStr(firstNonEmpty(row, ['doctor_name','doctorName','doctor'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'active')),
-      admittedAt: timeAny(row, ['admitted_at','admittedAt','created_at','createdAt']),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'pharmacy_dispenses') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      dispenseId: toStr(firstNonEmpty(row, ['dispenseId','dispense_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      itemName: toStr(firstNonEmpty(row, ['item_name','itemName','drug_name','drugName'])),
-      quantity: numAny(row, ['qty','quantity'], 0),
-      unitPrice: numAny(row, ['unit_price','unitPrice','price'], 0),
-      total: numAny(row, ['total','amount'], 0),
-      receiptNo: toStr(firstNonEmpty(row, ['receipt_no','receiptNo'])),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'lab_requests') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      requestId: toStr(firstNonEmpty(row, ['requestId','request_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      requestNo: toStr(firstNonEmpty(row, ['request_no','requestNo','sample_id','sampleId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      testName: toStr(firstNonEmpty(row, ['test_name','testName'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'pending')),
-      amount: numAny(row, ['amount','total'], 0),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'prescriptions') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      prescriptionId: toStr(firstNonEmpty(row, ['prescriptionId','prescription_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      doctorName: toStr(firstNonEmpty(row, ['doctor_name','doctorName','doctor'])),
-      medication: toStr(firstNonEmpty(row, ['medication','drug_name','drugName'])),
-      dosage: toStr(firstNonEmpty(row, ['dosage'])),
-      frequency: toStr(firstNonEmpty(row, ['frequency'])),
-      duration: toStr(firstNonEmpty(row, ['duration'])),
-      notes: toStr(firstNonEmpty(row, ['notes'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'active')),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'nurse_desk') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      deskId: toStr(firstNonEmpty(row, ['deskId','desk_id','noteId','note_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      nurseName: toStr(firstNonEmpty(row, ['nurse_name','nurseName','actor'])),
-      note: toStr(firstNonEmpty(row, ['note','notes'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'open')),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'doctor_queue') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      queueId: toStr(firstNonEmpty(row, ['queueId','queue_id','visitId','visit_id','id'])),
-      clinicId: baseClinicId,
-      patientId: toStr(firstNonEmpty(row, ['patient_id','patientId'])),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      patientName: toStr(firstNonEmpty(row, ['patient_name','patientName'])),
-      doctorName: toStr(firstNonEmpty(row, ['doctor_name','doctorName','doctor'])),
-      queueNo: toStr(firstNonEmpty(row, ['queue_no','queueNo','visit_no','visitNo'])),
-      status: toStr(firstNonEmpty(row, ['status'], 'waiting')),
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  if (table === 'staff') {
-    const createdAt = timeAny(row, ['updated_at','updatedAt','created_at','createdAt']);
-    return {
-      userId: toStr(firstNonEmpty(row, ['userId','user_id','id'])),
-      clinicId: baseClinicId,
-      email: safeEmail(firstNonEmpty(row, ['email','username'])),
-      username: toStr(firstNonEmpty(row, ['username','email'])),
-      password: toStr(firstNonEmpty(row, ['password'], '1234')),
-      role: normRole(firstNonEmpty(row, ['role'], 'Cashier')),
-      branchId: toStr(firstNonEmpty(row, ['branch_id','branchId'])),
-      fullName: toStr(firstNonEmpty(row, ['full_name','fullName','name'])),
-      active: firstNonEmpty(row, ['active'], true) !== false,
-      createdAt,
-      updatedAt: createdAt
-    };
-  }
-  return { ...row, clinicId: baseClinicId };
-}
-function findCanonicalRow(collection, clinicId, table, incoming){
-  const identity = rowIdentityForTable(table, incoming);
-  if (identity) {
-    return collection.find(x => String(x.clinicId) === String(clinicId) && rowIdentityForTable(table, x) === identity) || null;
-  }
-  return null;
-}
-function mergeSnapshotIntoDbArrays(db, clinicId, snapshot){
-  ensureArrays(db);
-  const data = snapshot?.data || {};
-  const mapping = {
-    patients: 'clinicPatients',
-    bills: 'clinicBills',
-    visits: 'clinicVisits',
-    admissions: 'clinicAdmissions',
-    appointments: 'clinicAppointments',
-    pharmacy_dispenses: 'clinicPharmacyDispenses',
-    lab_requests: 'clinicLabRequests',
-    prescriptions: 'clinicPrescriptions',
-    nurse_desk: 'clinicNurseDesk',
-    doctor_queue: 'clinicDoctorQueue',
-    staff: 'clinicUsers',
-    staffs: 'clinicUsers'
-  };
-  const applied = {};
-  for (const [table, bucket] of Object.entries(mapping)) {
-    const rows = arr(data[table]);
-    if (!rows.length) continue;
-    const collection = db[bucket];
-    let count = 0;
-    for (const raw of rows) {
-      if (!raw || typeof raw !== 'object') continue;
-      const normalized = normalizeSnapshotRow(table === 'staffs' ? 'staff' : table, raw, clinicId);
-      const current = findCanonicalRow(collection, clinicId, table === 'staffs' ? 'staff' : table, normalized);
-      if (current) {
-        const incomingTs = toNum(normalized.updatedAt || normalized.createdAt || 0);
-        const existingTs = toNum(current.updatedAt || current.createdAt || 0);
-        if (incomingTs >= existingTs || JSON.stringify(normalized).length >= JSON.stringify(current).length) {
-          Object.assign(current, { ...current, ...normalized, clinicId: String(clinicId), updatedAt: Math.max(incomingTs, existingTs, now()) });
-          count++;
-        }
-      } else {
-        collection.push({ ...normalized, clinicId: String(clinicId) });
-        count++;
-      }
-    }
-    if (count) applied[table] = count;
-  }
-  return applied;
-}
-function toAndroidSnapshot(db, clinicId){
-  const rows = clinicRows(db, clinicId);
-  const mapPatient = p => ({
-    id: numAny(p, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(p, ['patientId','mrn','id'])),
-    full_name: toStr(firstNonEmpty(p, ['fullName','name'])),
-    phone: cleanPhone(firstNonEmpty(p, ['phone'])),
-    gender: toStr(firstNonEmpty(p, ['gender'])),
-    age: numAny(p, ['age'], 0),
-    address: toStr(firstNonEmpty(p, ['address'])),
-    created_at: timeAny(p, ['updatedAt','createdAt'])
-  });
-  const mapBill = b => ({
-    id: numAny(b, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(b, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(b, ['patientName'])),
-    receipt_no: toStr(firstNonEmpty(b, ['receiptNo','billNo'])),
-    consultation: numAny(b, ['consultation'], 0),
-    lab: numAny(b, ['lab'], 0),
-    drugs: numAny(b, ['drugs'], 0),
-    other: numAny(b, ['other'], 0),
-    total: numAny(b, ['total','amount'], 0),
-    paid: numAny(b, ['paid','amountPaid'], 0),
-    balance: numAny(b, ['balance'], Math.max(0, numAny(b, ['total','amount'], 0) - numAny(b, ['paid','amountPaid'], 0))),
-    payment_method: toStr(firstNonEmpty(b, ['paymentMethod'])),
-    cashier: toStr(firstNonEmpty(b, ['cashier'])),
-    created_at: timeAny(b, ['updatedAt','createdAt'])
-  });
-  const mapVisit = v => ({
-    id: numAny(v, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(v, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(v, ['patientName'])),
-    visit_no: toStr(firstNonEmpty(v, ['visitNo','visitId'])),
-    doctor_name: toStr(firstNonEmpty(v, ['doctorName'])),
-    complaint: toStr(firstNonEmpty(v, ['complaint'])),
-    diagnosis: toStr(firstNonEmpty(v, ['diagnosis'])),
-    status: toStr(firstNonEmpty(v, ['status'], 'pending')),
-    created_at: timeAny(v, ['updatedAt','createdAt'])
-  });
-  const mapAppointment = a => ({
-    id: numAny(a, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(a, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(a, ['patientName'])),
-    appointment_no: toStr(firstNonEmpty(a, ['appointmentNo','appointmentId'])),
-    doctor_name: toStr(firstNonEmpty(a, ['doctorName'])),
-    reason: toStr(firstNonEmpty(a, ['reason','notes'])),
-    status: toStr(firstNonEmpty(a, ['status'], 'pending')),
-    appointment_time: timeAny(a, ['appointmentTime','updatedAt','createdAt']),
-    created_at: timeAny(a, ['updatedAt','createdAt'])
-  });
-  const mapAdmission = a => ({
-    id: numAny(a, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(a, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(a, ['patientName'])),
-    admission_no: toStr(firstNonEmpty(a, ['admissionNo','admissionId'])),
-    ward: toStr(firstNonEmpty(a, ['ward'])),
-    bed: toStr(firstNonEmpty(a, ['bed'])),
-    doctor_name: toStr(firstNonEmpty(a, ['doctorName'])),
-    status: toStr(firstNonEmpty(a, ['status'], 'active')),
-    admitted_at: timeAny(a, ['admittedAt','updatedAt','createdAt'])
-  });
-  const mapDispense = d => ({
-    id: numAny(d, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(d, ['patientId'])),
-    item_name: toStr(firstNonEmpty(d, ['itemName'])),
-    qty: numAny(d, ['quantity'], 0),
-    unit_price: numAny(d, ['unitPrice','price'], 0),
-    total: numAny(d, ['total','amount'], 0),
-    receipt_no: toStr(firstNonEmpty(d, ['receiptNo'])),
-    created_at: timeAny(d, ['updatedAt','createdAt'])
-  });
-  const mapLab = l => ({
-    id: numAny(l, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(l, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(l, ['patientName'])),
-    request_no: toStr(firstNonEmpty(l, ['requestNo','sampleId'])),
-    test_name: toStr(firstNonEmpty(l, ['testName'])),
-    status: toStr(firstNonEmpty(l, ['status'], 'pending')),
-    amount: numAny(l, ['amount','total'], 0),
-    created_at: timeAny(l, ['updatedAt','createdAt'])
-  });
-  const mapPrescription = p => ({
-    id: numAny(p, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(p, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(p, ['patientName'])),
-    doctor_name: toStr(firstNonEmpty(p, ['doctorName'])),
-    medication: toStr(firstNonEmpty(p, ['medication'])),
-    dosage: toStr(firstNonEmpty(p, ['dosage'])),
-    frequency: toStr(firstNonEmpty(p, ['frequency'])),
-    duration: toStr(firstNonEmpty(p, ['duration'])),
-    notes: toStr(firstNonEmpty(p, ['notes'])),
-    status: toStr(firstNonEmpty(p, ['status'], 'active')),
-    created_at: timeAny(p, ['updatedAt','createdAt'])
-  });
-  const mapNurse = n => ({
-    id: numAny(n, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(n, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(n, ['patientName'])),
-    nurse_name: toStr(firstNonEmpty(n, ['nurseName'])),
-    note: toStr(firstNonEmpty(n, ['note','notes'])),
-    status: toStr(firstNonEmpty(n, ['status'], 'open')),
-    created_at: timeAny(n, ['updatedAt','createdAt'])
-  });
-  const mapQueue = q => ({
-    id: numAny(q, ['id'], 0),
-    patient_id: toStr(firstNonEmpty(q, ['patientId'])),
-    patient_name: toStr(firstNonEmpty(q, ['patientName'])),
-    doctor_name: toStr(firstNonEmpty(q, ['doctorName'])),
-    queue_no: toStr(firstNonEmpty(q, ['queueNo','visitNo'])),
-    status: toStr(firstNonEmpty(q, ['status'], 'waiting')),
-    created_at: timeAny(q, ['updatedAt','createdAt'])
-  });
-  const mapStaff = u => ({
-    id: numAny(u, ['id'], 0),
-    username: toStr(firstNonEmpty(u, ['username','email'])),
-    password: toStr(firstNonEmpty(u, ['password'], '1234')),
-    full_name: toStr(firstNonEmpty(u, ['fullName','name'])),
-    role: normRole(firstNonEmpty(u, ['role'], 'Cashier')),
-    active: firstNonEmpty(u, ['active'], true) !== false ? 1 : 0,
-    created_at: timeAny(u, ['updatedAt','createdAt'])
-  });
   return {
     exported_at: now(),
-    data: {
-      patients: rows.patients.map(mapPatient),
-      bills: rows.bills.map(mapBill),
-      visits: rows.visits.map(mapVisit),
-      admissions: rows.admissions.map(mapAdmission),
-      appointments: rows.appointments.map(mapAppointment),
-      pharmacy_dispenses: rows.pharmacy_dispenses.map(mapDispense),
-      lab_requests: rows.lab_requests.map(mapLab),
-      prescriptions: rows.prescriptions.map(mapPrescription),
-      nurse_desk: rows.nurse_desk.map(mapNurse),
-      doctor_queue: rows.doctor_queue.map(mapQueue),
-      staff: rows.staff.map(mapStaff),
-      staffs: rows.staff.map(mapStaff),
-      pharmacy_items: rows.pharmacy_dispenses.map(mapDispense)
-    }
+    tables: SYNC_TABLES,
+    data
   };
 }
+
 function persistDerivedSnapshot(db, clinicId, actor='system', role='Admin', deviceId='', branchId=''){
   const latest = getLatestSnapshot(db, clinicId);
   const snapshot = buildSnapshotData(db, clinicId);
@@ -741,7 +784,7 @@ r.post('/hospital/create', (req, res) => {
         active: true
       };
       db.clinics.push(clinic);
-      db.clinicBranches.push({ branchId: 'br_' + nanoid(10), clinicId: clinic.clinicId, name: branchName, createdAt: now(), updatedAt: now(), isMain: true });
+      const mainBranch = { branchId: 'br_' + nanoid(10), clinicId: clinic.clinicId, name: branchName, code: 'MAIN', createdAt: now(), updatedAt: now(), isMain: true }; db.clinicBranches.push(mainBranch); mirrorCanonicalRowToSyncStore(db, clinic.clinicId, 'branches', mainBranch);
     } else {
       clinic.updatedAt = now();
       clinic.ownerPassword = ownerPassword || clinic.ownerPassword;
@@ -836,39 +879,41 @@ r.get('/device/list', (req, res) => {
   return res.json({ ok:true, devices: items });
 });
 
+
 function saveSnapshot(db, clinicId, body){
+  const merged = mergeSnapshotIntoStore(db, clinicId, body?.snapshot || body || {});
   const row = {
     snapshotId: 'snp_' + nanoid(12),
     clinicId,
-    branchId: toStr(body.branchId),
-    deviceId: toStr(body.deviceId),
-    role: normRole(body.role),
-    actor: toStr(body.actor),
-    snapshot: body.snapshot || { data:{} },
+    branchId: toStr(body?.branchId),
+    deviceId: toStr(body?.deviceId),
+    role: normRole(body?.role),
+    actor: toStr(body?.actor),
+    snapshot: merged.snapshot,
     createdAt: now(),
-    since: toNum(body.since, 0),
-    crossBranchEnabled: !!body.cross_branch_enabled
+    since: toNum(body?.since, 0),
+    crossBranchEnabled: !!body?.cross_branch_enabled
   };
   db.clinicSnapshots.push(row);
-  const clinic = db.clinics.find(x => String(x.clinicId) === clinicId);
+  const clinic = db.clinics.find(x => String(x.clinicId) === String(clinicId));
   if (clinic) clinic.updatedAt = now();
   return row;
 }
+
 
 r.post('/clinic/snapshot/upload', (req, res) => {
   try {
     const clinicId = authClinicId(req) || toStr(req.body?.hospitalId || req.body?.clinic_id || req.body?.clinicId);
     if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
     const db = readDB(); ensureArrays(db);
-    const rawRow = saveSnapshot(db, clinicId, req.body || {});
-    const merged = mergeSnapshotIntoDbArrays(db, clinicId, rawRow.snapshot || { data:{} });
-    const row = persistDerivedSnapshot(db, clinicId, toStr(req.body?.actor || 'system'), normRole(req.body?.role), toStr(req.body?.deviceId), toStr(req.body?.branchId));
+    const row = saveSnapshot(db, clinicId, req.body || {});
     const stats = summarizeSnapshot(row.snapshot || {});
     setCursor(db, clinicId, toStr(req.body?.deviceId), row.createdAt);
     makeNotification(db, clinicId, 'sync', 'Cloud snapshot uploaded', `Device ${toStr(req.body?.deviceName || req.body?.deviceId || 'unknown')} uploaded clinic data.`);
-    pushEvent(db, clinicId, 'snapshot_uploaded', { deviceId: toStr(req.body?.deviceId), branchId: toStr(req.body?.branchId), stats, merged });
+    pushEvent(db, clinicId, 'snapshot_uploaded', { deviceId: toStr(req.body?.deviceId), branchId: toStr(req.body?.branchId), stats });
     writeDB(db);
-    return res.json({ ok:true, uploaded:true, snapshotId: row.snapshotId, stats, merged, pull_snapshot: toAndroidSnapshot(db, clinicId), server_time: now() });
+    const latest = getLatestSnapshot(db, clinicId);
+    return res.json({ ok:true, uploaded:true, snapshotId: row.snapshotId, stats, pull_snapshot: latest?.snapshot || row.snapshot, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'upload failed' });
   }
@@ -880,7 +925,8 @@ r.get('/clinic/snapshot/pull', (req, res) => {
     if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
     const db = readDB(); ensureArrays(db);
     const latest = getLatestSnapshot(db, clinicId);
-    return res.json({ ok:true, snapshot: toAndroidSnapshot(db, clinicId), snapshot_meta: latest ? { snapshotId: latest.snapshotId, createdAt: latest.createdAt, deviceId: latest.deviceId, branchId: latest.branchId } : null, server_time: now() });
+    const fallback = buildSnapshotData(db, clinicId);
+    return res.json({ ok:true, snapshot: latest?.snapshot || fallback, snapshot_meta: latest ? { snapshotId: latest.snapshotId, createdAt: latest.createdAt, deviceId: latest.deviceId, branchId: latest.branchId } : null, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'pull failed' });
   }
@@ -891,14 +937,12 @@ r.post('/clinic/sync/push', (req, res) => {
     const clinicId = authClinicId(req) || toStr(req.body?.hospitalId || req.body?.clinic_id || req.body?.clinicId);
     if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
     const db = readDB(); ensureArrays(db);
-    const rawRow = saveSnapshot(db, clinicId, req.body || {});
-    const merged = mergeSnapshotIntoDbArrays(db, clinicId, rawRow.snapshot || { data:{} });
-    const row = persistDerivedSnapshot(db, clinicId, toStr(req.body?.actor || 'system'), normRole(req.body?.role), toStr(req.body?.deviceId), toStr(req.body?.branchId));
+    const row = saveSnapshot(db, clinicId, req.body || {});
     const stats = summarizeSnapshot(row.snapshot || {});
     setCursor(db, clinicId, toStr(req.body?.deviceId), row.createdAt);
-    pushEvent(db, clinicId, 'sync_push', { deviceId: toStr(req.body?.deviceId), branchId: toStr(req.body?.branchId), stats, merged });
+    pushEvent(db, clinicId, 'sync_push', { deviceId: toStr(req.body?.deviceId), branchId: toStr(req.body?.branchId), stats });
     writeDB(db);
-    return res.json({ ok:true, pushed:true, snapshotId: row.snapshotId, stats, merged, snapshot: toAndroidSnapshot(db, clinicId), server_time: now() });
+    return res.json({ ok:true, pushed:true, snapshotId: row.snapshotId, stats, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'push failed' });
   }
@@ -909,9 +953,70 @@ r.get('/clinic/sync/pull', (req, res) => {
     const clinicId = authClinicId(req) || toStr(req.query?.hospitalId || req.query?.clinicId || req.query?.clinic_id);
     if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
     const db = readDB(); ensureArrays(db);
-    return res.json({ ok:true, pulled:true, snapshot: toAndroidSnapshot(db, clinicId), server_time: now() });
+    const latest = getLatestSnapshot(db, clinicId);
+    const fallback = buildSnapshotData(db, clinicId);
+    return res.json({ ok:true, pulled:true, snapshot: latest?.snapshot || fallback, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'pull failed' });
+  }
+});
+
+
+r.get('/export', (req, res) => {
+  try {
+    const clinicId = authClinicId(req) || toStr(req.query?.hospitalId || req.query?.clinicId || req.query?.clinic_id);
+    if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
+    const db = readDB(); ensureArrays(db);
+    return res.json(buildSnapshotData(db, clinicId));
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'export failed' });
+  }
+});
+
+r.get('/export_delta', (req, res) => {
+  try {
+    const clinicId = authClinicId(req) || toStr(req.query?.hospitalId || req.query?.clinicId || req.query?.clinic_id);
+    if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
+    const db = readDB(); ensureArrays(db);
+    const since = toNum(req.query?.since, 0);
+    const snapshot = buildSnapshotData(db, clinicId);
+    if (since > 0) {
+      for (const table of SYNC_TABLES) {
+        snapshot.data[table] = arr(snapshot.data[table]).filter(row => syncRowTime(row, syncTimeColumn(table)) >= since);
+      }
+      snapshot.since = since;
+    }
+    return res.json(snapshot);
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'export delta failed' });
+  }
+});
+
+r.post('/import', (req, res) => {
+  try {
+    const clinicId = authClinicId(req) || toStr(req.body?.hospitalId || req.body?.clinic_id || req.body?.clinicId);
+    if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
+    const db = readDB(); ensureArrays(db);
+    const merged = mergeSnapshotIntoStore(db, clinicId, req.body || {});
+    const row = saveSnapshot(db, clinicId, { ...(req.body || {}), snapshot: merged.snapshot });
+    writeDB(db);
+    return res.json({ ok:true, imported_rows: merged.applied, snapshotId: row.snapshotId, snapshot: row.snapshot, server_time: now() });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'import failed' });
+  }
+});
+
+r.post('/import_delta', (req, res) => {
+  try {
+    const clinicId = authClinicId(req) || toStr(req.body?.hospitalId || req.body?.clinic_id || req.body?.clinicId);
+    if (!clinicId) return res.status(400).json({ ok:false, error:'hospitalId/clinicId is required' });
+    const db = readDB(); ensureArrays(db);
+    const merged = mergeSnapshotIntoStore(db, clinicId, req.body || {});
+    const row = saveSnapshot(db, clinicId, { ...(req.body || {}), snapshot: merged.snapshot });
+    writeDB(db);
+    return res.json({ ok:true, imported_rows: merged.applied, snapshotId: row.snapshotId, snapshot: row.snapshot, server_time: now() });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'import delta failed' });
   }
 });
 
@@ -971,6 +1076,7 @@ r.post('/patient/register', (req, res) => {
       updatedAt: now()
     };
     db.clinicPatients.push(patient);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'patients', patient);
     const summary = finalizeWrite(db, clinicId, 'patient_registered', 'New Patient Registered', `${patient.fullName} has been registered.`, { patientId: patient.patientId, patientName: patient.fullName }, req);
     return res.json({ ok:true, patient, ...summary });
   } catch (e) {
@@ -1040,6 +1146,7 @@ r.post('/bill/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicBills.push(bill);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'bills', bill);
     const summary = finalizeWrite(db, clinicId, 'bill_created', 'Bill Created', `Bill created for ${patient.fullName}.`, { billId: bill.billId, patientId, total: bill.total }, req);
     return res.json({ ok:true, bill, ...summary });
   } catch (e) {
@@ -1079,6 +1186,7 @@ r.post('/visit/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicVisits.push(visit);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'visits', visit);
     db.clinicDoctorQueue.push({
       queueId: createId('dq'),
       clinicId,
@@ -1133,6 +1241,7 @@ r.post('/admission/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicAdmissions.push(admission);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'admissions', admission);
     const summary = finalizeWrite(db, clinicId, 'admission_created', 'Admission Created', `${patient.fullName} has been admitted.`, { admissionId: admission.admissionId, patientId }, req);
     return res.json({ ok:true, admission, ...summary });
   } catch (e) {
@@ -1171,6 +1280,7 @@ r.post('/appointment/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicAppointments.push(appointment);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'appointments', appointment);
     const summary = finalizeWrite(db, clinicId, 'appointment_created', 'Appointment Created', `Appointment scheduled for ${patient.fullName}.`, { appointmentId: appointment.appointmentId, patientId }, req);
     return res.json({ ok:true, appointment, ...summary });
   } catch (e) {
@@ -1211,6 +1321,7 @@ r.post('/pharmacy/dispense', (req, res) => {
       updatedAt: now()
     };
     db.clinicPharmacyDispenses.push(row);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'pharmacy_dispenses', row);
     const summary = finalizeWrite(db, clinicId, 'drug_dispensed', 'Drug Dispensed', `${row.itemName || 'Drug'} dispensed to ${patient.fullName}.`, { dispenseId: row.dispenseId, patientId, itemName: row.itemName }, req);
     return res.json({ ok:true, dispense: row, ...summary });
   } catch (e) {
@@ -1249,6 +1360,7 @@ r.post('/lab/request', (req, res) => {
       updatedAt: now()
     };
     db.clinicLabRequests.push(row);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'lab_requests', row);
     const summary = finalizeWrite(db, clinicId, 'lab_request_created', 'Lab Request Created', `Lab request created for ${patient.fullName}.`, { labRequestId: row.labRequestId, patientId, testName: row.testName }, req);
     return res.json({ ok:true, labRequest: row, ...summary });
   } catch (e) {
@@ -1290,6 +1402,7 @@ r.post('/prescription/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicPrescriptions.push(row);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'prescriptions', row);
     const summary = finalizeWrite(db, clinicId, 'prescription_created', 'Prescription Created', `Prescription created for ${patient.fullName}.`, { prescriptionId: row.prescriptionId, patientId, drugName: row.drugName }, req);
     return res.json({ ok:true, prescription: row, ...summary });
   } catch (e) {
@@ -1330,6 +1443,7 @@ r.post('/nurse_desk/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicNurseDesk.push(row);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'nurse_tasks', row);
     const summary = finalizeWrite(db, clinicId, 'nurse_desk_created', 'Nurse Desk Updated', `Nurse desk entry saved for ${patient.fullName}.`, { nurseDeskId: row.nurseDeskId, patientId }, req);
     return res.json({ ok:true, nurseDesk: row, ...summary });
   } catch (e) {
@@ -1369,6 +1483,7 @@ r.post('/staff/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicUsers.push(staff);
+    mirrorCanonicalRowToSyncStore(db, clinicId, 'staff', staff);
     const summary = finalizeWrite(db, clinicId, 'staff_created', 'Staff Added', `${staff.fullName || staff.email} added as ${staff.role}.`, { userId: staff.userId, role: staff.role, email: staff.email }, req);
     return res.json({ ok:true, staff, ...summary });
   } catch (e) {
