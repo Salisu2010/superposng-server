@@ -573,6 +573,69 @@ function finalizeWrite(db, clinicId, type, title, message, payload, req){
 }
 function sortRecent(items){ return arr(items).sort((a,b)=>toNum(b.updatedAt || b.createdAt)-toNum(a.updatedAt || a.createdAt)); }
 
+
+function buildTimeline(db, clinicId, days = 14){
+  const totalDays = Math.max(1, Math.min(60, toNum(days, 14)));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(end.getTime() - ((totalDays - 1) * dayMs));
+  start.setHours(0, 0, 0, 0);
+  const byDay = new Map();
+
+  for (let i = 0; i < totalDays; i += 1) {
+    const d = new Date(start.getTime() + (i * dayMs));
+    const key = d.toISOString().slice(0, 10);
+    byDay.set(key, {
+      date: key,
+      label: key,
+      patients: 0,
+      visits: 0,
+      bills: 0,
+      revenue: 0,
+      paid: 0,
+      outstanding: 0,
+      queueAdded: 0,
+      appointments: 0,
+      admissions: 0,
+      lab: 0,
+      pharmacy: 0,
+      notifications: 0
+    });
+  }
+
+  const bump = (rows, field, valueFn) => {
+    for (const row of arr(rows)) {
+      if (!row || String(row.clinicId) !== String(clinicId)) continue;
+      const ts = toNum(row.updatedAt || row.createdAt || row.date || row.timestamp || row.time, 0);
+      if (!ts) continue;
+      const key = new Date(ts).toISOString().slice(0, 10);
+      const bucket = byDay.get(key);
+      if (!bucket) continue;
+      bucket[field] = toNum(bucket[field]) + toNum(valueFn ? valueFn(row) : 1);
+    }
+  };
+
+  bump(db.clinicPatients, 'patients');
+  bump(db.clinicVisits, 'visits');
+  bump(db.clinicBills, 'bills');
+  bump(db.clinicBills, 'revenue', row => toNum(row.total || row.amount));
+  bump(db.clinicBills, 'paid', row => toNum(row.paid || row.amount_paid));
+  bump(db.clinicDoctorQueue, 'queueAdded');
+  bump(db.clinicAppointments, 'appointments');
+  bump(db.clinicAdmissions, 'admissions');
+  bump(db.clinicLabRequests, 'lab');
+  bump(db.clinicPharmacyDispenses, 'pharmacy');
+  bump(db.clinicNotifications, 'notifications');
+
+  const timeline = Array.from(byDay.values()).map(item => ({
+    ...item,
+    outstanding: Math.max(0, toNum(item.revenue) - toNum(item.paid))
+  }));
+
+  return timeline.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
 function portalBundle(db, clinicId, options = {}){
   const include = new Set(arr(options.include).map(x => toStr(x).trim()).filter(Boolean));
   const wants = key => !include.size || include.has(key);
@@ -2059,12 +2122,16 @@ r.get('/portal/command-center', (req, res) => {
 
 r.get('/portal/refresh-lite', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
-  const db = readDB(); ensureArrays(db);
-  const include = String(req.query?.include || 'live,overview,finance,queue,timeline,patients,notifications,aiOverview,risk,doctorWidgets').split(',').map(x => x.trim()).filter(Boolean);
-  const days = toNum(req.query?.days, 14);
-  const bundle = portalBundle(db, clinicId, { include, days });
-  if (include.includes('doctorWidgets')) bundle.doctorWidgets = buildPortalDoctorWidgets(db, clinicId);
-  return res.json(bundle);
+  try {
+    const db = readDB(); ensureArrays(db);
+    const include = String(req.query?.include || 'live,overview,finance,queue,timeline,patients,notifications,aiOverview,risk,doctorWidgets').split(',').map(x => x.trim()).filter(Boolean);
+    const days = toNum(req.query?.days, 14);
+    const bundle = portalBundle(db, clinicId, { include, days });
+    if (include.includes('doctorWidgets')) bundle.doctorWidgets = buildPortalDoctorWidgets(db, clinicId);
+    return res.json(bundle);
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'portal refresh failed' });
+  }
 });
 
 r.post('/backup/create', (req, res) => {
