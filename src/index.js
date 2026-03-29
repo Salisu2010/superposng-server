@@ -201,7 +201,6 @@ app.use("/api/stmn/sync", authMiddleware, stmnSyncRoutes);
 app.use("/api/stmn/fcm", authMiddleware, stmnFcmRoutes);
 app.use("/api/stmn/chat", authMiddleware, stmnChatRoutes);
 app.use("/api/spng/fcm", authMiddleware, spngFcmRoutes);
-app.use("/api", clinicRoutes);
 
 /**
  * StayMasterNG Realtime Events (SSE)
@@ -269,6 +268,8 @@ app.get('/api/clinic/events', (req, res) => {
     return res.status(500).json({ ok:false, error:'Server error' });
   }
 });
+
+app.use("/api", clinicRoutes);
 
 /**
  * TrackGuard Realtime Events (SSE)

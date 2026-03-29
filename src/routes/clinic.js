@@ -2,7 +2,7 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import { readDB, writeDB } from '../db.js';
-import { clinicPublish } from '../clinic_events.js';
+import { clinicAddClient, clinicPublish, clinicSendSse, clinicSseHeaders } from '../clinic_events.js';
 import { ensureFcm, pushShopChange } from '../fcm.js';
 
 const r = Router();
@@ -1242,7 +1242,21 @@ r.get('/clinic/delta/pull', (req, res) => {
 });
 
 r.get('/events/stream', (req, res) => {
-  return res.status(400).json({ ok:false, error:'Use app-level /api/events/stream endpoint' });
+  try {
+    const clinicId = authClinicId(req) || toStr(req.query?.hospitalId || req.query?.clinicId || req.query?.clinic_id);
+    if (!clinicId) return res.status(401).json({ ok:false, error:'Missing clinicId or hospitalId' });
+    clinicSseHeaders(res);
+    clinicSendSse(res, 'hello', { ok:true, clinicId, at: Date.now(), route:'/api/events/stream' });
+    clinicAddClient(clinicId, res);
+    const ping = setInterval(() => {
+      try { clinicSendSse(res, 'ping', { t: Date.now() }); } catch {}
+    }, 15000);
+    req.on('close', () => {
+      try { clearInterval(ping); } catch {}
+    });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'events stream failed' });
+  }
 });
 
 r.post('/events/publish', (req, res) => {
