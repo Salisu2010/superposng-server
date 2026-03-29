@@ -218,6 +218,14 @@ async function loadPatients() { const r = await api('/api/portal/patients'); sta
 async function loadNotifications() { const r = await api('/api/notifications?limit=20'); state.data.notifications = r.notifications || []; return r; }
 async function loadAiOverview() { state.data.aiOverview = await api('/api/ai/clinic_overview'); }
 async function loadRisk() { state.data.risk = await api('/api/ai/risk_analysis'); }
+
+async function loadCommandCenter() {
+  const r = await api(`/api/portal/command-center?days=${state.timelineDays}`);
+  state.data.commandCenter = r.commandCenter || { cards: [], counts: {}, recentPatients: [], recentBills: [], queue: [], timeline: [], recentChanges: [] };
+  recomputeCommandCardsFromOverview();
+  return r;
+}
+
 async function loadDoctorWidgets() { const r = await api('/api/portal/doctor-widgets'); state.data.doctorWidgets = r.widgets || null; return r; }
 async function loadWorkspace() { const r = await api('/api/portal/workspace'); state.data.workspace = r || null; return r; }
 
