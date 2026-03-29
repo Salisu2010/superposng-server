@@ -13,6 +13,7 @@ const state = {
   currentTab: 'overview',
   live: null,
   version: 0,
+  sidebarCollapsed: localStorage.getItem('clinicPortalSidebarCollapsed') === '1',
   data: {
     overview: null,
     finance: null,
@@ -35,6 +36,8 @@ function init() {
   $('#hospitalId').value = state.hospitalId;
   $('#timelineDays').value = String(state.timelineDays);
   bindUI();
+  applySidebarState();
+  applyRouteState();
   tickClock();
   setInterval(tickClock, 1000);
   if (state.hospitalId) connect();
@@ -43,6 +46,10 @@ function init() {
 
 function bindUI() {
   $('#connectBtn').addEventListener('click', connect);
+  $('#sidebarCollapseBtn')?.addEventListener('click', () => toggleSidebarCollapsed());
+  $('#sidebarToggleMobile')?.addEventListener('click', () => setMobileSidebar(true));
+  $('#sidebarBackdrop')?.addEventListener('click', () => setMobileSidebar(false));
+  window.addEventListener('resize', handleResponsiveSidebar);
   $('#refreshBtn').addEventListener('click', refreshAll);
   $('#manualFeedBtn').addEventListener('click', loadNotificationsAndRender);
   $('#timelineDays').addEventListener('change', async (e) => {
@@ -59,7 +66,7 @@ function bindUI() {
     }
   });
 
-  $$('.navBtn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  $$('.navBtn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab, true)));
   $('#quickPatientBtn').addEventListener('click', openPatientWizard);
   $('#quickBillBtn').addEventListener('click', () => openBillModal());
   $('#quickVisitBtn').addEventListener('click', () => switchTab('workflow'));
@@ -127,7 +134,7 @@ function toggleFab(force) {
   dock.classList.toggle('open', open);
 }
 
-function switchTab(tab) {
+function switchTab(tab, pushHash = false) {
   state.currentTab = tab;
   $$('.navBtn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   $$('.tabPane').forEach(p => p.classList.add('hidden'));
@@ -140,7 +147,51 @@ function switchTab(tab) {
     workflow: 'Workflow',
     search: 'Search'
   }[tab] || 'Analytics';
+  document.getElementById('focusChipMode').textContent = {
+    overview: 'Executive Overview',
+    operations: 'Operations Board',
+    analytics: 'Analytics Suite',
+    patients: 'Patients Desk',
+    workflow: 'Workflow Workspace',
+    search: 'Patient Search'
+  }[tab] || 'Executive Overview';
+  document.getElementById('focusChipMode').classList.add('active');
+  if (pushHash) history.replaceState(null, '', `#${tab}`);
+  setMobileSidebar(false);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+
+function applySidebarState() {
+  document.body.classList.toggle('sidebar-collapsed', !!state.sidebarCollapsed);
+  const btn = document.getElementById('sidebarCollapseBtn');
+  if (btn) btn.textContent = state.sidebarCollapsed ? '»' : '☰';
+}
+
+function toggleSidebarCollapsed(force) {
+  state.sidebarCollapsed = typeof force === 'boolean' ? force : !state.sidebarCollapsed;
+  localStorage.setItem('clinicPortalSidebarCollapsed', state.sidebarCollapsed ? '1' : '0');
+  applySidebarState();
+}
+
+function setMobileSidebar(open) {
+  document.body.classList.toggle('sidebar-open-mobile', !!open);
+}
+
+function handleResponsiveSidebar() {
+  if (window.innerWidth > 1100) setMobileSidebar(false);
+}
+
+function applyRouteState() {
+  const tab = (location.hash || '').replace('#', '').trim();
+  if (tab && document.getElementById(`tab-${tab}`)) {
+    switchTab(tab, false);
+  } else {
+    switchTab(state.currentTab || 'overview', false);
+  }
+}
+
+window.addEventListener('hashchange', () => applyRouteState());
 
 function connect() {
   state.baseUrl = ($('#baseUrl').value || '').trim().replace(/\/$/, '');
@@ -153,6 +204,7 @@ function connect() {
   localStorage.setItem('clinicPortalBaseUrl', state.baseUrl);
   localStorage.setItem('clinicPortalHospitalId', state.hospitalId);
   $('#spotHospital').textContent = state.hospitalId;
+  document.getElementById('focusChipHospital').textContent = `Hospital ${state.hospitalId}`;
   $('#clinicTitle').textContent = `Clinic Pro NG - ${state.hospitalId}`;
   $('#heroSub').textContent = 'Enterprise analytics suite is connected. Revenue, operations, queue and AI intelligence now refresh live.';
   state.version = 0;
@@ -164,7 +216,10 @@ function renderDisconnected() {
   setLiveState('Disconnected', 'error');
   $('#spotHospital').textContent = '--';
   $('#transportText').textContent = state.transport;
+  document.getElementById('focusChipTransport').textContent = `Realtime ${state.transport}`;
   $('#realtimeText').textContent = 'Idle';
+  document.getElementById('focusChipHospital').textContent = 'Hospital --';
+  document.getElementById('focusChipSync').textContent = 'Last Sync --';
   $('#sideSummary').innerHTML = `<div class="miniPanel"><div class="itemTitle">Status</div><div>Connect Base URL and Hospital ID to start live command mode.</div></div>`;
   $('#kpiGrid').innerHTML = Array.from({ length: 8 }).map((_, i) => `
     <div class="kpiCard">
@@ -198,6 +253,8 @@ async function refreshAll() {
     ]);
     state.lastSync = Date.now();
     $('#lastSyncText').textContent = fmtTime(state.lastSync);
+    document.getElementById('focusChipSync').textContent = `Last Sync ${fmtTime(state.lastSync)}`;
+    document.getElementById('focusChipTransport').textContent = `Realtime ${state.transport}`;
     setLiveState(state.transport === 'SSE' ? 'Realtime Connected' : 'Connected', 'connected');
     if (state.data.live?.clinic?.clinicName) $('#clinicTitle').textContent = state.data.live.clinic.clinicName;
     if (state.data.live?.clinic?.clinicCode) $('#spotHospital').textContent = state.data.live.clinic.clinicCode;
@@ -841,6 +898,7 @@ function startRealtime() {
     state.sse.onopen = () => {
       state.transport = 'SSE';
       $('#transportText').textContent = 'SSE Live';
+      document.getElementById('focusChipTransport').textContent = 'Realtime SSE Live';
       $('#realtimeText').textContent = `Streaming${state.version ? ' • v' + state.version : ''}`;
       setLiveState('Realtime Connected', 'connected');
     };
@@ -848,11 +906,15 @@ function startRealtime() {
     state.sse.addEventListener('hello', () => {
       state.transport = 'SSE';
       $('#transportText').textContent = 'SSE Live';
+      document.getElementById('focusChipTransport').textContent = 'Realtime SSE Live';
       $('#realtimeText').textContent = `Streaming${state.version ? ' • v' + state.version : ''}`;
     });
     state.sse.addEventListener('ping', () => {
       state.lastSync = Date.now();
       $('#lastSyncText').textContent = fmtTime(state.lastSync);
+      document.getElementById('focusChipSync').textContent = `Last Sync ${fmtTime(state.lastSync)}`;
+    document.getElementById('focusChipSync').textContent = `Last Sync ${fmtTime(state.lastSync)}`;
+    document.getElementById('focusChipTransport').textContent = `Realtime ${state.transport}`;
     });
     state.sse.onerror = () => fallbackPolling();
   } catch {
@@ -898,6 +960,8 @@ async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
 function handleRealtimeEvent(raw) {
   state.lastSync = Date.now();
   $('#lastSyncText').textContent = fmtTime(state.lastSync);
+    document.getElementById('focusChipSync').textContent = `Last Sync ${fmtTime(state.lastSync)}`;
+    document.getElementById('focusChipTransport').textContent = `Realtime ${state.transport}`;
   let event = null;
   try { event = JSON.parse(raw); } catch {}
   const type = String(event?.type || event?.event || '').toLowerCase();
