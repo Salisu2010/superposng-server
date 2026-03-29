@@ -222,7 +222,8 @@ function pushEvent(db, clinicId, type, payload = {}){
   clinicPublish(clinicId, row.type, row);
   return row;
 }
-function clinicRows(db, clinicId){
+function clinicRows(db, clinicId, opts = {}){
+  const canonical = opts && opts.canonical !== false;
   const match = x => String(x.clinicId) === String(clinicId);
   const profileRows = db.clinicProfiles.filter(match);
   const derivedClinic = db.clinics.find(x => String(x.clinicId) === String(clinicId));
@@ -236,36 +237,38 @@ function clinicRows(db, clinicId){
     created_at: derivedClinic.createdAt,
     updated_at: derivedClinic.updatedAt
   } : null);
+  const pass = rows => arr(rows).map(x => ({ ...x }));
+  const generic = (rows, prefix='row') => canonical ? arr(rows).map(x => normalizeGenericSyncRow(clinicId, x, prefix)) : pass(rows);
   return {
-    clinic_profile: derivedProfile ? [derivedProfile] : profileRows,
-    branches: db.clinicBranches.filter(match),
-    audit_logs: db.clinicAuditLogs.filter(match),
-    staff: db.clinicUsers.filter(match),
-    patients: db.clinicPatients.filter(match),
-    visits: db.clinicVisits.filter(match),
-    bills: db.clinicBills.filter(match),
-    prescriptions: db.clinicPrescriptions.filter(match),
-    lab_requests: db.clinicLabRequests.filter(match),
-    pharmacy_items: db.clinicPharmacyItems.filter(match),
-    pharmacy_dispenses: db.clinicPharmacyDispenses.filter(match),
-    admissions: db.clinicAdmissions.filter(match),
-    appointments: db.clinicAppointments.filter(match),
-    vitals: db.clinicVitals.filter(match),
-    inpatient_treatment: db.clinicInpatientTreatment.filter(match),
-    treatment_notes: db.clinicTreatmentNotes.filter(match),
-    medication_schedule: db.clinicMedicationSchedule.filter(match),
-    medication_logs: db.clinicMedicationLogs.filter(match),
-    lab_samples: db.clinicLabSamples.filter(match),
-    pharmacy_receipts: db.clinicPharmacyReceipts.filter(match),
-    discharge_summary: db.clinicDischargeSummary.filter(match),
-    nurse_tasks: db.clinicNurseTasks.filter(match),
-    cashier_shifts: db.clinicCashierShifts.filter(match),
-    nurse_desk: db.clinicNurseDesk.filter(match),
-    doctor_queue: db.clinicDoctorQueue.filter(match)
+    clinic_profile: canonical ? arr(derivedProfile ? [derivedProfile] : profileRows).map(x => normalizeClinicProfile(clinicId, x)) : (derivedProfile ? [derivedProfile] : profileRows),
+    branches: canonical ? db.clinicBranches.filter(match).map(x => normalizeBranch(clinicId, x)) : pass(db.clinicBranches.filter(match)),
+    audit_logs: generic(db.clinicAuditLogs.filter(match), 'audit'),
+    staff: canonical ? db.clinicUsers.filter(match).map(x => normalizeStaff(clinicId, x)) : pass(db.clinicUsers.filter(match)),
+    patients: canonical ? db.clinicPatients.filter(match).map(x => normalizePatient(clinicId, x)) : pass(db.clinicPatients.filter(match)),
+    visits: canonical ? db.clinicVisits.filter(match).map(x => normalizeVisit(clinicId, x)) : pass(db.clinicVisits.filter(match)),
+    bills: canonical ? db.clinicBills.filter(match).map(x => normalizeBill(clinicId, x)) : pass(db.clinicBills.filter(match)),
+    prescriptions: generic(db.clinicPrescriptions.filter(match), 'rx'),
+    lab_requests: generic(db.clinicLabRequests.filter(match), 'lab'),
+    pharmacy_items: generic(db.clinicPharmacyItems.filter(match), 'item'),
+    pharmacy_dispenses: generic(db.clinicPharmacyDispenses.filter(match), 'disp'),
+    admissions: canonical ? db.clinicAdmissions.filter(match).map(x => normalizeAdmission(clinicId, x)) : pass(db.clinicAdmissions.filter(match)),
+    appointments: canonical ? db.clinicAppointments.filter(match).map(x => normalizeAppointment(clinicId, x)) : pass(db.clinicAppointments.filter(match)),
+    vitals: generic(db.clinicVitals.filter(match), 'vital'),
+    inpatient_treatment: generic(db.clinicInpatientTreatment.filter(match), 'ipt'),
+    treatment_notes: generic(db.clinicTreatmentNotes.filter(match), 'note'),
+    medication_schedule: generic(db.clinicMedicationSchedule.filter(match), 'msch'),
+    medication_logs: generic(db.clinicMedicationLogs.filter(match), 'mlog'),
+    lab_samples: generic(db.clinicLabSamples.filter(match), 'sample'),
+    pharmacy_receipts: generic(db.clinicPharmacyReceipts.filter(match), 'prx'),
+    discharge_summary: generic(db.clinicDischargeSummary.filter(match), 'disc'),
+    nurse_tasks: generic(db.clinicNurseTasks.filter(match), 'ntask'),
+    cashier_shifts: generic(db.clinicCashierShifts.filter(match), 'shift'),
+    nurse_desk: generic(db.clinicNurseDesk.filter(match), 'nurse'),
+    doctor_queue: generic(db.clinicDoctorQueue.filter(match), 'queue')
   };
 }
 function buildSnapshotData(db, clinicId){
-  const rows = clinicRows(db, clinicId);
+  const rows = clinicRows(db, clinicId, { canonical:true });
   return {
     data: {
       ...rows,
@@ -1351,9 +1354,8 @@ r.post('/patient/register', (req, res) => {
     const phone = cleanPhone(b.phone || b.patientPhone);
     if (!fullName) return res.status(400).json({ ok:false, error:'fullName is required' });
     const db = readDB(); ensureArrays(db);
-    const patient = {
+    const patient = normalizePatient(clinicId, {
       patientId: createId('pt'),
-      clinicId,
       branchId: toStr(b.branchId || req.auth?.branchId),
       mrn: toStr(b.mrn || `MRN-${Date.now().toString().slice(-6)}`),
       fullName,
@@ -1372,7 +1374,7 @@ r.post('/patient/register', (req, res) => {
       status: toStr(b.status || 'active'),
       createdAt: now(),
       updatedAt: now()
-    };
+    });
     db.clinicPatients.push(patient);
     const summary = finalizeWrite(db, clinicId, 'patient_registered', 'New Patient Registered', `${patient.fullName} has been registered.`, { patientId: patient.patientId, patientName: patient.fullName, entity: { patient: slimPatientRow(patient) } }, req);
     return res.json({ ok:true, patient, ...summary });
@@ -1986,13 +1988,19 @@ function buildPortalPatientProfile(db, clinicId, patientId){
   const visits = sortRecent(db.clinicVisits.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId)).slice(0, 12).map(v => ({ ...slimVisitRow(v), kind:'Visit' }));
   const bills = sortRecent(db.clinicBills.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId)).slice(0, 12).map(slimBillRow);
   const admissions = sortRecent(db.clinicAdmissions.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId)).slice(0, 8);
-  const summary = { visitCount: visits.length, billCount: bills.length, admissionCount: admissions.length, outstanding: bills.reduce((s,b)=>s + toNum(b.balance), 0) };
+  const prescriptions = sortRecent(db.clinicPrescriptions.filter(x => String(x.clinicId) === clinicId && String(x.patientId || x.patient_id) === patientId)).slice(0, 8);
+  const labs = sortRecent(db.clinicLabRequests.filter(x => String(x.clinicId) === clinicId && String(x.patientId || x.patient_id) === patientId)).slice(0, 8);
+  const queue = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && String(x.patientId || x.patient_id) === patientId)).slice(0, 8);
+  const summary = { visitCount: visits.length, billCount: bills.length, admissionCount: admissions.length, prescriptionCount: prescriptions.length, labCount: labs.length, queueCount: queue.length, outstanding: bills.reduce((s,b)=>s + toNum(b.balance), 0) };
   const encounters = sortRecent([
     ...visits.map(v => ({ ...v, createdAt: toNum(v.createdAt), title: v.reason })),
     ...bills.map(b => ({ ...b, kind:'Bill', doctorName:'Billing Desk', reason:b.category })),
-    ...admissions.map(a => ({ ...a, kind:'Admission', reason:a.ward, doctorName:a.doctorName, createdAt: toNum(a.admittedAt || a.createdAt) }))
-  ]).slice(0, 20);
-  return { patient, visits, bills, admissions, encounters, summary };
+    ...admissions.map(a => ({ ...a, kind:'Admission', reason:a.ward, doctorName:a.doctorName, createdAt: toNum(a.admittedAt || a.createdAt) })),
+    ...prescriptions.map(x => ({ kind:'Prescription', title: toStr(x.medicine || x.drugName), reason: toStr(x.dosage || x.instructions), doctorName: toStr(x.prescribed_by || x.prescribedBy), createdAt: toNum(x.created_at || x.createdAt) })),
+    ...labs.map(x => ({ kind:'Lab', title: toStr(x.test_name || x.testName), reason: toStr(x.status || 'pending'), doctorName: toStr(x.requested_by || x.requestedBy), createdAt: toNum(x.created_at || x.createdAt) })),
+    ...queue.map(x => ({ kind:'Queue', title: toStr(x.doctorName || x.doctor || 'Doctor Queue'), reason: toStr(x.status || 'waiting'), doctorName: toStr(x.doctorName || x.doctor), createdAt: toNum(x.createdAt || x.updatedAt || x.created_at) }))
+  ]).slice(0, 24);
+  return { patient, visits, bills, admissions, prescriptions, labs, queue, encounters, summary };
 }
 
 function buildPortalReceiptPreview(db, clinicId, billId){
@@ -2035,6 +2043,88 @@ function buildPortalDoctorWidgets(db, clinicId){
 }
 
 
+
+r.post('/portal/visit/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const b = req.body || {};
+    const visitId = toStr(b.visitId || b.visit_no || b.id);
+    if (!visitId) return res.status(400).json({ ok:false, error:'visitId is required' });
+    const db = readDB(); ensureArrays(db);
+    const visit = db.clinicVisits.find(x => String(x.clinicId) === clinicId && String(x.visitId || x.visit_no || x.id) === visitId);
+    if (!visit) return res.status(404).json({ ok:false, error:'Visit not found' });
+    if (b.doctorName != null) visit.doctorName = toStr(b.doctorName || b.doctor_name);
+    if (b.reason != null) visit.reason = toStr(b.reason || b.complaint);
+    if (b.diagnosis != null) visit.diagnosis = toStr(b.diagnosis);
+    if (b.status != null) visit.status = toStr(b.status);
+    visit.updatedAt = now();
+    const summary = finalizeWrite(db, clinicId, 'visit_updated', 'Visit Updated', `Visit ${visit.visitNo || visitId} updated from portal.`, { visitId, patientId: visit.patientId, entity: { visit: slimVisitRow(normalizeVisit(clinicId, visit)) } }, req);
+    return res.json({ ok:true, visit: normalizeVisit(clinicId, visit), ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'visit update failed' });
+  }
+});
+
+r.post('/portal/queue/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const b = req.body || {};
+    const queueId = toStr(b.queueId || b.id);
+    if (!queueId) return res.status(400).json({ ok:false, error:'queueId is required' });
+    const db = readDB(); ensureArrays(db);
+    const row = db.clinicDoctorQueue.find(x => String(x.clinicId) === clinicId && String(x.queueId || x.id) === queueId);
+    if (!row) return res.status(404).json({ ok:false, error:'Queue record not found' });
+    if (b.doctorName != null) row.doctorName = toStr(b.doctorName || b.doctor_name);
+    if (b.priority != null) row.priority = toStr(b.priority);
+    if (b.status != null) row.status = toStr(b.status);
+    row.updatedAt = now();
+    const summary = finalizeWrite(db, clinicId, 'doctor_queue_updated', 'Doctor Queue Updated', `Queue item ${queueId} updated from portal.`, { queueId, patientId: row.patientId, entity: { queue: slimQueueRow(row) } }, req);
+    return res.json({ ok:true, queue: row, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'queue update failed' });
+  }
+});
+
+r.post('/portal/lab/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const b = req.body || {};
+    const labId = toStr(b.labId || b.id);
+    if (!labId) return res.status(400).json({ ok:false, error:'labId is required' });
+    const db = readDB(); ensureArrays(db);
+    const row = db.clinicLabRequests.find(x => String(x.clinicId) === clinicId && String(x.id) === labId);
+    if (!row) return res.status(404).json({ ok:false, error:'Lab request not found' });
+    if (b.testName != null) row.test_name = toStr(b.testName || b.test_name);
+    if (b.resultText != null) row.result_text = toStr(b.resultText || b.result_text);
+    if (b.status != null) row.status = toStr(b.status);
+    row.updated_at = now();
+    const summary = finalizeWrite(db, clinicId, 'lab_request_updated', 'Lab Request Updated', `Lab request ${labId} updated from portal.`, { labId, patientId: row.patient_id || row.patientId, entity: { lab: row } }, req);
+    return res.json({ ok:true, lab: row, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'lab update failed' });
+  }
+});
+
+r.post('/portal/prescription/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const b = req.body || {};
+    const prescriptionId = toStr(b.prescriptionId || b.id);
+    if (!prescriptionId) return res.status(400).json({ ok:false, error:'prescriptionId is required' });
+    const db = readDB(); ensureArrays(db);
+    const row = db.clinicPrescriptions.find(x => String(x.clinicId) === clinicId && String(x.id) === prescriptionId);
+    if (!row) return res.status(404).json({ ok:false, error:'Prescription not found' });
+    if (b.medicine != null) row.medicine = toStr(b.medicine);
+    if (b.dosage != null) row.dosage = toStr(b.dosage);
+    if (b.instructions != null) row.instructions = toStr(b.instructions);
+    if (b.status != null) row.status = toStr(b.status);
+    row.updated_at = now();
+    const summary = finalizeWrite(db, clinicId, 'prescription_updated', 'Prescription Updated', `Prescription ${prescriptionId} updated from portal.`, { prescriptionId, patientId: row.patient_id || row.patientId, entity: { prescription: row } }, req);
+    return res.json({ ok:true, prescription: row, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'prescription update failed' });
+  }
+});
 
 r.post('/portal/patient/update', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
