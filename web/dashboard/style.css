@@ -74,3 +74,10 @@ textarea{min-height:88px;resize:vertical}
 @media (max-width:1560px){.kpiGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.workflowGrid,.analyticsSuite{grid-template-columns:1fr 1fr}.analyticsSuite .spanFull{grid-column:span 2}.operationsShell{grid-template-columns:1fr 1fr}.operationsShell .spanWide{grid-column:span 2}.executiveShell{grid-template-columns:1fr}.dualAnalyticsRow{grid-template-columns:1fr}.overviewRail{grid-template-columns:repeat(3,minmax(0,1fr));display:grid}.summaryGrid{grid-template-columns:1fr 1fr}}
 @media (max-width:1140px){.shell{grid-template-columns:1fr}.sidebar{position:static;height:auto}.heroGrid,.grid2,.workflowGrid,.overviewRail,.analyticsSuite,.operationsShell,.queueBoard{grid-template-columns:1fr}.operationsShell .spanWide,.analyticsSuite .spanFull{grid-column:auto}.topbar{flex-direction:column;align-items:flex-start}.topMeta{width:100%;grid-template-columns:repeat(2,1fr)}}
 @media (max-width:720px){.shell{padding:12px}.kpiGrid,.topMeta,.formGrid,.actionGrid,.summaryGrid{grid-template-columns:1fr}.finderRow{grid-template-columns:1fr}.topbar h2{font-size:26px}.heroCopy h3{font-size:23px}.glass,.modalCard,.kpiCard{border-radius:22px}}
+
+
+.livePill.connected{background:rgba(34,197,94,.18);color:#86efac;border-color:rgba(34,197,94,.35)}
+.livePill.error{background:rgba(239,68,68,.16);color:#fca5a5;border-color:rgba(239,68,68,.35)}
+.heroBadges span{position:relative;overflow:hidden}
+.heroBadges span::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);transform:translateX(-100%);animation:portalShimmer 3.8s linear infinite}
+@keyframes portalShimmer{100%{transform:translateX(100%)}}

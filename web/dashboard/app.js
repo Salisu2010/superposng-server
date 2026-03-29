@@ -11,6 +11,8 @@ const state = {
   refreshTimer: null,
   timelineDays: Number(localStorage.getItem('clinicPortalTimelineDays') || 14),
   currentTab: 'overview',
+  live: null,
+  version: 0,
   data: {
     overview: null,
     finance: null,
@@ -150,6 +152,7 @@ function connect() {
   $('#spotHospital').textContent = state.hospitalId;
   $('#clinicTitle').textContent = `Clinic Pro NG - ${state.hospitalId}`;
   $('#heroSub').textContent = 'Enterprise analytics suite is connected. Revenue, operations, queue and AI intelligence now refresh live.';
+  state.version = 0;
   refreshAll();
   startRealtime();
 }
@@ -177,6 +180,7 @@ async function refreshAll() {
   if (!state.baseUrl || !state.hospitalId) return renderDisconnected();
   try {
     await Promise.all([
+      loadLive(),
       loadOverview(),
       loadFinance(),
       loadQueue(),
@@ -189,6 +193,9 @@ async function refreshAll() {
     state.lastSync = Date.now();
     $('#lastSyncText').textContent = fmtTime(state.lastSync);
     setLiveState(state.transport === 'SSE' ? 'Realtime Connected' : 'Connected', 'connected');
+    if (state.data.live?.clinic?.clinicName) $('#clinicTitle').textContent = state.data.live.clinic.clinicName;
+    if (state.data.live?.clinic?.clinicCode) $('#spotHospital').textContent = state.data.live.clinic.clinicCode;
+    $('#heroSub').textContent = `Live hospital control for ${state.data.live?.clinic?.clinicName || state.hospitalId} with instant queue, revenue and patient analytics. Delta sync version ${state.version || 0}.`;
     renderAll();
   } catch (err) {
     setLiveState('Connection Error', 'error');
@@ -196,6 +203,7 @@ async function refreshAll() {
   }
 }
 
+async function loadLive() { state.data.live = await api('/api/portal/live'); state.live = state.data.live; state.version = num(state.data.live?.version || state.version); return state.data.live; }
 async function loadOverview() { state.data.overview = await api('/api/portal/overview'); }
 async function loadFinance() { state.data.finance = await api('/api/portal/finance'); }
 async function loadQueue() { const r = await api('/api/portal/queue'); state.data.queue = r.queue || []; return r; }
@@ -263,6 +271,7 @@ function renderAll() {
   renderFinance();
   renderDoctors();
   renderRealtimeBoard();
+  $('#realtimeText').textContent = `${state.transport}${state.version ? ' • v' + state.version : ''}`;
   renderDoctorBars();
   renderAnalyticsPanels();
   renderPatients();
@@ -412,14 +421,18 @@ function renderDoctors() {
 }
 
 function renderRealtimeBoard() {
-  const o = state.data.overview?.overview || {};
-  const n = state.data.notifications || [];
-  const signal = state.transport === 'SSE' ? 'Live stream active' : 'Polling fallback active';
-  $('#realtimeBoard').innerHTML = [
-    miniPanel('Connection', $('#livePill').textContent),
-    miniPanel('Transport', signal),
-    miniPanel('Last event', n[0] ? `${escapeHtml(n[0].title || n[0].type || 'Activity')} • ${fmtTime(n[0].createdAt)}` : 'No event yet'),
-    miniPanel('Operational pressure', `${num(o.queue)} queue • ${money(state.data.finance?.finance?.outstanding)} outstanding`),
+  const live = state.data.live || {};
+  const changes = Array.isArray(live.recentChanges) ? live.recentChanges : [];
+  const host = $('#realtimeBoard');
+  host.innerHTML = [
+    miniPanel('Transport', state.transport || 'Polling'),
+    miniPanel('Cloud Version', state.version || live.version || 0),
+    miniPanel('Queue Live', live.queueCount ?? state.data.queue?.queueCount ?? 0),
+    miniPanel('Snapshot', live.lastSnapshotAt ? fmtDateTime(live.lastSnapshotAt) : 'Waiting'),
+    ...changes.slice(0, 4).map(item => miniPanel(
+      `${String(item.type || 'update').replace(/_/g, ' ')}`,
+      `v${num(item.version)} • ${fmtTime(item.createdAt)}`
+    ))
   ].join('');
 }
 
@@ -477,13 +490,15 @@ function renderPatients() {
 }
 
 function renderSideSummary() {
-  const o = state.data.overview?.overview || {};
-  const f = state.data.finance?.finance || {};
+  const live = state.data.live || {};
+  const overview = state.data.overview?.overview || {};
   $('#sideSummary').innerHTML = [
-    miniPanel('Connection', $('#livePill').textContent),
-    miniPanel('Patients', `${num(o.patients)} registered`),
-    miniPanel('Queue', `${num(o.queue)} open items`),
-    miniPanel('Revenue', `${money(f.totalPaid)} collected`),
+    miniPanel('Hospital', state.data.live?.clinic?.clinicName || state.data.overview?.clinic?.clinicName || 'Connected'),
+    miniPanel('Cloud Version', state.version || live.version || 0),
+    miniPanel('Realtime Transport', state.transport || 'Polling'),
+    miniPanel('Patients', overview.patients ?? 0),
+    miniPanel('Outstanding', money(overview.outstanding || 0)),
+    miniPanel('Last Snapshot', live.lastSnapshotAt ? fmtDateTime(live.lastSnapshotAt) : '--')
   ].join('');
 }
 
@@ -549,14 +564,14 @@ function startRealtime() {
     state.sse.onopen = () => {
       state.transport = 'SSE';
       $('#transportText').textContent = 'SSE Live';
-      $('#realtimeText').textContent = 'Streaming';
+      $('#realtimeText').textContent = `Streaming${state.version ? ' • v' + state.version : ''}`;
       setLiveState('Realtime Connected', 'connected');
     };
     state.sse.onmessage = (e) => handleRealtimeEvent(e.data);
     state.sse.addEventListener('hello', () => {
       state.transport = 'SSE';
       $('#transportText').textContent = 'SSE Live';
-      $('#realtimeText').textContent = 'Streaming';
+      $('#realtimeText').textContent = `Streaming${state.version ? ' • v' + state.version : ''}`;
     });
     state.sse.addEventListener('ping', () => {
       state.lastSync = Date.now();
@@ -568,28 +583,70 @@ function startRealtime() {
   }
 }
 
+function inferTablesFromType(type) {
+  const value = String(type || '').toLowerCase();
+  const tables = new Set();
+  if (value.includes('patient')) tables.add('patients');
+  if (value.includes('bill')) tables.add('bills');
+  if (value.includes('visit')) tables.add('visits');
+  if (value.includes('queue')) tables.add('doctor_queue');
+  if (value.includes('appointment')) tables.add('appointments');
+  if (value.includes('admission')) tables.add('admissions');
+  if (value.includes('lab')) tables.add('lab_requests');
+  if (value.includes('pharmacy') || value.includes('drug')) tables.add('pharmacy_dispenses');
+  if (value.includes('nurse')) tables.add('nurse_desk');
+  if (value.includes('staff')) tables.add('staff');
+  return Array.from(tables);
+}
+
+async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
+  const keys = new Set((Array.isArray(tables) ? tables : []).map(x => String(x || '').toLowerCase()).filter(Boolean));
+  if (!keys.size) return refreshAll();
+  const jobs = [loadLive()];
+  const needsOps = ['patients','visits','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff'].some(k => keys.has(k));
+  const needsFinance = ['bills','pharmacy_dispenses','cashier_shifts'].some(k => keys.has(k));
+  const needsTimeline = ['patients','visits','bills','doctor_queue'].some(k => keys.has(k));
+  const needsPatients = ['patients','visits','bills','admissions','appointments'].some(k => keys.has(k));
+  const needsNotifications = ['audit_logs'].some(k => keys.has(k)) || !keys.size;
+  if (needsOps) jobs.push(loadQueue(), loadOverview(), loadAiOverview(), loadRisk());
+  if (needsFinance) jobs.push(loadFinance());
+  if (needsTimeline) jobs.push(loadTimeline());
+  if (needsPatients) jobs.push(loadPatients());
+  if (needsNotifications) jobs.push(loadNotifications());
+  await Promise.all(jobs);
+  if (versionHint) state.version = Math.max(state.version || 0, num(versionHint));
+  renderAll();
+}
+
 function handleRealtimeEvent(raw) {
   state.lastSync = Date.now();
   $('#lastSyncText').textContent = fmtTime(state.lastSync);
   let event = null;
   try { event = JSON.parse(raw); } catch {}
   const type = String(event?.type || event?.event || '').toLowerCase();
-  if (type) {
-    showToast('Realtime Update', event.title || event.message || type);
+  const versionHint = num(event?.payload?.version || event?.version || 0);
+  const tables = Array.from(new Set([...(event?.payload?.tables || []), ...(event?.payload?.changedTables || []), ...inferTablesFromType(type)]));
+  state.version = Math.max(state.version || 0, versionHint);
+  if (type) showToast('Realtime Update', event.title || event.message || type);
+  if (state.data.live && event && type) {
+    const recent = Array.isArray(state.data.live.recentChanges) ? state.data.live.recentChanges.slice() : [];
+    recent.unshift({ type, version: state.version, createdAt: Date.now(), payload: event.payload || {}, tables });
+    state.data.live.recentChanges = recent.slice(0, 8);
+    renderRealtimeBoard();
+    renderSideSummary();
   }
-  // safest path: lightweight schedule instead of immediate full refresh bursts
-  scheduleRefresh(type.includes('queue') ? 200 : 500);
+  scheduleRefresh(type.includes('queue') ? 120 : (type.includes('patient') || type.includes('bill') || type.includes('visit') ? 180 : 320), tables, versionHint);
 }
 
-function scheduleRefresh(delay = 400) {
+function scheduleRefresh(delay = 400, tables = [], versionHint = 0) {
   clearTimeout(state.refreshTimer);
-  state.refreshTimer = setTimeout(() => refreshAll(), delay);
+  state.refreshTimer = setTimeout(() => targetedRealtimeRefresh(tables, versionHint).catch(() => refreshAll()), delay);
 }
 
 function fallbackPolling() {
   state.transport = 'Polling';
   $('#transportText').textContent = 'Polling';
-  $('#realtimeText').textContent = 'Fallback';
+  $('#realtimeText').textContent = `Fallback${state.version ? ' • v' + state.version : ''}`;
   if (!state.poller) state.poller = setInterval(refreshAll, 15000);
 }
 
