@@ -7,70 +7,72 @@
   <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
-<div class="shell">
-  <aside class="sidebar glass">
-    <div class="brandBlock">
-      <div class="brandAura"></div>
-      <div class="eyebrow">Clinic Pro NG</div>
-      <h1>Enterprise Command Center</h1>
-      <p class="muted">Android style hospital ERP portal with realtime operations, queue intelligence and direct workflow control.</p>
+<div class="shell enterpriseShell">
+  <aside class="sidebar glass enterpriseSidebar">
+    <div class="sidebarInner">
+      <section class="brandBlock brandBlockPro">
+        <div class="brandAura"></div>
+        <div class="eyebrow">Clinic Pro NG</div>
+        <h1>World Class Hospital Portal</h1>
+        <p class="muted">Unified enterprise control room for registration, billing, queue, lab, prescription, staff workflow and realtime hospital intelligence.</p>
+      </section>
+
+      <section class="panel stack10 connectionPanel">
+        <div class="sectionTitle">Portal Connection</div>
+        <label class="fieldLabel">Base URL</label>
+        <input id="baseUrl" placeholder="https://api.superpos.com.ng">
+        <label class="fieldLabel">Hospital ID</label>
+        <input id="hospitalId" placeholder="cln_xxxxxxxx">
+        <div class="row split2">
+          <button id="connectBtn" class="btn btnPrimary" type="button">Connect</button>
+          <button id="refreshBtn" class="btn btnGhost" type="button">Refresh</button>
+        </div>
+        <div class="miniStats compactStats sideStatGrid">
+          <div><span>Transport</span><strong id="transportText">Polling</strong></div>
+          <div><span>Last Sync</span><strong id="lastSyncText">--</strong></div>
+        </div>
+      </section>
+
+      <section class="panel stack8 navPanel">
+        <div class="sectionTitle">Sidebar Navigation</div>
+        <nav class="navList navSidebar">
+          <button class="navBtn active" data-tab="overview" type="button"><span>Executive Overview</span><small>Live KPIs, revenue, queue board</small></button>
+          <button class="navBtn" data-tab="operations" type="button"><span>Operations Board</span><small>Activity feed, finance, doctors</small></button>
+          <button class="navBtn" data-tab="analytics" type="button"><span>Analytics Suite</span><small>Signals, benchmarks, summaries</small></button>
+          <button class="navBtn" data-tab="patients" type="button"><span>Patients Desk</span><small>Registration, registry, patient profile</small></button>
+          <button class="navBtn" data-tab="workflow" type="button"><span>Workflow Workspace</span><small>Billing, visit, queue, lab, nurse</small></button>
+          <button class="navBtn" data-tab="search" type="button"><span>Patient Search</span><small>Find patient and AI summary</small></button>
+        </nav>
+      </section>
+
+      <section class="panel stack8 quickLaunchPanel">
+        <div class="sectionTitle">Quick Launch</div>
+        <button id="quickPatientBtn" class="quickBtn" type="button">New Patient Registration</button>
+        <button id="quickBillBtn" class="quickBtn" type="button">Direct Billing</button>
+        <button id="quickVisitBtn" class="quickBtn" type="button">New Visit</button>
+        <button id="quickQueueBtn" class="quickBtn" type="button">Doctor Queue</button>
+      </section>
+
+      <section class="panel stack8 summaryPanel">
+        <div class="sectionTitle">Command Snapshot</div>
+        <div id="sideSummary" class="stack8">
+          <div class="miniPanel"><div class="itemTitle">Status</div><div>Connect portal to start live mode.</div></div>
+        </div>
+      </section>
     </div>
-
-    <section class="panel stack10">
-      <div class="sectionTitle">Connection</div>
-      <label class="fieldLabel">Base URL</label>
-      <input id="baseUrl" placeholder="https://api.superpos.com.ng">
-      <label class="fieldLabel">Hospital ID</label>
-      <input id="hospitalId" placeholder="cln_xxxxxxxx">
-      <div class="row split2">
-        <button id="connectBtn" class="btn btnPrimary" type="button">Connect</button>
-        <button id="refreshBtn" class="btn btnGhost" type="button">Refresh</button>
-      </div>
-      <div class="miniStats compactStats">
-        <div><span>Transport</span><strong id="transportText">Polling</strong></div>
-        <div><span>Last Sync</span><strong id="lastSyncText">--</strong></div>
-      </div>
-    </section>
-
-    <section class="panel stack8">
-      <div class="sectionTitle">Navigation</div>
-      <nav class="navList">
-        <button class="navBtn active" data-tab="overview" type="button"><span>Executive Overview</span><small>KPIs, trends, board</small></button>
-        <button class="navBtn" data-tab="operations" type="button"><span>Operations Board</span><small>Queue, feed, finance</small></button>
-        <button class="navBtn" data-tab="analytics" type="button"><span>Analytics Suite</span><small>Signals, AI, insights</small></button>
-        <button class="navBtn" data-tab="patients" type="button"><span>Patients</span><small>Registry and profiles</small></button>
-        <button class="navBtn" data-tab="workflow" type="button"><span>Workflow Desk</span><small>Visits, bills, lab, staff</small></button>
-        <button class="navBtn" data-tab="search" type="button"><span>Patient Search</span><small>Find and bill instantly</small></button>
-      </nav>
-    </section>
-
-    <section class="panel stack8">
-      <div class="sectionTitle">Quick Launch</div>
-      <button id="quickPatientBtn" class="quickBtn" type="button">New Patient Registration</button>
-      <button id="quickBillBtn" class="quickBtn" type="button">Direct Billing</button>
-      <button id="quickVisitBtn" class="quickBtn" type="button">New Visit</button>
-      <button id="quickQueueBtn" class="quickBtn" type="button">Doctor Queue</button>
-    </section>
-
-    <section class="panel stack8">
-      <div class="sectionTitle">Command Snapshot</div>
-      <div id="sideSummary" class="stack8">
-        <div class="miniPanel"><div class="itemTitle">Status</div><div>Connect portal to start live mode.</div></div>
-      </div>
-    </section>
   </aside>
 
-  <main class="content">
-    <section class="topbar glass">
+  <main class="content enterpriseContent">
+    <section class="topbar glass topbarPro">
       <div>
         <div class="eyebrow">Executive Control Bar</div>
         <div class="headlineRow">
           <h2 id="clinicTitle">Clinic Pro NG Web Portal</h2>
           <span class="livePill" id="livePill">Disconnected</span>
         </div>
-        <p id="heroSub" class="heroSub">Full analytics enterprise suite for revenue intelligence, patient growth, doctor workload, queue pressure and realtime operations.</p>
+        <p id="heroSub" class="heroSub">A premium browser command center for hospital operations, patient flow, billing, workforce coordination and realtime care delivery.</p>
       </div>
-      <div class="topMeta">
+      <div class="topMeta topMetaPro">
         <div class="metaCard"><span>System Time</span><strong id="systemClock">--</strong></div>
         <div class="metaCard"><span>Hospital</span><strong id="spotHospital">--</strong></div>
         <div class="metaCard"><span>Realtime</span><strong id="realtimeText">Idle</strong></div>
@@ -78,23 +80,23 @@
       </div>
     </section>
 
-    <section class="heroGrid">
-      <article class="heroPanel glass">
+    <section class="heroGrid heroGridPro">
+      <article class="heroPanel glass heroPanelPro">
         <div class="heroCopy">
-          <div class="eyebrow">Hospital ERP Command Center</div>
-          <h3>Monitor revenue, care delivery, doctor workload, queue risk and patient growth in one live command screen</h3>
-          <p>Designed in the spirit of your Android LocalHub flow, but restructured into a world class web portal with analytics center, operations board, smart workflow desk and live command actions.</p>
+          <div class="eyebrow">Enterprise Hospital Command Center</div>
+          <h3>One world class workspace for patient registration, live billing, queue control, lab flow, prescription monitoring and operational intelligence</h3>
+          <p>Redesigned into a premium hospital portal with a dedicated sidebar navigation, executive overview, rich workflow workspace, live command cards and instant cross-desk visibility.</p>
         </div>
         <div class="heroBadges" id="heroBadges">
           <span>SSE Live</span>
-          <span>Revenue Analytics</span>
-          <span>AI Watchlist</span>
+          <span>Realtime Sync</span>
+          <span>Billing Control</span>
+          <span>Patient Registry</span>
           <span>Doctor Queue</span>
-          <span>Direct Billing</span>
-          <span>Delta Sync v2</span>
+          <span>Hospital Analytics</span>
         </div>
       </article>
-      <article class="heroRight glass">
+      <article class="heroRight glass heroRightPro">
         <div class="cardHead compact"><div><div class="eyebrow">Realtime Board</div><h3>Live Command Pulse</h3></div></div>
         <div id="realtimeBoard" class="stack10"></div>
       </article>
@@ -102,7 +104,7 @@
 
     <section id="kpiGrid" class="kpiGrid"></section>
 
-    <section class="glass tickerStrip">
+    <section class="glass tickerStrip tickerStripPro">
       <div class="tickerHead">Live Counter Stream</div>
       <div id="liveTicker" class="tickerRow"></div>
     </section>
@@ -227,8 +229,9 @@
     <section id="tab-patients" class="tabPane hidden">
       <div class="grid2 patientsShell">
         <article class="glass card">
-          <div class="cardHead">
-            <div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div><div class="row gap8"><span class="badge">Wizard</span><span class="badge">Realtime</span></div>
+          <div class="cardHead cardHeadWrap">
+            <div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div>
+            <div class="row gap8"><span class="badge">Wizard</span><span class="badge">Realtime</span></div>
             <button class="btn btnGhost small openPatientModal" type="button">Launch Wizard</button>
           </div>
           <form id="patientForm" class="formGrid">
