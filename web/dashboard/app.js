@@ -22,6 +22,9 @@ const state = {
     notifications: [],
     aiOverview: null,
     risk: null,
+    commandCenter: null,
+    doctorWidgets: null,
+    workspace: null,
   }
 };
 
@@ -57,7 +60,7 @@ function bindUI() {
   });
 
   $$('.navBtn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-  $('#quickPatientBtn').addEventListener('click', openPatientModal);
+  $('#quickPatientBtn').addEventListener('click', openPatientWizard);
   $('#quickBillBtn').addEventListener('click', () => openBillModal());
   $('#quickVisitBtn').addEventListener('click', () => switchTab('workflow'));
   $('#quickQueueBtn').addEventListener('click', () => switchTab('operations'));
@@ -69,26 +72,26 @@ function bindUI() {
   document.addEventListener('click', (e) => {
     if (!$('#fabDock').contains(e.target)) toggleFab(false);
   });
-  $$('.openPatientModal').forEach(btn => btn.addEventListener('click', openPatientModal));
+  $$('.openPatientModal').forEach(btn => btn.addEventListener('click', openPatientWizard));
   $$('.openBillModal').forEach(btn => btn.addEventListener('click', () => openBillModal()));
 
   bindForm('#patientForm', '/api/patient/register', 'Patient registered', async (res) => {
     closeModal();
     showToast('Patient Saved', res?.patient?.fullName || res?.patient?.patientName || 'Patient registration completed');
-    await refreshAll();
+    await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
   });
   bindForm('#billForm', '/api/bill/create', 'Bill created', async (res) => {
     closeModal();
     showToast('Bill Created', `${res?.bill?.serviceName || 'Service'} billing saved`);
-    await refreshAll();
+    await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
   });
-  bindForm('#visitForm', '/api/visit/create', 'Visit saved', async () => { showToast('Visit Saved', 'Clinical visit recorded'); await refreshAll(); });
-  bindForm('#appointmentForm', '/api/appointment/create', 'Appointment booked', async () => { showToast('Appointment Booked', 'Appointment created'); await refreshAll(); });
-  bindForm('#queueForm', '/api/doctor_queue/create', 'Queue entry saved', async () => { showToast('Queue Updated', 'Doctor queue updated'); await refreshAll(); });
-  bindForm('#labForm', '/api/lab/request', 'Lab request saved', async () => { showToast('Lab Request', 'Lab request created'); await refreshAll(); });
-  bindForm('#prescriptionForm', '/api/prescription/create', 'Prescription saved', async () => { showToast('Prescription Saved', 'Medication order created'); await refreshAll(); });
-  bindForm('#nurseForm', '/api/nurse_desk/create', 'Nurse note saved', async () => { showToast('Nurse Desk', 'Nurse entry saved'); await refreshAll(); });
-  bindForm('#staffForm', '/api/staff/create', 'Staff created', async () => { showToast('Staff Created', 'Team member saved'); await refreshAll(); });
+  bindForm('#visitForm', '/api/visit/create', 'Visit saved', async () => { showToast('Visit Saved', 'Clinical visit recorded'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#appointmentForm', '/api/appointment/create', 'Appointment booked', async () => { showToast('Appointment Booked', 'Appointment created'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#queueForm', '/api/doctor_queue/create', 'Queue entry saved', async () => { showToast('Queue Updated', 'Doctor queue updated'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#labForm', '/api/lab/request', 'Lab request saved', async () => { showToast('Lab Request', 'Lab request created'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#prescriptionForm', '/api/prescription/create', 'Prescription saved', async () => { showToast('Prescription Saved', 'Medication order created'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#nurseForm', '/api/nurse_desk/create', 'Nurse note saved', async () => { showToast('Nurse Desk', 'Nurse entry saved'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#staffForm', '/api/staff/create', 'Staff created', async () => { showToast('Staff Created', 'Team member saved'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
 }
 
 function bindForm(selector, path, successMsg, onDone) {
@@ -189,6 +192,9 @@ async function refreshAll() {
       loadNotifications(),
       loadAiOverview(),
       loadRisk(),
+      loadCommandCenter(),
+      loadDoctorWidgets(),
+      loadWorkspace(),
     ]);
     state.lastSync = Date.now();
     $('#lastSyncText').textContent = fmtTime(state.lastSync);
@@ -212,6 +218,34 @@ async function loadPatients() { const r = await api('/api/portal/patients'); sta
 async function loadNotifications() { const r = await api('/api/notifications?limit=20'); state.data.notifications = r.notifications || []; return r; }
 async function loadAiOverview() { state.data.aiOverview = await api('/api/ai/clinic_overview'); }
 async function loadRisk() { state.data.risk = await api('/api/ai/risk_analysis'); }
+async function loadDoctorWidgets() { const r = await api('/api/portal/doctor-widgets'); state.data.doctorWidgets = r.widgets || null; return r; }
+async function loadWorkspace() { const r = await api('/api/portal/workspace'); state.data.workspace = r || null; return r; }
+
+function applyLiteBundle(bundle = {}) {
+  if (bundle.live) { state.data.live = bundle.live; state.live = bundle.live; }
+  if (bundle.overview) state.data.overview = bundle.overview;
+  if (bundle.finance) state.data.finance = { finance: bundle.finance };
+  if (bundle.queue) state.data.queue = bundle.queue.queue || [];
+  if (bundle.timeline) state.data.timeline = bundle.timeline.timeline || [];
+  if (bundle.patients) state.data.patients = bundle.patients.patients || [];
+  if (bundle.notifications) state.data.notifications = bundle.notifications.notifications || [];
+  if (bundle.aiOverview) state.data.aiOverview = bundle.aiOverview;
+  if (bundle.risk) state.data.risk = bundle.risk;
+  if (bundle.commandCenter) state.data.commandCenter = bundle.commandCenter;
+  if (bundle.doctorWidgets) state.data.doctorWidgets = bundle.doctorWidgets;
+  if (bundle.workspace) state.data.workspace = bundle.workspace;
+  state.version = Math.max(state.version || 0, num(bundle.version || bundle.live?.version || 0));
+}
+
+async function loadLiteBundle(include = []) {
+  const key = (Array.isArray(include) ? include : []).filter(Boolean).join(',');
+  const q = new URLSearchParams();
+  if (key) q.set('include', key);
+  q.set('days', String(state.timelineDays || 14));
+  const bundle = await api(`/api/portal/refresh-lite?${q.toString()}`);
+  applyLiteBundle(bundle);
+  return bundle;
+}
 async function loadNotificationsAndRender() { await loadNotifications(); renderFeed(); renderAnalyticsPanels(); }
 
 async function runSearch() {
@@ -233,11 +267,13 @@ async function runSearch() {
         <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span></div>
         <div class="queueActions">
           <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI Summary</button>
+          <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
           <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
         </div>
       </div>
     `).join('');
     $$('[data-ai]', host).forEach(btn => btn.addEventListener('click', () => loadPatientAi(btn.dataset.ai)));
+    $$('[data-view]', host).forEach(btn => btn.addEventListener('click', () => openPatientDrawer(btn.dataset.view)));
     $$('[data-bill]', host).forEach(btn => btn.addEventListener('click', () => openBillModal(btn.dataset.bill, btn.dataset.name)));
     loadPatientAi(items[0].patientId);
   } catch (err) {
@@ -275,6 +311,9 @@ function renderAll() {
   renderDoctorBars();
   renderAnalyticsPanels();
   renderPatients();
+  renderWorkspace();
+  renderCommandCenter();
+  renderLiveTicker();
   renderSideSummary();
 }
 
@@ -396,7 +435,7 @@ async function updateQueueStatus(queueId, status) {
   try {
     await api('/api/doctor_queue/update', { method: 'POST', body: { queueId, status } });
     showToast('Queue Updated', `Queue item moved to ${status}`);
-    await refreshAll();
+    await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
   } catch (err) {
     showToast('Queue Update Failed', err.message || 'Unable to update queue');
   }
@@ -416,8 +455,37 @@ function renderFinance() {
 }
 
 function renderDoctors() {
-  const doctors = getDoctorWorkload();
-  $('#doctors').innerHTML = doctors.length ? doctors.slice(0, 6).map(d => metricBar(d.doctorName || 'Doctor', num(d.count), Math.max(...doctors.map(x => num(x.count)), 1))).join('') : `<div class="emptyState">Doctor workload will appear here after visits or queue records.</div>`;
+  const widgets = state.data.doctorWidgets || {};
+  const doctors = Array.isArray(widgets.doctors) && widgets.doctors.length ? widgets.doctors : getDoctorWorkload();
+  if (!doctors.length) {
+    $('#doctors').innerHTML = `<div class="emptyState">Doctor workload will appear here after visits or queue records.</div>`;
+    return;
+  }
+  const maxCount = Math.max(...doctors.map(d => num(d.queueCount || d.count || d.total || 0)), 1);
+  $('#doctors').innerHTML = doctors.slice(0, 8).map(d => `
+    <div class="doctorWidgetCard">
+      <div class="row alignCenter" style="justify-content:space-between">
+        <div>
+          <div class="itemTitle">${escapeHtml(d.doctorName || d.doctor || 'Doctor')}</div>
+          <div class="itemMeta"><span>${num(d.queueCount || d.count || 0)} in queue</span><span>${num(d.servedCount || 0)} served</span></div>
+        </div>
+        <span class="badge ${num(d.queueCount || d.count || 0) >= 6 ? 'urgent' : 'normal'}">${num(d.queueCount || d.count || 0) >= 6 ? 'Busy' : 'Stable'}</span>
+      </div>
+      <div class="miniKpis">
+        <div><small>Open</small><strong>${num(d.queueCount || d.count || 0)}</strong></div>
+        <div><small>Served</small><strong>${num(d.servedCount || 0)}</strong></div>
+        <div><small>Avg Wait</small><strong>${escapeHtml(String(d.avgWaitLabel || '--'))}</strong></div>
+      </div>
+      <div class="progress"><span style="width:${(num(d.queueCount || d.count || 0) / maxCount) * 100}%"></span></div>
+      <div class="queueActions">
+        <button class="pillBtn" type="button" data-queue-doctor="${escapeHtml(d.doctorName || d.doctor || '')}">Open Queue</button>
+      </div>
+    </div>`).join('');
+  $$('[data-queue-doctor]', $('#doctors')).forEach(btn => btn.addEventListener('click', () => {
+    switchTab('operations');
+    const target = Array.from(document.querySelectorAll('.queueCard')).find(card => card.textContent.toLowerCase().includes(String(btn.dataset.queueDoctor || '').toLowerCase()));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }));
 }
 
 function renderRealtimeBoard() {
@@ -457,18 +525,24 @@ function renderAnalyticsPanels() {
     metricBar('Exposure Outstanding', num(f.outstanding), Math.max(num(f.totalBill), 1)),
     metricBar('Pharmacy Share', num(f.pharmacySales), Math.max(num(f.totalBill), 1)),
   ].join('');
+  const ws = state.data.workspace?.summary || {};
   $('#workflowBenchmarks').innerHTML = [
     metricRow('Patient registry strength', num(o.patients), 'Registered patient footprint'),
-    metricRow('Clinical throughput', num(o.visits), 'Visits handled in the current dataset'),
-    metricRow('Queue intensity', num(o.queue), 'Open doctor queue count'),
-    metricRow('Admissions active', num(o.admissions), 'Bed-side and inpatient activity'),
+    metricRow('Clinical throughput', num(ws.activeVisits || o.visits), 'Visits handled in the current dataset'),
+    metricRow('Queue intensity', num(ws.openQueue || o.queue), 'Open doctor queue count'),
+    metricRow('Pending labs', num(ws.pendingLabs), 'Laboratory desk workload'),
+    metricRow('Active prescriptions', num(ws.activePrescriptions), 'Medication flow still active'),
+    metricRow('Admissions active', num(ws.activeAdmissions || o.admissions), 'Bed-side and inpatient activity'),
   ].join('');
   $('#analyticsSignals').innerHTML = notifications.slice(0, 6).map(n => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(n.title || n.type || 'Signal')}</div><div>${escapeHtml(n.message || '--')}</div></div>`).join('') || `<div class="emptyState">Realtime signals will show after events start flowing.</div>`;
+  const ws2 = state.data.workspace?.summary || {};
   $('#boardSummary').innerHTML = [
     miniPanel('Executive summary', escapeHtml(state.data.aiOverview?.summary || 'Analytics summary will appear here.')),
     miniPanel('Billing insight', `${money(f.totalPaid)} collected out of ${money(f.totalBill)} total billed.`),
-    miniPanel('Queue insight', num(o.queue) > 5 ? 'Doctor queue is under pressure. Consider load balancing.' : 'Queue pressure is under control.'),
-    miniPanel('Operations pulse', `${num(o.patients)} patients • ${num(o.visits)} visits • ${num(o.bills)} bills.`),
+    miniPanel('Queue insight', num(ws2.openQueue || o.queue) > 5 ? 'Doctor queue is under pressure. Consider load balancing.' : 'Queue pressure is under control.'),
+    miniPanel('Workflow command', `${num(ws2.pendingAppointments)} appointments • ${num(ws2.pendingLabs)} labs • ${num(ws2.activePrescriptions)} active prescriptions.`),
+    miniPanel('Operations pulse', `${num(o.patients)} patients • ${num(ws2.activeVisits || o.visits)} visits • ${num(o.bills)} bills.`),
+    miniPanel('Nurse desk', `${num(ws2.nurseDeskOpen)} open care entries • ${num(ws2.staffOnlineReady)} active staff ready.`),
   ].join('');
 }
 
@@ -481,11 +555,13 @@ function renderPatients() {
       <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span></div>
       <div class="inlineActions">
         <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI</button>
+        <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
         <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
       </div>
     </div>
   `).join('') : `<div class="emptyState">No patients registered yet.</div>`;
   $$('[data-ai]', $('#patientsList')).forEach(btn => btn.addEventListener('click', () => { switchTab('search'); loadPatientAi(btn.dataset.ai); $('#searchInput').value = btn.dataset.ai; }));
+  $$('[data-view]', $('#patientsList')).forEach(btn => btn.addEventListener('click', () => openPatientDrawer(btn.dataset.view)));
   $$('[data-bill]', $('#patientsList')).forEach(btn => btn.addEventListener('click', () => openBillModal(btn.dataset.bill, btn.dataset.name)));
 }
 
@@ -502,18 +578,91 @@ function renderSideSummary() {
   ].join('');
 }
 
-function openPatientModal() {
+
+function openPatientWizard(prefill = {}) {
   toggleFab(false);
-  const sourceForm = $('#patientForm');
-  if (!sourceForm) return;
-  const clone = sourceForm.cloneNode(true);
-  clone.id = 'patientModalForm';
-  showModal('Patient Registration', clone.outerHTML);
-  bindForm('#patientModalForm', '/api/patient/register', 'Patient registered', async (res) => {
-    closeModal();
-    showToast('Patient Saved', res?.patient?.fullName || 'Patient registration completed');
-    await refreshAll();
+  showModal('Patient Registration Wizard', `
+    <div class="wizardShell">
+      <div class="wizardSteps">
+        <div class="wizardStep active" data-step="1"><span>1</span><div><strong>Identity</strong><small>Patient bio</small></div></div>
+        <div class="wizardStep" data-step="2"><span>2</span><div><strong>Contacts</strong><small>Reachability</small></div></div>
+        <div class="wizardStep" data-step="3"><span>3</span><div><strong>Medical</strong><small>Clinical basics</small></div></div>
+      </div>
+      <form id="patientWizardForm" class="stack12">
+        <section class="wizardPane" data-pane="1">
+          <div class="formGrid compactGrid">
+            <input name="fullName" placeholder="Full Name" required value="${escapeHtml(prefill.fullName || '')}">
+            <input name="phone" placeholder="Phone Number" value="${escapeHtml(prefill.phone || '')}">
+            <select name="gender"><option value="">Gender</option><option ${prefill.gender==='Male'?'selected':''}>Male</option><option ${prefill.gender==='Female'?'selected':''}>Female</option></select>
+            <input name="age" placeholder="Age" type="number" value="${escapeHtml(prefill.age || '')}">
+            <input name="mrn" placeholder="MRN optional" value="${escapeHtml(prefill.mrn || '')}">
+            <input name="dob" placeholder="DOB YYYY-MM-DD" value="${escapeHtml(prefill.dob || '')}">
+          </div>
+        </section>
+        <section class="wizardPane hidden" data-pane="2">
+          <div class="formGrid compactGrid">
+            <input name="email" placeholder="Email" value="${escapeHtml(prefill.email || '')}">
+            <input name="maritalStatus" placeholder="Marital Status" value="${escapeHtml(prefill.maritalStatus || '')}">
+            <input name="nextOfKin" placeholder="Next of Kin" value="${escapeHtml(prefill.nextOfKin || '')}">
+            <input name="nextOfKinPhone" placeholder="Next of Kin Phone" value="${escapeHtml(prefill.nextOfKinPhone || '')}">
+            <textarea name="address" placeholder="Address" class="span2">${escapeHtml(prefill.address || '')}</textarea>
+          </div>
+        </section>
+        <section class="wizardPane hidden" data-pane="3">
+          <div class="formGrid compactGrid">
+            <input name="bloodGroup" placeholder="Blood Group" value="${escapeHtml(prefill.bloodGroup || '')}">
+            <input name="genotype" placeholder="Genotype" value="${escapeHtml(prefill.genotype || '')}">
+            <input name="status" placeholder="Status" value="${escapeHtml(prefill.status || 'active')}">
+            <input name="notes" placeholder="Quick Notes" value="${escapeHtml(prefill.notes || '')}">
+            <textarea class="span2" disabled>After save, the patient will flow instantly to command center, queue, billing, and Android sync channels.</textarea>
+          </div>
+        </section>
+        <div class="wizardActions">
+          <button type="button" class="btn btnGhost" id="wizardBackBtn">Back</button>
+          <div class="row gap8">
+            <button type="button" class="btn btnGhost" id="wizardNextBtn">Next</button>
+            <button type="submit" class="btn btnPrimary hidden" id="wizardSubmitBtn">Save Patient</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  `);
+  bindPatientWizard(prefill.patientId ? '/api/portal/patient/update' : '/api/patient/register', prefill.patientId || '');
+}
+
+function bindPatientWizard(path, patientId) {
+  const form = $('#patientWizardForm');
+  if (!form) return;
+  let step = 1;
+  const total = 3;
+  const syncStep = () => {
+    $$('.wizardPane', form).forEach(p => p.classList.toggle('hidden', Number(p.dataset.pane) !== step));
+    $$('.wizardStep').forEach(s => s.classList.toggle('active', Number(s.dataset.step) === step));
+    $('#wizardBackBtn').disabled = step === 1;
+    $('#wizardNextBtn').classList.toggle('hidden', step === total);
+    $('#wizardSubmitBtn').classList.toggle('hidden', step !== total);
+  };
+  $('#wizardBackBtn').addEventListener('click', () => { if (step > 1) { step--; syncStep(); } });
+  $('#wizardNextBtn').addEventListener('click', () => { if (step < total) { step++; syncStep(); } });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const body = formToObject(form);
+      if (patientId) body.patientId = patientId;
+      const res = await api(path, { method: 'POST', body });
+      closeModal();
+      showToast(patientId ? 'Patient Updated' : 'Patient Saved', res?.patient?.fullName || 'Patient record stored');
+      await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
+      if (res?.patient?.patientId) openPatientDrawer(res.patient.patientId);
+    } catch (err) {
+      showToast('Wizard Failed', err.message || 'Unable to save patient');
+    }
   });
+  syncStep();
+}
+
+function openPatientModal() {
+  openPatientWizard();
 }
 
 function openBillModal(patientId = '', patientName = '') {
@@ -531,9 +680,129 @@ function openBillModal(patientId = '', patientName = '') {
   showModal('Direct Billing Workflow', form.outerHTML);
   bindForm('#billModalForm', '/api/bill/create', 'Bill created', async (res) => {
     closeModal();
-    showToast('Bill Created', `${res?.bill?.serviceName || 'Service'} billing saved`);
-    await refreshAll();
+    showToast('Bill Created', `${res?.bill?.category || 'Service'} billing saved`);
+    await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
+    if (res?.bill?.billId) openReceiptPreview(res.bill.billId);
   });
+}
+
+
+async function openPatientDrawer(patientId) {
+  if (!patientId) return;
+  try {
+    const res = await api(`/api/portal/patient-profile?patientId=${encodeURIComponent(patientId)}`);
+    const p = res.patient || {};
+    const encounters = Array.isArray(res.encounters) ? res.encounters : [];
+    const billing = Array.isArray(res.bills) ? res.bills : [];
+    const admissions = Array.isArray(res.admissions) ? res.admissions : [];
+    const summary = res.summary || {};
+    showDrawer(`${p.fullName || p.patientName || 'Patient Profile'}`, `
+      <div class="drawerHero">
+        <div>
+          <div class="eyebrow">Patient Profile Drawer</div>
+          <h3>${escapeHtml(p.fullName || p.patientName || patientId)}</h3>
+          <div class="itemMeta"><span>${escapeHtml(p.patientId || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.phone || '--')}</span></div>
+        </div>
+        <div class="drawerHeroBadge">${escapeHtml(p.status || 'active')}</div>
+      </div>
+      <div class="drawerGrid">
+        <div class="miniPanel"><div class="itemTitle">Demography</div><div>${escapeHtml(p.gender || '--')} • ${escapeHtml(String(p.age || '--'))}</div><div class="itemMeta"><span>${escapeHtml(p.bloodGroup || '--')}</span><span>${escapeHtml(p.genotype || '--')}</span></div></div>
+        <div class="miniPanel"><div class="itemTitle">Clinical Totals</div><div>${num(summary.visitCount)} visits • ${num(summary.billCount)} bills</div><div class="itemMeta"><span>${num(summary.admissionCount)} admissions</span><span>${money(summary.outstanding || 0)} outstanding</span></div></div>
+        <div class="miniPanel"><div class="itemTitle">Address</div><div>${escapeHtml(p.address || '--')}</div></div>
+        <div class="miniPanel"><div class="itemTitle">Next of Kin</div><div>${escapeHtml(p.nextOfKin || '--')}</div><div class="itemMeta"><span>${escapeHtml(p.nextOfKinPhone || '--')}</span></div></div>
+      </div>
+      <div class="drawerSection">
+        <div class="cardHead compact"><div><div class="eyebrow">Timeline</div><h3>Recent Encounters</h3></div><div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill</button></div></div>
+        <div class="stack10">${encounters.length ? encounters.map(v => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(v.kind || 'Visit')} • ${escapeHtml(v.status || '--')}</div><div>${escapeHtml(v.doctorName || v.title || '--')}</div><div class="itemMeta"><span>${escapeHtml(v.reason || v.category || '--')}</span><span>${fmtDateTime(v.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No recent encounters for this patient.</div>`}</div>
+      </div>
+      <div class="drawerSection">
+        <div class="cardHead compact"><div><div class="eyebrow">Billing</div><h3>Receipt Preview Queue</h3></div></div>
+        <div class="stack10">${billing.length ? billing.map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span><span>${fmtDateTime(b.createdAt)}</span></div><div class="inlineActions"><button class="pillBtn" type="button" data-receipt="${escapeHtml(b.billId || '')}">Open Receipt</button><button class="pillBtn warn" type="button" data-edit-bill="${escapeHtml(b.billId || '')}" data-category="${escapeHtml(b.category || '')}" data-total="${escapeHtml(String(b.total || ''))}" data-paid="${escapeHtml(String(b.paid || ''))}" data-status="${escapeHtml(b.status || '')}" data-payment="${escapeHtml(b.paymentMethod || '')}" data-description="${escapeHtml(b.description || '')}">Edit Bill</button></div></div>`).join('') : `<div class="emptyState">No bills created for this patient.</div>`}</div>
+      </div>
+      <div class="drawerSection">
+        <div class="cardHead compact"><div><div class="eyebrow">Admissions</div><h3>Inpatient Summary</h3></div></div>
+        <div class="stack10">${admissions.length ? admissions.map(a => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(a.ward || 'Ward')} • ${escapeHtml(a.status || '--')}</div><div>${escapeHtml(a.doctorName || '--')}</div><div class="itemMeta"><span>${escapeHtml(a.bed || '--')}</span><span>${fmtDateTime(a.admittedAt || a.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No admission records for this patient.</div>`}</div>
+      </div>
+    `);
+    document.getElementById('drawerBillBtn')?.addEventListener('click', () => { closeModal(); openBillModal(p.patientId || patientId, p.fullName || p.patientName || ''); });
+    document.getElementById('drawerEditBtn')?.addEventListener('click', () => openPatientWizard(p));
+    $$('[data-receipt]', document.getElementById('activeModal')).forEach(btn => btn.addEventListener('click', () => openReceiptPreview(btn.dataset.receipt)));
+    $$('[data-edit-bill]', document.getElementById('activeModal')).forEach(btn => btn.addEventListener('click', () => openBillEditModal({ billId: btn.dataset.editBill, category: btn.dataset.category, total: btn.dataset.total, paid: btn.dataset.paid, status: btn.dataset.status, paymentMethod: btn.dataset.payment, description: btn.dataset.description })));
+  } catch (err) {
+    showToast('Profile Unavailable', err.message || 'Unable to load patient profile');
+  }
+}
+
+
+function openBillEditModal(bill = {}) {
+  showModal(`Update Bill • ${bill.billId || ''}`, `
+    <form id="billEditForm" class="formGrid compactGrid">
+      <input type="hidden" name="billId" value="${escapeHtml(bill.billId || '')}">
+      <input name="category" placeholder="Category" value="${escapeHtml(bill.category || '')}">
+      <input name="total" type="number" step="0.01" placeholder="Total" value="${escapeHtml(String(bill.total || ''))}">
+      <input name="paid" type="number" step="0.01" placeholder="Paid" value="${escapeHtml(String(bill.paid || ''))}">
+      <select name="status"><option ${String(bill.status).toLowerCase()==='paid'?'selected':''} value="paid">Paid</option><option ${String(bill.status).toLowerCase()==='partial'?'selected':''} value="partial">Partial</option><option ${String(bill.status).toLowerCase()==='unpaid'?'selected':''} value="unpaid">Unpaid</option></select>
+      <input name="paymentMethod" placeholder="Payment Method" value="${escapeHtml(bill.paymentMethod || '')}">
+      <textarea name="description" class="span2" placeholder="Description">${escapeHtml(bill.description || '')}</textarea>
+      <div class="span2 row end"><button type="submit" class="btn btnPrimary">Update Bill</button></div>
+    </form>
+  `);
+  bindForm('#billEditForm', '/api/portal/bill/update', 'Bill updated', async (res) => {
+    closeModal();
+    showToast('Bill Updated', `${res?.bill?.category || 'Billing'} record updated`);
+    await targetedRealtimeRefresh(['bills','patients','doctor_queue','audit_logs']);
+    if (res?.bill?.billId) openReceiptPreview(res.bill.billId);
+  });
+}
+
+async function openReceiptPreview(billId) {
+  if (!billId) return;
+  try {
+    const res = await api(`/api/portal/receipt-preview?billId=${encodeURIComponent(billId)}`);
+    const receipt = res.receipt || {};
+    showModal(`Receipt Preview • ${receipt.billNo || billId}`, `
+      <div class="receiptShell">
+        <div class="receiptPaper">
+          <div class="receiptCenter">
+            <div class="receiptClinic">${escapeHtml(receipt.clinicName || 'Clinic Pro NG')}</div>
+            <div>${escapeHtml(receipt.branchName || 'Main Branch')}</div>
+            <div>${escapeHtml(receipt.generatedLabel || '')}</div>
+          </div>
+          <div class="receiptLine"></div>
+          <div class="receiptRow"><span>Patient</span><strong>${escapeHtml(receipt.patientName || '--')}</strong></div>
+          <div class="receiptRow"><span>Patient ID</span><strong>${escapeHtml(receipt.patientId || '--')}</strong></div>
+          <div class="receiptRow"><span>Bill No</span><strong>${escapeHtml(receipt.billNo || '--')}</strong></div>
+          <div class="receiptRow"><span>Category</span><strong>${escapeHtml(receipt.category || '--')}</strong></div>
+          <div class="receiptRow"><span>Description</span><strong>${escapeHtml(receipt.description || '--')}</strong></div>
+          <div class="receiptLine"></div>
+          <div class="receiptRow"><span>Total</span><strong>${money(receipt.total || 0)}</strong></div>
+          <div class="receiptRow"><span>Paid</span><strong>${money(receipt.paid || 0)}</strong></div>
+          <div class="receiptRow"><span>Balance</span><strong>${money(receipt.balance || 0)}</strong></div>
+          <div class="receiptRow"><span>Status</span><strong>${escapeHtml(receipt.status || '--')}</strong></div>
+          <div class="receiptRow"><span>Payment</span><strong>${escapeHtml(receipt.paymentMethod || '--')}</strong></div>
+          <div class="receiptLine"></div>
+          <div class="receiptCenter receiptSmall">Web portal preview for direct billing workflow. Android thermal receipt can print the same bill from the device.</div>
+          <div class="inlineActions" style="justify-content:center;margin-top:14px"><button class="pillBtn" type="button" id="receiptPrintBtn">Print</button><button class="pillBtn warn" type="button" id="receiptEditBtn">Edit Bill</button></div>
+        </div>
+      </div>
+    `);
+    document.getElementById('receiptPrintBtn')?.addEventListener('click', () => window.print());
+    document.getElementById('receiptEditBtn')?.addEventListener('click', () => openBillEditModal({ billId: receipt.billId || billId, category: receipt.category || '', total: receipt.total || '', paid: receipt.paid || '', status: receipt.status || '', paymentMethod: receipt.paymentMethod || '', description: receipt.description || '' }));
+  } catch (err) {
+    showToast('Receipt Unavailable', err.message || 'Unable to load receipt preview');
+  }
+}
+
+function showDrawer(title, bodyHtml) {
+  $('#modalHost').innerHTML = `
+    <div class="modalWrap drawerWrap" id="activeModal">
+      <div class="modalCard drawerCard">
+        <div class="cardHead"><div><div class="eyebrow">Enterprise Patient Workspace</div><h3>${escapeHtml(title)}</h3></div><button class="btn btnGhost small" id="closeModalBtn" type="button">Close</button></div>
+        ${bodyHtml}
+      </div>
+    </div>`;
+  $('#closeModalBtn').addEventListener('click', closeModal);
+  $('#activeModal').addEventListener('click', (e) => { if (e.target.id === 'activeModal') closeModal(); });
 }
 
 function showModal(title, bodyHtml) {
@@ -602,18 +871,18 @@ function inferTablesFromType(type) {
 async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
   const keys = new Set((Array.isArray(tables) ? tables : []).map(x => String(x || '').toLowerCase()).filter(Boolean));
   if (!keys.size) return refreshAll();
-  const jobs = [loadLive()];
+  const include = new Set(['live']);
   const needsOps = ['patients','visits','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff'].some(k => keys.has(k));
   const needsFinance = ['bills','pharmacy_dispenses','cashier_shifts'].some(k => keys.has(k));
   const needsTimeline = ['patients','visits','bills','doctor_queue'].some(k => keys.has(k));
   const needsPatients = ['patients','visits','bills','admissions','appointments'].some(k => keys.has(k));
   const needsNotifications = ['audit_logs'].some(k => keys.has(k)) || !keys.size;
-  if (needsOps) jobs.push(loadQueue(), loadOverview(), loadAiOverview(), loadRisk());
-  if (needsFinance) jobs.push(loadFinance());
-  if (needsTimeline) jobs.push(loadTimeline());
-  if (needsPatients) jobs.push(loadPatients());
-  if (needsNotifications) jobs.push(loadNotifications());
-  await Promise.all(jobs);
+  if (needsOps) ['queue','overview','aiOverview','risk','doctorWidgets','workspace'].forEach(k => include.add(k));
+  if (needsFinance) include.add('finance');
+  if (needsTimeline) include.add('timeline');
+  if (needsPatients) include.add('patients');
+  if (needsNotifications) include.add('notifications');
+  await loadLiteBundle(Array.from(include));
   if (versionHint) state.version = Math.max(state.version || 0, num(versionHint));
   renderAll();
 }
@@ -628,6 +897,7 @@ function handleRealtimeEvent(raw) {
   const tables = Array.from(new Set([...(event?.payload?.tables || []), ...(event?.payload?.changedTables || []), ...inferTablesFromType(type)]));
   state.version = Math.max(state.version || 0, versionHint);
   if (type) showToast('Realtime Update', event.title || event.message || type);
+  if (event) applyRealtimeMutation(event);
   if (state.data.live && event && type) {
     const recent = Array.isArray(state.data.live.recentChanges) ? state.data.live.recentChanges.slice() : [];
     recent.unshift({ type, version: state.version, createdAt: Date.now(), payload: event.payload || {}, tables });
@@ -635,7 +905,11 @@ function handleRealtimeEvent(raw) {
     renderRealtimeBoard();
     renderSideSummary();
   }
-  scheduleRefresh(type.includes('queue') ? 120 : (type.includes('patient') || type.includes('bill') || type.includes('visit') ? 180 : 320), tables, versionHint);
+  if (!event?.payload?.entity && !event?.payload?.liveCounters) {
+    scheduleRefresh(type.includes('queue') ? 120 : (type.includes('patient') || type.includes('bill') || type.includes('visit') ? 180 : 320), tables, versionHint);
+  } else {
+    renderAll();
+  }
 }
 
 function scheduleRefresh(delay = 400, tables = [], versionHint = 0) {
@@ -673,6 +947,135 @@ async function api(path, options = {}) {
   try { json = await res.json(); } catch {}
   if (!res.ok || json.ok === false) throw new Error(json.error || json.message || `Request failed (${res.status})`);
   return json;
+}
+
+
+function ensureCommandCenter() {
+  if (!state.data.commandCenter) state.data.commandCenter = { cards: [], counts: {}, recentPatients: [], recentBills: [], queue: [], timeline: [], recentChanges: [] };
+  return state.data.commandCenter;
+}
+
+function upsertByKey(list, item, key) {
+  if (!item || !item[key]) return Array.isArray(list) ? list || [] : [];
+  const rows = Array.isArray(list) ? list.slice() : [];
+  const idx = rows.findIndex(x => String(x?.[key]) === String(item[key]));
+  if (idx >= 0) rows[idx] = { ...rows[idx], ...item };
+  else rows.unshift(item);
+  return rows;
+}
+
+function recomputeCommandCardsFromOverview() {
+  const cc = ensureCommandCenter();
+  const o = state.data.overview?.overview || {};
+  const f = state.data.finance?.finance || {};
+  cc.counts = {
+    patients: num(o.patients),
+    visits: num(o.visits),
+    queue: num(o.queue),
+    bills: num(o.bills || f.billCount),
+    admissions: num(o.admissions),
+    totalPaid: num(f.totalPaid),
+    outstanding: num(f.outstanding),
+    pharmacy: num(f.pharmacySales || o.pharmacy)
+  };
+  cc.cards = [
+    { key:'patients', label:'Patients', value: cc.counts.patients, sub:'Registered patient base' },
+    { key:'visits', label:'Active Visits', value: cc.counts.visits, sub:'Clinical load in motion' },
+    { key:'queue', label:'Queue', value: cc.counts.queue, sub:'Doctor waiting line' },
+    { key:'totalPaid', label:'Paid Revenue', value: cc.counts.totalPaid, kind:'money', sub:'Collected billing revenue' },
+    { key:'outstanding', label:'Outstanding', value: cc.counts.outstanding, kind:'money', sub:'Awaiting payment' },
+    { key:'bills', label:'Bills', value: cc.counts.bills, sub:'Billing records created' },
+    { key:'admissions', label:'Admissions', value: cc.counts.admissions, sub:'Current admissions' },
+    { key:'pharmacy', label:'Pharmacy Sales', value: cc.counts.pharmacy, kind:'count', sub:'Pharmacy workflow volume' },
+  ];
+}
+
+function applyRealtimeMutation(event) {
+  const payload = event?.payload || {};
+  if (!payload.liveCounters && !payload.entity) return;
+  const o = state.data.overview?.overview || (state.data.overview = { overview: {}, clinic: state.data.overview?.clinic }).overview;
+  const f = state.data.finance?.finance || (state.data.finance = { finance: {} }).finance;
+  if (payload.liveCounters) {
+    o.patients = num(payload.liveCounters.patients);
+    o.visits = num(payload.liveCounters.visits);
+    o.queue = num(payload.liveCounters.queue);
+    o.bills = num(payload.liveCounters.bills);
+    o.admissions = num(payload.liveCounters.admissions);
+    o.outstanding = num(payload.liveCounters.outstanding);
+    o.totalPaid = num(payload.liveCounters.totalPaid);
+    f.totalBill = num(payload.liveCounters.totalBill);
+    f.totalPaid = num(payload.liveCounters.totalPaid);
+    f.outstanding = num(payload.liveCounters.outstanding);
+    f.billCount = num(payload.liveCounters.bills);
+    f.pharmacySales = num(payload.liveCounters.pharmacy);
+  }
+  const cc = ensureCommandCenter();
+  if (payload.entity?.patient) {
+    state.data.patients = upsertByKey(state.data.patients, payload.entity.patient, 'patientId').slice(0, 500);
+    cc.recentPatients = upsertByKey(cc.recentPatients, payload.entity.patient, 'patientId').slice(0, 12);
+  }
+  if (payload.entity?.bill) {
+    cc.recentBills = upsertByKey(cc.recentBills, payload.entity.bill, 'billId').slice(0, 12);
+  }
+  if (payload.entity?.queue) {
+    state.data.queue = upsertByKey(state.data.queue, payload.entity.queue, 'queueId').slice(0, 500);
+    cc.queue = upsertByKey(cc.queue, payload.entity.queue, 'queueId').slice(0, 12);
+  }
+  if (state.data.live) state.data.live.queueCount = num(payload.liveCounters?.queue ?? state.data.live.queueCount);
+  recomputeCommandCardsFromOverview();
+}
+
+function renderLiveTicker() {
+  const host = $('#liveTicker');
+  if (!host) return;
+  const cc = state.data.commandCenter;
+  const cards = cc?.cards?.length ? cc.cards : [];
+  host.innerHTML = cards.length ? cards.map(card => `<div class="tickerChip">${escapeHtml(card.label)} <b>${card.kind === 'money' ? money(card.value) : escapeHtml(String(card.value))}</b></div>`).join('') : `<div class="emptyState">Live counters will appear when data loads.</div>`;
+}
+
+
+function renderWorkspace() {
+  const ws = state.data.workspace || {};
+  const summary = ws.summary || {};
+  const careTimeline = ws.careTimeline || [];
+  const summaryHost = document.getElementById('workspaceSummary');
+  const timelineHost = document.getElementById('workspaceTimeline');
+  if (summaryHost) {
+    const cards = [
+      ['Active Visits', num(summary.activeVisits), 'Current clinical encounters'],
+      ['Open Queue', num(summary.openQueue), 'Doctor queue waiting now'],
+      ['Pending Appointments', num(summary.pendingAppointments), 'Scheduled and not closed'],
+      ['Pending Labs', num(summary.pendingLabs), 'Lab desk workload'],
+      ['Active Prescriptions', num(summary.activePrescriptions), 'Medication orders in motion'],
+      ['Nurse Desk', num(summary.nurseDeskOpen), 'Open nursing notes/tasks'],
+      ['Admissions', num(summary.activeAdmissions), 'Inpatient load'],
+      ['Staff Ready', num(summary.staffOnlineReady), 'Available active team members'],
+    ];
+    summaryHost.innerHTML = cards.map(([label, value, sub]) => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(label)}</div><div style="font-size:24px;font-weight:900">${escapeHtml(String(value))}</div><div class="itemMeta"><span>${escapeHtml(sub)}</span></div></div>`).join('');
+  }
+  if (timelineHost) {
+    timelineHost.innerHTML = careTimeline.length ? careTimeline.map(item => `<div class="feedItem"><div class="row alignCenter" style="justify-content:space-between"><div class="itemTitle">${escapeHtml(item.lane || 'Care')}</div><span class="feedType">${escapeHtml(item.status || '--')}</span></div><div>${escapeHtml(item.title || '--')}</div><div class="itemMeta"><span>${escapeHtml(item.sub || '--')}</span><span>${fmtDateTime(item.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">Unified care timeline will appear here as queue, lab, prescription and nurse actions come in.</div>`;
+  }
+}
+
+function renderCommandCenter() {
+  const cc = state.data.commandCenter || {};
+  const rp = $('#recentPatients');
+  const rb = $('#recentBills');
+  const bc = $('#billingCards');
+  if (rp) rp.innerHTML = (cc.recentPatients || []).length ? (cc.recentPatients || []).map(p => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(p.fullName || 'Patient')}</div><div>${escapeHtml(p.patientId || '--')} • ${escapeHtml(p.gender || '--')}</div><div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${fmtDateTime(p.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">Recent patients will appear here.</div>`;
+  if (rb) rb.innerHTML = (cc.recentBills || []).length ? (cc.recentBills || []).map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.patientName || 'Patient')}</div><div>${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span></div><div class="inlineActions"><button class="pillBtn" data-receipt="${escapeHtml(b.billId || '')}">Receipt</button></div></div>`).join('') : `<div class="emptyState">Recent bills will appear here.</div>`;
+  if (bc) {
+    const f = state.data.finance?.finance || {};
+    const cards = [
+      { title:'Instant Revenue', value: money(f.totalPaid), sub:'Collected revenue now', cta:'New Bill', action:'bill' },
+      { title:'Pending Collection', value: money(f.outstanding), sub:'Outstanding exposure', cta:'Find Patient', action:'search' },
+      { title:'Bills Created', value: num(f.billCount), sub:'Billing volume in system', cta:'Direct Billing', action:'bill' }
+    ];
+    bc.innerHTML = cards.map(c => `<button class="billQuickCard" type="button" data-quick-action="${c.action}"><div class="itemTitle">${escapeHtml(c.title)}</div><div style="font-size:24px;font-weight:900">${escapeHtml(String(c.value))}</div><div class="itemMeta"><span>${escapeHtml(c.sub)}</span><span>${escapeHtml(c.cta)}</span></div></button>`).join('');
+    $$('[data-quick-action]', bc).forEach(btn => btn.addEventListener('click', () => btn.dataset.quickAction === 'search' ? switchTab('search') : openBillModal()));
+  }
+  if (rb) $$('[data-receipt]', rb).forEach(btn => btn.addEventListener('click', () => openReceiptPreview(btn.dataset.receipt)));
 }
 
 function setLiveState(text, mode) {

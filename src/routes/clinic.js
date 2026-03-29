@@ -325,6 +325,149 @@ function summarizeSnapshot(snapshot){
   const lowStock = pharmacyRows.filter(x => toNum(x.remaining_qty || x.quantity || x.qty || x.stock, 0) <= Math.max(5, toNum(x.reorder_level || x.min_stock, 5)));
   return { patients, visits, bills, admissions, pharmacy, lab, totalBill, totalPaid, outstanding, queue, doctorWorkload, lowStock };
 }
+function slimPatientRow(row){
+  if (!row) return null;
+  return {
+    patientId: toStr(row.patientId || row.id),
+    fullName: toStr(row.fullName || row.patientName),
+    mrn: toStr(row.mrn),
+    gender: toStr(row.gender),
+    age: toNum(row.age, 0),
+    phone: cleanPhone(row.phone),
+    status: toStr(row.status || 'active'),
+    createdAt: toNum(row.createdAt),
+    updatedAt: toNum(row.updatedAt || row.createdAt)
+  };
+}
+function slimBillRow(row){
+  if (!row) return null;
+  return {
+    billId: toStr(row.billId || row.id),
+    patientId: toStr(row.patientId || row.patient_id),
+    patientName: toStr(row.patientName),
+    category: toStr(row.category || 'General'),
+    total: toNum(row.total || row.amount),
+    paid: toNum(row.paid || row.amount_paid),
+    balance: Math.max(0, toNum(row.balance, Math.max(0, toNum(row.total || row.amount) - toNum(row.paid || row.amount_paid)))),
+    status: toStr(row.status || 'pending'),
+    createdAt: toNum(row.createdAt),
+    updatedAt: toNum(row.updatedAt || row.createdAt)
+  };
+}
+function slimVisitRow(row){
+  if (!row) return null;
+  return {
+    visitId: toStr(row.visitId || row.id),
+    patientId: toStr(row.patientId || row.patient_id),
+    patientName: toStr(row.patientName),
+    doctorName: toStr(row.doctorName || row.doctor || 'Unassigned'),
+    status: toStr(row.status || 'waiting'),
+    reason: toStr(row.reason || row.complaint),
+    createdAt: toNum(row.createdAt),
+    updatedAt: toNum(row.updatedAt || row.createdAt)
+  };
+}
+function slimQueueRow(row){
+  if (!row) return null;
+  return {
+    queueId: toStr(row.queueId || row.id),
+    patientId: toStr(row.patientId || row.patient_id),
+    patientName: toStr(row.patientName),
+    doctorName: toStr(row.doctorName || row.doctor || 'Unassigned'),
+    status: toStr(row.status || 'waiting'),
+    priority: toStr(row.priority || 'normal'),
+    createdAt: toNum(row.createdAt),
+    updatedAt: toNum(row.updatedAt || row.createdAt)
+  };
+}
+function liveCardsFromSnapshot(snapshot, changes = []){
+  const stats = summarizeSnapshot(snapshot);
+  const counts = {
+    patients: stats.patients,
+    visits: stats.visits,
+    queue: stats.queue,
+    bills: stats.bills,
+    admissions: stats.admissions,
+    totalPaid: stats.totalPaid,
+    outstanding: stats.outstanding,
+    pharmacy: stats.pharmacy
+  };
+  const cards = [
+    { key:'patients', label:'Patients', value: counts.patients, sub:'Registered patient base' },
+    { key:'visits', label:'Active Visits', value: counts.visits, sub:'Clinical load in motion' },
+    { key:'queue', label:'Queue', value: counts.queue, sub:'Doctor waiting line' },
+    { key:'totalPaid', label:'Paid Revenue', value: counts.totalPaid, kind:'money', sub:'Collected billing revenue' },
+    { key:'outstanding', label:'Outstanding', value: counts.outstanding, kind:'money', sub:'Awaiting payment' },
+    { key:'bills', label:'Bills', value: counts.bills, sub:'Billing records created' },
+    { key:'admissions', label:'Admissions', value: counts.admissions, sub:'Current admissions' },
+    { key:'pharmacy', label:'Pharmacy Sales', value: counts.pharmacy, kind:'count', sub:'Pharmacy workflow volume' }
+  ];
+  return { counts, cards, recentChanges: changes.slice(0,8) };
+}
+function buildPortalCommandCenter(db, clinicId, days = 14){
+  const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };
+  const timeline = buildTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(days, 14))));
+  const queue = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimQueueRow);
+  const patients = sortRecent(db.clinicPatients.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimPatientRow);
+  const bills = sortRecent(db.clinicBills.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimBillRow);
+  const changes = db.clinicChangeLog.filter(x => String(x.clinicId) === String(clinicId)).sort((a,b)=>toNum(b.version)-toNum(a.version)).slice(0, 8);
+  const cards = liveCardsFromSnapshot(latest.snapshot, changes);
+  return {
+    version: getClinicVersion(db, clinicId),
+    generatedAt: now(),
+    cards: cards.cards,
+    counts: cards.counts,
+    timeline,
+    recentPatients: patients,
+    recentBills: bills,
+    queue,
+    recentChanges: cards.recentChanges
+  };
+}
+function buildPortalWorkspace(db, clinicId){
+  const queue = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === String(clinicId)));
+  const visits = sortRecent(db.clinicVisits.filter(x => String(x.clinicId) === String(clinicId)));
+  const appointments = sortRecent(db.clinicAppointments.filter(x => String(x.clinicId) === String(clinicId)));
+  const labs = sortRecent(db.clinicLabRequests.filter(x => String(x.clinicId) === String(clinicId)));
+  const prescriptions = sortRecent(db.clinicPrescriptions.filter(x => String(x.clinicId) === String(clinicId)));
+  const nurseDesk = sortRecent(db.clinicNurseDesk.filter(x => String(x.clinicId) === String(clinicId)));
+  const admissions = sortRecent(db.clinicAdmissions.filter(x => String(x.clinicId) === String(clinicId)));
+  const staff = sortRecent(db.clinicUsers.filter(x => String(x.clinicId) === String(clinicId)));
+  const openQueue = queue.filter(v => !['completed','closed','done','cancelled','served'].includes(lower(v.status)));
+  const pendingAppointments = appointments.filter(v => ['pending','booked','scheduled'].includes(lower(v.status || 'pending')));
+  const pendingLabs = labs.filter(v => !['completed','cancelled'].includes(lower(v.status || 'pending')));
+  const activeVisits = visits.filter(v => !['completed','cancelled','closed'].includes(lower(v.status || 'active')));
+  const activeAdmissions = admissions.filter(v => ['active','admitted','open'].includes(lower(v.status || 'active')));
+  const activeRx = prescriptions.filter(v => !['stopped','cancelled','completed'].includes(lower(v.status || 'active')));
+  const recentCare = [];
+  openQueue.slice(0,4).forEach(x => recentCare.push({ lane:'Queue', title: pickPatientId(x) || toStr(x.patientName), sub: toStr(x.doctorName || x.doctor || 'Unassigned'), status: toStr(x.status || 'waiting'), createdAt: toNum(x.createdAt || x.updatedAt) }));
+  pendingLabs.slice(0,4).forEach(x => recentCare.push({ lane:'Lab', title: toStr(x.testName || x.name || x.patientName || x.patientId), sub: toStr(x.status || 'pending'), status: toStr(x.status || 'pending'), createdAt: toNum(x.createdAt || x.updatedAt) }));
+  activeRx.slice(0,4).forEach(x => recentCare.push({ lane:'Rx', title: toStr(x.drugName || x.name || x.patientName || x.patientId), sub: toStr(x.frequency || x.dosage || 'Medication order'), status: toStr(x.status || 'active'), createdAt: toNum(x.createdAt || x.updatedAt) }));
+  recentCare.sort((a,b)=>toNum(b.createdAt)-toNum(a.createdAt));
+  return {
+    generatedAt: now(),
+    summary: {
+      activeVisits: activeVisits.length,
+      openQueue: openQueue.length,
+      pendingAppointments: pendingAppointments.length,
+      pendingLabs: pendingLabs.length,
+      activePrescriptions: activeRx.length,
+      nurseDeskOpen: nurseDesk.filter(v => !['completed','closed'].includes(lower(v.status || 'open'))).length,
+      activeAdmissions: activeAdmissions.length,
+      staffOnlineReady: staff.filter(v => v.active !== false).length
+    },
+    lists: {
+      queue: openQueue.slice(0,10).map(slimQueueRow),
+      visits: activeVisits.slice(0,10).map(slimVisitRow),
+      appointments: pendingAppointments.slice(0,10).map(x => ({ appointmentNo: toStr(x.appointmentNo || x.appointment_no || x.id), patientId: toStr(x.patientId || x.patient_id), doctorName: toStr(x.doctorName || x.doctor || 'Unassigned'), appointmentDate: toStr(x.appointmentDate || x.appointment_date), status: toStr(x.status || 'pending') })),
+      labs: pendingLabs.slice(0,10).map(x => ({ id: toStr(x.id), patientId: toStr(x.patientId || x.patient_id), patientName: toStr(x.patientName || x.patient_id), testName: toStr(x.testName || x.name), status: toStr(x.status || 'pending'), createdAt: toNum(x.createdAt || x.updatedAt) })),
+      prescriptions: activeRx.slice(0,10).map(x => ({ id: toStr(x.id), patientId: toStr(x.patientId || x.patient_id), patientName: toStr(x.patientName || x.patient_id), drugName: toStr(x.drugName || x.name), dosage: toStr(x.dosage), frequency: toStr(x.frequency), status: toStr(x.status || 'active'), createdAt: toNum(x.createdAt || x.updatedAt) })),
+      nurseDesk: nurseDesk.slice(0,10).map(x => ({ id: toStr(x.id), patientId: toStr(x.patientId || x.patient_id), note: toStr(x.note), vitalSummary: toStr(x.vitalSummary || x.vital_summary), nurseName: toStr(x.nurseName || x.nurse), status: toStr(x.status || 'open'), createdAt: toNum(x.createdAt || x.updatedAt) }))
+    },
+    careTimeline: recentCare.slice(0,12)
+  };
+}
+
 function patientSummary(snapshot, patientId){
   const data = snapshot?.data || {};
   const patients = arr(data.patients);
@@ -410,13 +553,100 @@ function finalizeWrite(db, clinicId, type, title, message, payload, req){
   const snapshotRow = persistDerivedSnapshot(db, clinicId, info.actor, info.role, info.deviceId, info.branchId);
   const changedTables = inferTablesForEvent(type, payload);
   const change = recordClinicChange(db, clinicId, type, changedTables, payload, info);
-  const livePayload = { ...payload, version: change.version, changedTables, tables: changedTables, snapshotId: snapshotRow.snapshotId };
+  const stats = summarizeSnapshot(snapshotRow.snapshot);
+  const liveCounters = {
+    patients: stats.patients,
+    visits: stats.visits,
+    bills: stats.bills,
+    queue: stats.queue,
+    admissions: stats.admissions,
+    totalBill: stats.totalBill,
+    totalPaid: stats.totalPaid,
+    outstanding: stats.outstanding,
+    pharmacy: stats.pharmacy
+  };
+  const livePayload = { ...payload, version: change.version, changedTables, tables: changedTables, snapshotId: snapshotRow.snapshotId, liveCounters, actor: info.actor, role: info.role };
   const event = pushEvent(db, clinicId, type, livePayload);
   makeNotification(db, clinicId, type, title, message, { payload: livePayload });
   writeDB(db);
-  return { event, snapshotId: snapshotRow.snapshotId, stats: summarizeSnapshot(snapshotRow.snapshot), version: change.version, changedTables };
+  return { event, snapshotId: snapshotRow.snapshotId, stats, version: change.version, changedTables, liveCounters };
 }
 function sortRecent(items){ return arr(items).sort((a,b)=>toNum(b.updatedAt || b.createdAt)-toNum(a.updatedAt || a.createdAt)); }
+
+function portalBundle(db, clinicId, options = {}){
+  const include = new Set(arr(options.include).map(x => toStr(x).trim()).filter(Boolean));
+  const wants = key => !include.size || include.has(key);
+  const out = { ok:true, version: getClinicVersion(db, clinicId), serverTime: now() };
+  const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };
+  const clinic = db.clinics.find(x => String(x.clinicId) === String(clinicId));
+  const overview = summarizeSnapshot(latest?.snapshot || { data:{} });
+  if (wants('live')) {
+    const queue = db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status)));
+    const changes = db.clinicChangeLog.filter(x => String(x.clinicId) === clinicId).sort((a,b)=>toNum(b.version)-toNum(a.version)).slice(0, 8);
+    const timeline = buildTimeline(db, clinicId, 1);
+    const today = timeline[0] || {};
+    out.live = {
+      clinic: clinic ? clinicPublicRow(clinic) : null,
+      version: getClinicVersion(db, clinicId),
+      serverTime: now(),
+      lastSnapshotAt: latest?.createdAt || 0,
+      overview,
+      queueCount: queue.length,
+      today: {
+        patients: toNum(today.patients),
+        visits: toNum(today.visits),
+        bills: toNum(today.bills),
+        revenue: toNum(today.revenue),
+        queueAdded: toNum(today.queueAdded)
+      },
+      recentChanges: changes
+    };
+  }
+  if (wants('overview')) out.overview = { ok:true, version: getClinicVersion(db, clinicId), clinic: clinic ? clinicPublicRow(clinic) : null, overview };
+  if (wants('finance')) out.finance = { totalBill: overview.totalBill, totalPaid: overview.totalPaid, outstanding: overview.outstanding, billCount: overview.bills, pharmacySales: overview.pharmacy };
+  if (wants('queue')) {
+    const rows = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status))));
+    out.queue = { queue: rows, queueCount: rows.length };
+  }
+  if (wants('patients')) {
+    out.patients = { patients: sortRecent(db.clinicPatients.filter(x => String(x.clinicId) === clinicId)).slice(0, 500) };
+  }
+  if (wants('notifications')) {
+    out.notifications = { notifications: db.clinicNotifications.filter(x => String(x.clinicId) === clinicId).sort((a,b)=>toNum(b.createdAt)-toNum(a.createdAt)).slice(0, 20) };
+  }
+  if (wants('timeline')) {
+    out.timeline = { timeline: buildTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(options.days, 14)))) };
+  }
+  if (wants('aiOverview')) {
+    const risks = {
+      unpaid_bill_detection: { score: Math.min(100, Math.round((overview.outstanding / Math.max(1, overview.totalBill || 1)) * 100)), outstanding: overview.outstanding },
+      queue_pressure: { score: Math.min(100, overview.queue * 8), openQueue: overview.queue },
+      doctor_workload: { score: Math.min(100, (overview.doctorWorkload[0]?.count || 0) * 10), doctors: overview.doctorWorkload.slice(0, 5) },
+      pharmacy_stock_warning: { score: Math.min(100, overview.lowStock.length * 20), items: overview.lowStock.slice(0, 10) }
+    };
+    out.aiOverview = { ok:true, stats: overview, risks, signals: [
+      { title: 'Queue pressure', score: risks.queue_pressure.score, detail: `${overview.queue} active queue item(s)` },
+      { title: 'Outstanding balance', score: risks.unpaid_bill_detection.score, detail: `NGN ${overview.outstanding.toFixed(2)} pending collection` },
+      { title: 'Top doctor workload', score: risks.doctor_workload.score, detail: `${overview.doctorWorkload[0]?.doctor || 'Unassigned'} currently leads queue` },
+      { title: 'Pharmacy stock watch', score: risks.pharmacy_stock_warning.score, detail: `${overview.lowStock.length} item(s) below reorder threshold` }
+    ] };
+  }
+  if (wants('risk')) {
+    out.risk = { ok:true, risks: {
+      unpaid_bill_detection: { score: Math.min(100, Math.round((overview.outstanding / Math.max(1, overview.totalBill || 1)) * 100)), outstanding: overview.outstanding },
+      queue_pressure: { score: Math.min(100, overview.queue * 8), openQueue: overview.queue },
+      doctor_workload: { score: Math.min(100, (overview.doctorWorkload[0]?.count || 0) * 10), doctors: overview.doctorWorkload.slice(0, 5) },
+      pharmacy_stock_warning: { score: Math.min(100, overview.lowStock.length * 20), items: overview.lowStock.slice(0, 10) }
+    }};
+  }
+  if (wants('commandCenter') || wants('cards') || wants('recent')) {
+    out.commandCenter = buildPortalCommandCenter(db, clinicId, toNum(options.days, 14));
+  }
+  if (wants('workspace')) {
+    out.workspace = buildPortalWorkspace(db, clinicId);
+  }
+  return out;
+}
 
 // Create hospital like SPNG shop create
 r.post('/hospital/create', (req, res) => {
@@ -751,26 +981,45 @@ function rowTime(row){
     toNum(row?.created_at, 0)
   );
 }
+function valueStrength(v){
+  if (v == null) return 0;
+  if (typeof v === 'string') return v.trim() ? Math.max(1, Math.min(12, v.trim().length)) : 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? 3 : 0;
+  if (typeof v === 'boolean') return 2;
+  if (Array.isArray(v)) return v.length ? 4 + v.length : 0;
+  if (typeof v === 'object') return Object.keys(v).length ? 4 + Object.keys(v).length : 0;
+  return 1;
+}
+function mergeRowFields(existing, incoming, preferIncoming){
+  const out = { ...(preferIncoming ? existing : incoming), ...(preferIncoming ? incoming : existing) };
+  const keys = new Set([...Object.keys(existing || {}), ...Object.keys(incoming || {})]);
+  keys.forEach(key => {
+    const a = existing?.[key];
+    const b = incoming?.[key];
+    const aScore = valueStrength(a);
+    const bScore = valueStrength(b);
+    if (bScore > aScore) out[key] = b;
+    else if (aScore > bScore) out[key] = a;
+    else if (preferIncoming) out[key] = b;
+    else out[key] = a;
+  });
+  return out;
+}
 function chooseMergedRow(existing, incoming){
   const existingTs = rowTime(existing);
   const incomingTs = rowTime(incoming);
   const existingScore = rowScore(existing);
   const incomingScore = rowScore(incoming);
+  const closeWriteWindow = Math.abs(incomingTs - existingTs) <= 45000;
   const preferIncoming = incomingTs > existingTs || (incomingTs === existingTs && incomingScore >= existingScore);
-  if (preferIncoming) {
-    return {
-      ...existing,
-      ...incoming,
-      clinicId: incoming.clinicId || existing.clinicId,
-      createdAt: Math.min(Math.max(toNum(existing.createdAt, 0), 0) || Infinity, Math.max(toNum(incoming.createdAt, 0), 0) || Infinity) === Infinity ? now() : Math.min(Math.max(toNum(existing.createdAt, 0), 0) || Infinity, Math.max(toNum(incoming.createdAt, 0), 0) || Infinity),
-      updatedAt: Math.max(existingTs, incomingTs, now())
-    };
-  }
+  const merged = closeWriteWindow
+    ? mergeRowFields(existing || {}, incoming || {}, preferIncoming)
+    : (preferIncoming ? { ...existing, ...incoming } : { ...incoming, ...existing });
+  const earliestCreated = Math.min(Math.max(toNum(existing?.createdAt, 0), 0) || Infinity, Math.max(toNum(incoming?.createdAt, 0), 0) || Infinity);
   return {
-    ...incoming,
-    ...existing,
-    clinicId: existing.clinicId || incoming.clinicId,
-    createdAt: Math.min(Math.max(toNum(existing.createdAt, 0), 0) || Infinity, Math.max(toNum(incoming.createdAt, 0), 0) || Infinity) === Infinity ? now() : Math.min(Math.max(toNum(existing.createdAt, 0), 0) || Infinity, Math.max(toNum(incoming.createdAt, 0), 0) || Infinity),
+    ...merged,
+    clinicId: incoming?.clinicId || existing?.clinicId,
+    createdAt: earliestCreated === Infinity ? now() : earliestCreated,
     updatedAt: Math.max(existingTs, incomingTs, now())
   };
 }
@@ -1048,7 +1297,7 @@ r.post('/patient/register', (req, res) => {
       updatedAt: now()
     };
     db.clinicPatients.push(patient);
-    const summary = finalizeWrite(db, clinicId, 'patient_registered', 'New Patient Registered', `${patient.fullName} has been registered.`, { patientId: patient.patientId, patientName: patient.fullName }, req);
+    const summary = finalizeWrite(db, clinicId, 'patient_registered', 'New Patient Registered', `${patient.fullName} has been registered.`, { patientId: patient.patientId, patientName: patient.fullName, entity: { patient: slimPatientRow(patient) } }, req);
     return res.json({ ok:true, patient, ...summary });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'patient register failed' });
@@ -1117,7 +1366,7 @@ r.post('/bill/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicBills.push(bill);
-    const summary = finalizeWrite(db, clinicId, 'bill_created', 'Bill Created', `Bill created for ${patient.fullName}.`, { billId: bill.billId, patientId, total: bill.total }, req);
+    const summary = finalizeWrite(db, clinicId, 'bill_created', 'Bill Created', `Bill created for ${patient.fullName}.`, { billId: bill.billId, patientId, total: bill.total, paid: bill.paid, balance: bill.balance, entity: { bill: slimBillRow(bill), patient: slimPatientRow(patient) } }, req);
     return res.json({ ok:true, bill, ...summary });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'bill create failed' });
@@ -1169,7 +1418,7 @@ r.post('/visit/create', (req, res) => {
       createdAt: now(),
       updatedAt: now()
     });
-    const summary = finalizeWrite(db, clinicId, 'visit_created', 'Visit Created', `Visit created for ${patient.fullName}.`, { visitId: visit.visitId, patientId, doctorName: visit.doctorName }, req);
+    const summary = finalizeWrite(db, clinicId, 'visit_created', 'Visit Created', `Visit created for ${patient.fullName}.`, { visitId: visit.visitId, patientId, doctorName: visit.doctorName, entity: { visit: slimVisitRow(visit), patient: slimPatientRow(patient) } }, req);
     return res.json({ ok:true, visit, ...summary });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'visit create failed' });
@@ -1483,7 +1732,7 @@ r.post('/doctor_queue/create', (req, res) => {
       updatedAt: now()
     };
     db.clinicDoctorQueue.push(row);
-    const summary = finalizeWrite(db, clinicId, 'doctor_queue_created', 'Doctor Queue Updated', `${patient.fullName} added to doctor queue.`, { queueId: row.queueId, patientId, doctorName: row.doctorName }, req);
+    const summary = finalizeWrite(db, clinicId, 'doctor_queue_created', 'Doctor Queue Updated', `${patient.fullName} added to doctor queue.`, { queueId: row.queueId, patientId, doctorName: row.doctorName, entity: { queue: slimQueueRow(row), patient: slimPatientRow(patient) } }, req);
     return res.json({ ok:true, queue: row, ...summary });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'doctor queue create failed' });
@@ -1649,6 +1898,159 @@ r.get('/portal/queue', (req, res) => {
   const db = readDB(); ensureArrays(db);
   const rows = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status))));
   return res.json({ ok:true, queue: rows, queueCount: rows.length });
+});
+
+
+
+function buildPortalPatientProfile(db, clinicId, patientId){
+  ensureArrays(db);
+  const patient = ensurePatientExists(db, clinicId, patientId);
+  if (!patient) return null;
+  const visits = sortRecent(db.clinicVisits.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId)).slice(0, 12).map(v => ({ ...slimVisitRow(v), kind:'Visit' }));
+  const bills = sortRecent(db.clinicBills.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId)).slice(0, 12).map(slimBillRow);
+  const admissions = sortRecent(db.clinicAdmissions.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId)).slice(0, 8);
+  const summary = { visitCount: visits.length, billCount: bills.length, admissionCount: admissions.length, outstanding: bills.reduce((s,b)=>s + toNum(b.balance), 0) };
+  const encounters = sortRecent([
+    ...visits.map(v => ({ ...v, createdAt: toNum(v.createdAt), title: v.reason })),
+    ...bills.map(b => ({ ...b, kind:'Bill', doctorName:'Billing Desk', reason:b.category })),
+    ...admissions.map(a => ({ ...a, kind:'Admission', reason:a.ward, doctorName:a.doctorName, createdAt: toNum(a.admittedAt || a.createdAt) }))
+  ]).slice(0, 20);
+  return { patient, visits, bills, admissions, encounters, summary };
+}
+
+function buildPortalReceiptPreview(db, clinicId, billId){
+  ensureArrays(db);
+  const bill = db.clinicBills.find(x => String(x.clinicId) === clinicId && String(x.billId || x.id) === String(billId));
+  if (!bill) return null;
+  const patient = ensurePatientExists(db, clinicId, toStr(bill.patientId)) || {};
+  const clinic = db.clinics.find(x => String(x.clinicId || x.hospitalId) === clinicId) || {};
+  const branch = db.clinicBranches.find(x => String(x.clinicId) === clinicId && String(x.branchId) === String(bill.branchId)) || {};
+  return {
+    billId: toStr(bill.billId || bill.id), billNo: toStr(bill.billNo || `BILL-${String(bill.billId || '').slice(-6)}`),
+    clinicName: toStr(clinic.clinicName || clinic.name || 'Clinic Pro NG'), branchName: toStr(branch.name || 'Main Branch'),
+    generatedLabel: new Date(toNum(bill.createdAt || now())).toLocaleString(), patientId: toStr(patient.patientId || bill.patientId),
+    patientName: toStr(patient.fullName || bill.patientName), category: toStr(bill.category || 'General'), description: toStr(bill.description),
+    total: toNum(bill.total || bill.amount), paid: toNum(bill.paid || bill.amount_paid),
+    balance: Math.max(0, toNum(bill.balance, toNum(bill.total || bill.amount) - toNum(bill.paid || bill.amount_paid))),
+    status: toStr(bill.status || 'pending'), paymentMethod: toStr(bill.paymentMethod || bill.payment_method || 'Cash'), createdAt: toNum(bill.createdAt), updatedAt: toNum(bill.updatedAt || bill.createdAt)
+  };
+}
+
+function buildPortalDoctorWidgets(db, clinicId){
+  ensureArrays(db);
+  const queue = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId)).slice(0, 400);
+  const map = new Map();
+  for (const row of queue){
+    const doctorName = pickDoctorName(row) || 'Unassigned';
+    if (!map.has(doctorName)) map.set(doctorName, { doctorName, queueCount:0, servedCount:0, waitMillisTotal:0, waitRows:0 });
+    const item = map.get(doctorName);
+    const status = lower(row.status || 'waiting');
+    if (!['completed','cancelled'].includes(status)) item.queueCount += 1;
+    if (['served','completed'].includes(status)) item.servedCount += 1;
+    if (!['completed','cancelled'].includes(status)){
+      const waited = Math.max(0, now() - toNum(row.createdAt || row.updatedAt));
+      item.waitMillisTotal += waited;
+      item.waitRows += 1;
+    }
+  }
+  const doctors = Array.from(map.values()).map(d => { const avgWaitMin = d.waitRows ? Math.round((d.waitMillisTotal / d.waitRows) / 60000) : 0; return { ...d, avgWaitMin, avgWaitLabel: avgWaitMin ? `${avgWaitMin} min` : 'Live' }; }).sort((a,b) => toNum(b.queueCount) - toNum(a.queueCount));
+  return { doctors, totals: { openQueue: doctors.reduce((s,d)=>s + toNum(d.queueCount), 0), served: doctors.reduce((s,d)=>s + toNum(d.servedCount), 0), doctorCount: doctors.length } };
+}
+
+
+
+r.post('/portal/patient/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const patientId = toStr(req.body?.patientId || req.body?.id);
+    if (!patientId) return res.status(400).json({ ok:false, error:'patientId is required' });
+    const db = readDB(); ensureArrays(db);
+    const patient = db.clinicPatients.find(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId);
+    if (!patient) return res.status(404).json({ ok:false, error:'Patient not found' });
+    const b = req.body || {};
+    const fields = ['fullName','phone','gender','age','mrn','dob','email','bloodGroup','genotype','maritalStatus','nextOfKin','nextOfKinPhone','address','notes','status'];
+    for (const key of fields) {
+      if (b[key] !== undefined && b[key] !== null && String(b[key]).trim() !== '') patient[key] = key === 'age' ? toNum(b[key]) : toStr(b[key]);
+    }
+    patient.updatedAt = now();
+    const summary = finalizeWrite(db, clinicId, 'patient_updated', 'Patient Updated', `${patient.fullName || 'Patient'} profile updated from portal.`, { patientId: patient.patientId, entity: { patient: slimPatientRow(patient) } }, req);
+    return res.json({ ok:true, patient, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'patient update failed' });
+  }
+});
+
+r.post('/portal/bill/update', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const billId = toStr(req.body?.billId || req.body?.id);
+    if (!billId) return res.status(400).json({ ok:false, error:'billId is required' });
+    const db = readDB(); ensureArrays(db);
+    const bill = db.clinicBills.find(x => String(x.clinicId) === clinicId && String(x.billId || x.id) === billId);
+    if (!bill) return res.status(404).json({ ok:false, error:'Bill not found' });
+    const b = req.body || {};
+    const total = b.total !== undefined ? toNum(b.total, toNum(bill.total || bill.amount)) : toNum(bill.total || bill.amount);
+    const paid = b.paid !== undefined ? toNum(b.paid, toNum(bill.paid || bill.amount_paid)) : toNum(bill.paid || bill.amount_paid);
+    if (b.category !== undefined && String(b.category).trim() !== '') bill.category = toStr(b.category);
+    if (b.description !== undefined && String(b.description).trim() !== '') bill.description = toStr(b.description);
+    if (b.status !== undefined && String(b.status).trim() !== '') bill.status = toStr(b.status);
+    if (b.paymentMethod !== undefined && String(b.paymentMethod).trim() !== '') {
+      bill.paymentMethod = toStr(b.paymentMethod);
+      bill.payment_method = bill.paymentMethod;
+    }
+    bill.total = total;
+    bill.amount = total;
+    bill.paid = paid;
+    bill.amount_paid = paid;
+    bill.balance = Math.max(0, total - paid);
+    bill.updatedAt = now();
+    const summary = finalizeWrite(db, clinicId, 'bill_updated', 'Bill Updated', `${bill.patientName || 'Patient'} billing updated from portal.`, { billId: toStr(bill.billId || bill.id), patientId: bill.patientId, entity: { bill: slimBillRow(bill) } }, req);
+    return res.json({ ok:true, bill, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'bill update failed' });
+  }
+});
+
+r.get('/portal/patient-profile', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const patientId = toStr(req.query?.patientId);
+  if (!patientId) return res.status(400).json({ ok:false, error:'patientId is required' });
+  const db = readDB(); ensureArrays(db);
+  const profile = buildPortalPatientProfile(db, clinicId, patientId);
+  if (!profile) return res.status(404).json({ ok:false, error:'Patient not found' });
+  return res.json({ ok:true, ...profile });
+});
+
+r.get('/portal/receipt-preview', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const billId = toStr(req.query?.billId);
+  if (!billId) return res.status(400).json({ ok:false, error:'billId is required' });
+  const db = readDB(); ensureArrays(db);
+  const receipt = buildPortalReceiptPreview(db, clinicId, billId);
+  if (!receipt) return res.status(404).json({ ok:false, error:'Bill not found' });
+  return res.json({ ok:true, receipt });
+});
+
+r.get('/portal/doctor-widgets', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  return res.json({ ok:true, widgets: buildPortalDoctorWidgets(db, clinicId) });
+});
+
+r.get('/portal/command-center', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  return res.json({ ok:true, commandCenter: buildPortalCommandCenter(db, clinicId, toNum(req.query?.days, 14)) });
+});
+
+r.get('/portal/refresh-lite', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  const include = String(req.query?.include || 'live,overview,finance,queue,timeline,patients,notifications,aiOverview,risk,doctorWidgets').split(',').map(x => x.trim()).filter(Boolean);
+  const days = toNum(req.query?.days, 14);
+  const bundle = portalBundle(db, clinicId, { include, days });
+  if (include.includes('doctorWidgets')) bundle.doctorWidgets = buildPortalDoctorWidgets(db, clinicId);
+  return res.json(bundle);
 });
 
 r.post('/backup/create', (req, res) => {

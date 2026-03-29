@@ -102,6 +102,11 @@
 
     <section id="kpiGrid" class="kpiGrid"></section>
 
+    <section class="glass tickerStrip">
+      <div class="tickerHead">Live Counter Stream</div>
+      <div id="liveTicker" class="tickerRow"></div>
+    </section>
+
     <section id="tab-overview" class="tabPane">
       <div class="executiveShell">
         <div class="overviewMain stack16">
@@ -181,6 +186,12 @@
         </article>
 
         <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Fast Lane</div><h3>Direct Billing Cards</h3></div></div>
+          <div id="billingCards" class="stack10"></div>
+          <div id="recentBills" class="stack10 mt16"></div>
+        </article>
+
+        <article class="glass card">
           <div class="cardHead compact"><div><div class="eyebrow">Doctor Coverage</div><h3>Operational Load</h3></div></div>
           <div id="doctors" class="stack10"></div>
         </article>
@@ -217,8 +228,8 @@
       <div class="grid2 patientsShell">
         <article class="glass card">
           <div class="cardHead">
-            <div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div>
-            <button class="btn btnGhost small openPatientModal" type="button">Open Modal</button>
+            <div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div><div class="row gap8"><span class="badge">Wizard</span><span class="badge">Realtime</span></div>
+            <button class="btn btnGhost small openPatientModal" type="button">Launch Wizard</button>
           </div>
           <form id="patientForm" class="formGrid">
             <input name="fullName" placeholder="Full Name" required>
@@ -241,11 +252,22 @@
         <article class="glass card">
           <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div></div>
           <div id="patientsList" class="stack10"></div>
+          <div id="recentPatients" class="stack10 mt16"></div>
         </article>
       </div>
     </section>
 
     <section id="tab-workflow" class="tabPane hidden">
+      <div class="workspaceHero">
+        <article class="glass card spanWide">
+          <div class="cardHead compact"><div><div class="eyebrow">Unified Command Workspace</div><h3>Cross Desk Pulse</h3></div></div>
+          <div id="workspaceSummary" class="summaryGrid"></div>
+        </article>
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Care Timeline</div><h3>Queue, Lab, Prescription, Nurse</h3></div></div>
+          <div id="workspaceTimeline" class="stack10"></div>
+        </article>
+      </div>
       <div class="workflowGrid">
         <article class="glass card">
           <div class="cardHead"><div><div class="eyebrow">Billing</div><h3>Direct Billing Workflow</h3></div><button class="btn btnGhost small openBillModal" type="button">Quick Bill Modal</button></div>
