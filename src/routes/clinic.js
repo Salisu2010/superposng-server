@@ -2120,6 +2120,16 @@ r.get('/portal/command-center', (req, res) => {
   return res.json({ ok:true, commandCenter: buildPortalCommandCenter(db, clinicId, toNum(req.query?.days, 14)) });
 });
 
+r.get('/portal/workspace', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    return res.json({ ok:true, workspace: buildPortalWorkspace(db, clinicId) });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'workspace load failed' });
+  }
+});
+
 r.get('/portal/refresh-lite', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
   try {
