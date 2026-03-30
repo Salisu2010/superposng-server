@@ -299,3 +299,101 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
   body.sidebar-collapsed .enterpriseSidebar .navBtn{padding:16px}
   .enterpriseContent{max-width:100%!important}
 }
+
+
+/* v9.3 ultra-premium portal polish */
+.commandRibbon{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 18px;}
+.searchRibbon{grid-template-columns:repeat(2,minmax(0,1fr));}
+.ribbonCard{position:relative;overflow:hidden;padding:18px 18px 16px;border-radius:24px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(19,27,48,.96),rgba(9,14,28,.96));box-shadow:0 16px 40px rgba(0,0,0,.28);}
+.ribbonCard::after{content:"";position:absolute;inset:auto -20% -35% auto;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.12),transparent 70%);pointer-events:none;}
+.ribbonCard span{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#9fb1d9);margin-bottom:8px;}
+.ribbonCard strong{display:block;font-size:20px;line-height:1.2;margin-bottom:6px;color:#fff;}
+.ribbonCard small{display:block;color:rgba(232,239,255,.74);line-height:1.45;}
+.accentBlue{box-shadow:inset 0 0 0 1px rgba(90,168,255,.12),0 16px 40px rgba(0,0,0,.28);}
+.accentViolet{box-shadow:inset 0 0 0 1px rgba(167,120,255,.14),0 16px 40px rgba(0,0,0,.28);}
+.accentGreen{box-shadow:inset 0 0 0 1px rgba(86,219,162,.14),0 16px 40px rgba(0,0,0,.28);}
+.accentCyan{box-shadow:inset 0 0 0 1px rgba(86,214,255,.14),0 16px 40px rgba(0,0,0,.28);}
+.accentOrange{box-shadow:inset 0 0 0 1px rgba(255,174,86,.14),0 16px 40px rgba(0,0,0,.28);}
+.accentPink{box-shadow:inset 0 0 0 1px rgba(255,112,182,.14),0 16px 40px rgba(0,0,0,.28);}
+.registryToolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
+.registryHint{color:rgba(232,239,255,.72);max-width:620px;}
+.patientDeck{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.patientCardPremium,.searchCardPremium{position:relative;overflow:hidden;padding:16px;border-radius:22px;background:linear-gradient(180deg,rgba(13,19,34,.96),rgba(7,11,24,.96));border:1px solid rgba(255,255,255,.06);box-shadow:0 12px 30px rgba(0,0,0,.26);}
+.patientCardPremium::before,.searchCardPremium::before{content:"";position:absolute;inset:0 0 auto 0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);}
+.patientCardHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;}
+.patientIdentity{display:flex;gap:12px;align-items:flex-start;}
+.avatarOrb{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,rgba(86,214,255,.24),rgba(167,120,255,.2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
+.patientMetaLine{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.metaPill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.05);color:rgba(232,239,255,.82);font-size:12px;border:1px solid rgba(255,255,255,.06);}
+.patientFoot{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+.patientQuickStats{display:flex;gap:10px;flex-wrap:wrap;color:rgba(232,239,255,.66);font-size:12px;}
+.patientQuickStats strong{display:block;color:#fff;font-size:13px;}
+.searchCardPremium .queueActions,.patientCardPremium .queueActions{margin-top:12px;}
+.aiSpotlight{position:relative;overflow:hidden;margin-bottom:14px;padding:16px 18px;border-radius:22px;background:linear-gradient(135deg,rgba(40,72,130,.34),rgba(18,24,42,.88));border:1px solid rgba(255,255,255,.08);display:flex;gap:14px;align-items:center;}
+.spotlightGlow{width:54px;height:54px;border-radius:18px;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.35),rgba(86,214,255,.18),transparent 72%);box-shadow:0 0 40px rgba(86,214,255,.18);}
+.spotlightLabel{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:rgba(220,232,255,.72);margin-bottom:4px;}
+.sidebarFooterGrid{display:grid;grid-template-columns:1fr;gap:10px;}
+.footerSignal{padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;gap:10px;align-items:center;}
+.footerSignal span{color:rgba(232,239,255,.66);font-size:12px;text-transform:uppercase;letter-spacing:.08em;}
+.footerSignal strong{color:#fff;}
+.patientDrawerHeroStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px;}
+.drawerStat{padding:14px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);}
+.drawerStat span{display:block;color:rgba(232,239,255,.64);font-size:12px;margin-bottom:6px;}
+.drawerStat strong{font-size:18px;color:#fff;}
+.drawerSplitGrid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;}
+.drawerPanelCard{padding:16px;border-radius:22px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);}
+.drawerTimelineRow{padding:12px 14px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05);}
+.searchSummaryBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;color:rgba(232,239,255,.74);}
+@media (max-width: 1100px){.commandRibbon,.searchRibbon,.patientDeck,.drawerSplitGrid,.patientDrawerHeroStats{grid-template-columns:1fr;}.registryToolbar{align-items:flex-start;}}
+
+
+/* v9.4 operations + analytics executive redesign */
+.operationsRibbon,.analyticsRibbon{margin-bottom:18px;}
+.doctorCommandCard,.analyticsExecutiveCard{position:relative;overflow:hidden;}
+.doctorCommandCard::after,.analyticsExecutiveCard::after{content:"";position:absolute;inset:auto -10% -25% auto;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(95,181,255,.12),transparent 70%);pointer-events:none;}
+.opsExecutiveGrid,.analyticsSummaryGrid,.receiptExecutiveGrid,.receiptTotalsGrid,.doctorMetricsGrid{display:grid;gap:12px;}
+.opsExecutiveGrid{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px;}
+.analyticsSummaryGrid{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:14px;}
+.receiptExecutiveGrid{grid-template-columns:1.05fr .95fr;gap:18px;align-items:start;}
+.receiptTotalsGrid{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:14px;}
+.doctorMetricsGrid{grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0;}
+.execMiniCard,.doctorBadgeStrip span,.receiptSpotlight,.analyticsSignalCard{padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);}
+.execMiniCard strong,.receiptSpotlight strong{display:block;font-size:1.08rem;margin-top:6px;color:#fff;}
+.execMiniCard span,.receiptSpotlight span{display:block;font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+.doctorWidgetCard{position:relative;overflow:hidden;background:linear-gradient(180deg,rgba(13,24,42,.96),rgba(8,14,26,.96));}
+.doctorWidgetCard::before{content:"";position:absolute;inset:0 auto auto 0;width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);}
+.doctorIdentityRow{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;}
+.doctorNameBlock small{display:block;color:var(--muted);font-size:.8rem;margin-top:6px;}
+.doctorBadgeStrip{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+.doctorBadgeStrip span{padding:8px 10px;border-radius:999px;font-size:.76rem;}
+.doctorMetric{padding:12px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);}
+.doctorMetric small{display:block;color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.doctorMetric strong{font-size:1.05rem;color:#fff;}
+.doctorIntensity{margin-top:12px;padding:12px 14px;border-radius:18px;background:linear-gradient(135deg,rgba(95,181,255,.12),rgba(157,140,255,.08));border:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;gap:12px;align-items:center;}
+.doctorIntensity strong{font-size:.94rem;}
+.doctorIntensity small{display:block;color:var(--muted);margin-top:4px;}
+.metricBarRow{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:8px;}
+.metricBarStrong{font-weight:800;color:#fff;}
+.metricBarHint{color:var(--muted);font-size:.78rem;margin-top:6px;}
+.analyticsSignalCard{background:linear-gradient(180deg,rgba(17,31,52,.96),rgba(10,18,31,.96));}
+.analyticsSignalCard strong{display:block;font-size:1rem;margin-bottom:4px;}
+.receiptShell{padding:0;background:transparent;border:none;}
+.receiptPaper{padding:0;background:linear-gradient(180deg,#f7f9fd,#edf3fb 58%,#f7f9fd);color:#102037;overflow:hidden;}
+.receiptBanner{padding:22px 22px 18px;background:linear-gradient(135deg,#102742,#183b63 65%,#215488);color:#f8fbff;}
+.receiptBannerTop{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;}
+.receiptTitle{font-size:1.46rem;font-weight:900;line-height:1.1;margin:8px 0 6px;}
+.receiptBadge{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);font-size:.78rem;font-weight:800;}
+.receiptClinicBlock{padding:22px;}
+.receiptIdentityCard,.receiptMetaCard{padding:16px 18px;border-radius:20px;background:rgba(16,39,66,.04);border:1px solid rgba(16,39,66,.08);}
+.receiptIdentityCard h4,.receiptMetaCard h4{margin:0 0 12px;font-size:.82rem;letter-spacing:.12em;text-transform:uppercase;color:#5b7293;}
+.receiptLine{height:1px;padding:0;border:none;background:linear-gradient(90deg,transparent,rgba(16,32,55,.18),transparent);margin:8px 0;}
+.receiptRow{padding:10px 0;align-items:center;border-bottom:1px dashed rgba(16,32,55,.12);}
+.receiptRow span{color:#60758f;}
+.receiptRow strong{text-align:right;}
+.receiptTotalCard{padding:16px;border-radius:18px;background:#fff;border:1px solid rgba(16,39,66,.08);box-shadow:0 14px 30px rgba(16,39,66,.08);}
+.receiptTotalCard span{display:block;font-size:.74rem;text-transform:uppercase;letter-spacing:.08em;color:#6d829d;margin-bottom:8px;}
+.receiptTotalCard strong{font-size:1.18rem;color:#102742;}
+.receiptFooterNote{padding:0 22px 22px;color:#4d617e;}
+.receiptActionBar{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;padding:0 22px 24px;}
+.receiptActionBtn{min-width:150px;text-align:center;}
+@media (max-width:1100px){.opsExecutiveGrid,.analyticsSummaryGrid,.receiptExecutiveGrid,.receiptTotalsGrid,.doctorMetricsGrid{grid-template-columns:1fr;}}

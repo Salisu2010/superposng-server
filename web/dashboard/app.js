@@ -73,6 +73,7 @@ function bindUI() {
   $('#quickQueueBtn').addEventListener('click', () => switchTab('operations'));
   $('#railVisitBtn').addEventListener('click', () => switchTab('workflow'));
   $('#railSearchBtn').addEventListener('click', () => switchTab('search'));
+  $('#patientsOpenSearchBtn')?.addEventListener('click', () => switchTab('search'));
   $('#fabVisitBtn').addEventListener('click', () => { toggleFab(false); switchTab('workflow'); });
   $('#fabSearchBtn').addEventListener('click', () => { toggleFab(false); switchTab('search'); });
   $('#fabMain').addEventListener('click', () => toggleFab());
@@ -325,18 +326,33 @@ async function runSearch() {
       $('#patientAiSummary').innerHTML = `<div class="emptyState">Select a patient to see AI summary.</div>`;
       return;
     }
-    host.innerHTML = items.map(p => `
-      <div class="searchCard">
-        <div class="itemTitle">${escapeHtml(p.fullName || p.patientName || 'Unnamed Patient')}</div>
-        <div class="row"><span class="badge">${escapeHtml(p.patientId || '--')}</span><span class="badge">${escapeHtml(p.gender || '--')}</span></div>
-        <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span></div>
-        <div class="queueActions">
-          <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI Summary</button>
-          <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
-          <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
-        </div>
-      </div>
-    `).join('');
+    host.innerHTML = `
+      <div class="searchSummaryBar"><div><strong>${items.length}</strong> patient result(s) found for <strong>${escapeHtml(q)}</strong></div><div class="row gap8"><span class="badge">Live Search</span><span class="badge">Profile Drawer</span></div></div>
+      ${items.map(p => {
+        const name = escapeHtml(p.fullName || p.patientName || 'Unnamed Patient');
+        const pid = escapeHtml(p.patientId || '--');
+        const initials = escapeHtml(((p.fullName || p.patientName || 'P').split(/\s+/).slice(0,2).map(s => s[0] || '').join('') || 'P').toUpperCase());
+        return `
+        <div class="searchCardPremium">
+          <div class="patientCardHead">
+            <div class="patientIdentity">
+              <div class="avatarOrb">${initials}</div>
+              <div>
+                <div class="itemTitle">${name}</div>
+                <div class="patientMetaLine"><span class="metaPill">${pid}</span><span class="metaPill">${escapeHtml(p.gender || '--')}</span><span class="metaPill">${escapeHtml(String(p.age || '--'))} yrs</span></div>
+              </div>
+            </div>
+            <span class="badge">Search Match</span>
+          </div>
+          <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.email || '--')}</span></div>
+          <div class="queueActions">
+            <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI Summary</button>
+            <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
+            <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
+          </div>
+        </div>`;
+      }).join('')}
+    `;
     $$('[data-ai]', host).forEach(btn => btn.addEventListener('click', () => loadPatientAi(btn.dataset.ai)));
     $$('[data-view]', host).forEach(btn => btn.addEventListener('click', () => openPatientDrawer(btn.dataset.view)));
     $$('[data-bill]', host).forEach(btn => btn.addEventListener('click', () => openBillModal(btn.dataset.bill, btn.dataset.name)));
@@ -511,41 +527,62 @@ function renderFinance() {
   const paid = num(f.totalPaid);
   const outstanding = num(f.outstanding);
   const total = Math.max(1, num(f.totalBill));
-  $('#finance').innerHTML = [
-    metricBar('Total billed', paid + outstanding, total),
-    metricBar('Collected', paid, total),
-    metricBar('Outstanding', outstanding, total),
-    metricBar('Pharmacy sales', num(f.pharmacySales), Math.max(total, num(f.pharmacySales), 1)),
-  ].join('');
+  const billCount = num(f.billCount || state.data.overview?.overview?.bills || 0);
+  const avgCollection = billCount ? money(paid / Math.max(billCount, 1)) : money(0);
+  document.getElementById('opsRibbonBilling') && (document.getElementById('opsRibbonBilling').textContent = outstanding > paid ? 'Collections Attention' : 'Collections Ready');
+  $('#finance').innerHTML = `
+    <div class="opsExecutiveGrid">
+      <div class="execMiniCard"><span>Collected</span><strong>${money(paid)}</strong></div>
+      <div class="execMiniCard"><span>Outstanding</span><strong>${money(outstanding)}</strong></div>
+      <div class="execMiniCard"><span>Avg per Bill</span><strong>${avgCollection}</strong></div>
+    </div>
+    ${metricBar('Total billed', paid + outstanding, total, 'Full billing volume now in the system')}
+    ${metricBar('Collected', paid, total, paid >= outstanding ? 'Cashflow is leading exposure' : 'Collection is trailing exposure')}
+    ${metricBar('Outstanding', outstanding, total, outstanding > 0 ? 'Pending settlement still exists' : 'No outstanding exposure')}
+    ${metricBar('Pharmacy sales', num(f.pharmacySales), Math.max(total, num(f.pharmacySales), 1), 'Medication revenue contribution')}
+  `;
 }
 
 function renderDoctors() {
   const widgets = state.data.doctorWidgets || {};
   const doctors = Array.isArray(widgets.doctors) && widgets.doctors.length ? widgets.doctors : getDoctorWorkload();
+  const opsSummary = state.data.overview?.overview || {};
+  document.getElementById('opsRibbonDoctors') && (document.getElementById('opsRibbonDoctors').textContent = doctors.some(d => num(d.queueCount || d.count || 0) >= 6) ? 'Load Pressure' : 'Balanced Load');
+  document.getElementById('opsRibbonStatus') && (document.getElementById('opsRibbonStatus').textContent = num(opsSummary.queue || 0) > 6 ? 'Queue Elevated' : 'Live Control');
   if (!doctors.length) {
     $('#doctors').innerHTML = `<div class="emptyState">Doctor workload will appear here after visits or queue records.</div>`;
     return;
   }
   const maxCount = Math.max(...doctors.map(d => num(d.queueCount || d.count || d.total || 0)), 1);
-  $('#doctors').innerHTML = doctors.slice(0, 8).map(d => `
+  $('#doctors').innerHTML = doctors.slice(0, 8).map(d => {
+    const open = num(d.queueCount || d.count || 0);
+    const served = num(d.servedCount || 0);
+    const avgWait = escapeHtml(String(d.avgWaitLabel || '--'));
+    const intensity = open >= 7 ? 'Critical Load' : open >= 4 ? 'Moderate Load' : 'Balanced';
+    const statusClass = open >= 7 ? 'urgent' : open >= 4 ? 'warn' : 'normal';
+    return `
     <div class="doctorWidgetCard">
-      <div class="row alignCenter" style="justify-content:space-between">
-        <div>
+      <div class="doctorIdentityRow">
+        <div class="doctorNameBlock">
           <div class="itemTitle">${escapeHtml(d.doctorName || d.doctor || 'Doctor')}</div>
-          <div class="itemMeta"><span>${num(d.queueCount || d.count || 0)} in queue</span><span>${num(d.servedCount || 0)} served</span></div>
+          <small>${open} open queue • ${served} served • Avg wait ${avgWait}</small>
         </div>
-        <span class="badge ${num(d.queueCount || d.count || 0) >= 6 ? 'urgent' : 'normal'}">${num(d.queueCount || d.count || 0) >= 6 ? 'Busy' : 'Stable'}</span>
+        <span class="badge ${statusClass}">${open >= 7 ? 'Busy' : open >= 4 ? 'Watch' : 'Stable'}</span>
       </div>
-      <div class="miniKpis">
-        <div><small>Open</small><strong>${num(d.queueCount || d.count || 0)}</strong></div>
-        <div><small>Served</small><strong>${num(d.servedCount || 0)}</strong></div>
-        <div><small>Avg Wait</small><strong>${escapeHtml(String(d.avgWaitLabel || '--'))}</strong></div>
+      <div class="doctorBadgeStrip">
+        <span>Queue Focus</span>
+        <span>${open ? `${open} active cases` : 'No open queue'}</span>
+        <span>${served} served this window</span>
       </div>
-      <div class="progress"><span style="width:${(num(d.queueCount || d.count || 0) / maxCount) * 100}%"></span></div>
-      <div class="queueActions">
-        <button class="pillBtn" type="button" data-queue-doctor="${escapeHtml(d.doctorName || d.doctor || '')}">Open Queue</button>
+      <div class="doctorMetricsGrid">
+        <div class="doctorMetric"><small>Open Queue</small><strong>${open}</strong></div>
+        <div class="doctorMetric"><small>Served</small><strong>${served}</strong></div>
+        <div class="doctorMetric"><small>Avg Wait</small><strong>${avgWait}</strong></div>
       </div>
-    </div>`).join('');
+      <div class="progress"><span style="width:${(open / maxCount) * 100}%"></span></div>
+      <div class="doctorIntensity"><div><strong>${intensity}</strong><small>Use Open Queue to focus this desk instantly.</small></div><button class="pillBtn" type="button" data-queue-doctor="${escapeHtml(d.doctorName || d.doctor || '')}">Open Queue</button></div>
+    </div>`;
+  }).join('');
   $$('[data-queue-doctor]', $('#doctors')).forEach(btn => btn.addEventListener('click', () => {
     switchTab('operations');
     const target = Array.from(document.querySelectorAll('.queueCard')).find(card => card.textContent.toLowerCase().includes(String(btn.dataset.queueDoctor || '').toLowerCase()));
@@ -584,13 +621,21 @@ function renderAnalyticsPanels() {
   const f = state.data.finance?.finance || {};
   const o = state.data.overview?.overview || {};
   const notifications = state.data.notifications || [];
-  $('#financeBreakdown').innerHTML = [
-    metricBar('Total Revenue Engine', num(f.totalBill), Math.max(num(f.totalBill), 1)),
-    metricBar('Collected Cashflow', num(f.totalPaid), Math.max(num(f.totalBill), 1)),
-    metricBar('Exposure Outstanding', num(f.outstanding), Math.max(num(f.totalBill), 1)),
-    metricBar('Pharmacy Share', num(f.pharmacySales), Math.max(num(f.totalBill), 1)),
-  ].join('');
   const ws = state.data.workspace?.summary || {};
+  const collectionRate = num(f.totalBill) ? Math.round((num(f.totalPaid) / Math.max(num(f.totalBill), 1)) * 100) : 0;
+  const exposureRate = num(f.totalBill) ? Math.round((num(f.outstanding) / Math.max(num(f.totalBill), 1)) * 100) : 0;
+  document.getElementById('analyticsRibbonFinance') && (document.getElementById('analyticsRibbonFinance').textContent = `${collectionRate}% Collected`);
+  document.getElementById('analyticsRibbonWorkflow') && (document.getElementById('analyticsRibbonWorkflow').textContent = ws.pendingLabs + ws.pendingAppointments + ws.activePrescriptions > 0 ? 'Workflow Under Watch' : 'Workflow Stable');
+  $('#financeBreakdown').innerHTML = `
+    <div class="analyticsSummaryGrid">
+      <div class="execMiniCard"><span>Collection Rate</span><strong>${collectionRate}%</strong></div>
+      <div class="execMiniCard"><span>Exposure Rate</span><strong>${exposureRate}%</strong></div>
+    </div>
+    ${metricBar('Total Revenue Engine', num(f.totalBill), Math.max(num(f.totalBill), 1), 'Overall billed revenue moving through the portal')}
+    ${metricBar('Collected Cashflow', num(f.totalPaid), Math.max(num(f.totalBill), 1), 'Cash already secured into collections')}
+    ${metricBar('Exposure Outstanding', num(f.outstanding), Math.max(num(f.totalBill), 1), 'Unsettled balance that still needs action')}
+    ${metricBar('Pharmacy Share', num(f.pharmacySales), Math.max(num(f.totalBill), 1), 'Medication revenue contribution to total billing')}
+  `;
   $('#workflowBenchmarks').innerHTML = [
     metricRow('Patient registry strength', num(o.patients), 'Registered patient footprint'),
     metricRow('Clinical throughput', num(ws.activeVisits || o.visits), 'Visits handled in the current dataset'),
@@ -599,7 +644,7 @@ function renderAnalyticsPanels() {
     metricRow('Active prescriptions', num(ws.activePrescriptions), 'Medication flow still active'),
     metricRow('Admissions active', num(ws.activeAdmissions || o.admissions), 'Bed-side and inpatient activity'),
   ].join('');
-  $('#analyticsSignals').innerHTML = notifications.slice(0, 6).map(n => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(n.title || n.type || 'Signal')}</div><div>${escapeHtml(n.message || '--')}</div></div>`).join('') || `<div class="emptyState">Realtime signals will show after events start flowing.</div>`;
+  $('#analyticsSignals').innerHTML = notifications.slice(0, 6).map(n => `<div class="analyticsSignalCard"><strong>${escapeHtml(n.title || n.type || 'Signal')}</strong><div>${escapeHtml(n.message || '--')}</div><div class="itemMeta"><span>${fmtDateTime(n.createdAt)}</span><span>${escapeHtml(n.actor || n.by || 'system')}</span></div></div>`).join('') || `<div class="emptyState">Realtime signals will show after events start flowing.</div>`;
   const ws2 = state.data.workspace?.summary || {};
   $('#boardSummary').innerHTML = [
     miniPanel('Executive summary', escapeHtml(state.data.aiOverview?.summary || 'Analytics summary will appear here.')),
@@ -613,21 +658,41 @@ function renderAnalyticsPanels() {
 
 function renderPatients() {
   const items = state.data.patients || [];
-  $('#patientsList').innerHTML = items.length ? items.slice(0, 25).map(p => `
-    <div class="listCard">
-      <div class="itemTitle">${escapeHtml(p.fullName || 'Unnamed Patient')}</div>
-      <div class="row"><span class="badge">${escapeHtml(p.patientId || '--')}</span><span class="badge">${escapeHtml(p.gender || '--')}</span></div>
-      <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span></div>
-      <div class="inlineActions">
-        <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI</button>
-        <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
-        <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
-      </div>
-    </div>
-  `).join('') : `<div class="emptyState">No patients registered yet.</div>`;
-  $$('[data-ai]', $('#patientsList')).forEach(btn => btn.addEventListener('click', () => { switchTab('search'); loadPatientAi(btn.dataset.ai); $('#searchInput').value = btn.dataset.ai; }));
-  $$('[data-view]', $('#patientsList')).forEach(btn => btn.addEventListener('click', () => openPatientDrawer(btn.dataset.view)));
-  $$('[data-bill]', $('#patientsList')).forEach(btn => btn.addEventListener('click', () => openBillModal(btn.dataset.bill, btn.dataset.name)));
+  const overview = state.data.overview?.overview || {};
+  const listHost = $('#patientsList');
+  $('#patientRibbonCount').textContent = `${num(overview.patients || items.length)} Patients`;
+  $('#patientRibbonSearch').textContent = items.length ? 'Registry Connected' : 'Awaiting Records';
+  $('#patientRibbonSync').textContent = state.transport === 'SSE' ? 'Realtime Active' : 'Polling Mode';
+  listHost.innerHTML = items.length ? items.slice(0, 24).map(p => {
+    const fullName = escapeHtml(p.fullName || 'Unnamed Patient');
+    const pid = escapeHtml(p.patientId || '--');
+    const initials = escapeHtml(((p.fullName || 'P').split(/\s+/).slice(0,2).map(s => s[0] || '').join('') || 'P').toUpperCase());
+    return `
+      <div class="patientCardPremium">
+        <div class="patientCardHead">
+          <div class="patientIdentity">
+            <div class="avatarOrb">${initials}</div>
+            <div>
+              <div class="itemTitle">${fullName}</div>
+              <div class="patientMetaLine"><span class="metaPill">${pid}</span><span class="metaPill">${escapeHtml(p.gender || '--')}</span><span class="metaPill">${escapeHtml(String(p.age || '--'))} yrs</span></div>
+            </div>
+          </div>
+          <span class="badge">Live</span>
+        </div>
+        <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.email || '--')}</span></div>
+        <div class="patientFoot">
+          <div class="patientQuickStats"><div><strong>${escapeHtml(p.bloodGroup || '--')}</strong>Blood</div><div><strong>${escapeHtml(p.genotype || '--')}</strong>Genotype</div></div>
+          <div class="queueActions">
+            <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI</button>
+            <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
+            <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('') : `<div class="emptyState">No patients registered yet.</div>`;
+  $$('[data-ai]', listHost).forEach(btn => btn.addEventListener('click', () => { switchTab('search'); loadPatientAi(btn.dataset.ai); $('#searchInput').value = btn.dataset.ai; }));
+  $$('[data-view]', listHost).forEach(btn => btn.addEventListener('click', () => openPatientDrawer(btn.dataset.view)));
+  $$('[data-bill]', listHost).forEach(btn => btn.addEventListener('click', () => openBillModal(btn.dataset.bill, btn.dataset.name)));
 }
 
 function renderSideSummary() {
@@ -641,6 +706,10 @@ function renderSideSummary() {
     miniPanel('Outstanding', money(overview.outstanding || 0)),
     miniPanel('Last Snapshot', live.lastSnapshotAt ? fmtDateTime(live.lastSnapshotAt) : '--')
   ].join('');
+  const f = state.data.finance?.finance || {};
+  $('#sidebarPortalState').textContent = state.baseUrl && state.hospitalId ? (state.transport === 'SSE' ? 'Live' : 'Connected') : 'Standby';
+  $('#sidebarQueueState').textContent = `${num(overview.queue || 0)} Open`;
+  $('#sidebarBillingState').textContent = money(f.totalPaid || 0);
 }
 
 
@@ -766,27 +835,37 @@ async function openPatientDrawer(patientId) {
         <div>
           <div class="eyebrow">Patient Profile Drawer</div>
           <h3>${escapeHtml(p.fullName || p.patientName || patientId)}</h3>
-          <div class="itemMeta"><span>${escapeHtml(p.patientId || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.phone || '--')}</span></div>
+          <div class="itemMeta"><span>${escapeHtml(p.patientId || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.email || '--')}</span></div>
+          <div class="patientDrawerHeroStats">
+            <div class="drawerStat"><span>Visits</span><strong>${num(summary.visitCount)}</strong></div>
+            <div class="drawerStat"><span>Bills</span><strong>${num(summary.billCount)}</strong></div>
+            <div class="drawerStat"><span>Outstanding</span><strong>${money(summary.outstanding || 0)}</strong></div>
+          </div>
         </div>
         <div class="drawerHeroBadge">${escapeHtml(p.status || 'active')}</div>
       </div>
       <div class="drawerGrid">
         <div class="miniPanel"><div class="itemTitle">Demography</div><div>${escapeHtml(p.gender || '--')} • ${escapeHtml(String(p.age || '--'))}</div><div class="itemMeta"><span>${escapeHtml(p.bloodGroup || '--')}</span><span>${escapeHtml(p.genotype || '--')}</span></div></div>
-        <div class="miniPanel"><div class="itemTitle">Clinical Totals</div><div>${num(summary.visitCount)} visits • ${num(summary.billCount)} bills</div><div class="itemMeta"><span>${num(summary.admissionCount)} admissions</span><span>${money(summary.outstanding || 0)} outstanding</span></div></div>
-        <div class="miniPanel"><div class="itemTitle">Address</div><div>${escapeHtml(p.address || '--')}</div></div>
+        <div class="miniPanel"><div class="itemTitle">Contacts</div><div>${escapeHtml(p.phone || '--')}</div><div class="itemMeta"><span>${escapeHtml(p.email || '--')}</span><span>${escapeHtml(p.address || '--')}</span></div></div>
         <div class="miniPanel"><div class="itemTitle">Next of Kin</div><div>${escapeHtml(p.nextOfKin || '--')}</div><div class="itemMeta"><span>${escapeHtml(p.nextOfKinPhone || '--')}</span></div></div>
+        <div class="miniPanel"><div class="itemTitle">Clinical Totals</div><div>${num(summary.visitCount)} visits • ${num(summary.billCount)} bills</div><div class="itemMeta"><span>${num(summary.admissionCount)} admissions</span><span>${money(summary.outstanding || 0)} outstanding</span></div></div>
       </div>
       <div class="drawerSection">
-        <div class="cardHead compact"><div><div class="eyebrow">Timeline</div><h3>Recent Encounters</h3></div><div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill</button></div></div>
-        <div class="stack10">${encounters.length ? encounters.map(v => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(v.kind || 'Visit')} • ${escapeHtml(v.status || '--')}</div><div>${escapeHtml(v.doctorName || v.title || '--')}</div><div class="itemMeta"><span>${escapeHtml(v.reason || v.category || '--')}</span><span>${fmtDateTime(v.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No recent encounters for this patient.</div>`}</div>
+        <div class="cardHead compact"><div><div class="eyebrow">Command Actions</div><h3>Quick Clinical Controls</h3></div><div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill</button></div></div>
+      </div>
+      <div class="drawerSplitGrid">
+        <div class="drawerPanelCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Timeline</div><h3>Recent Encounters</h3></div></div>
+          <div class="stack10">${encounters.length ? encounters.map(v => `<div class="drawerTimelineRow"><div class="itemTitle">${escapeHtml(v.kind || 'Visit')} • ${escapeHtml(v.status || '--')}</div><div>${escapeHtml(v.doctorName || v.title || '--')}</div><div class="itemMeta"><span>${escapeHtml(v.reason || v.category || '--')}</span><span>${fmtDateTime(v.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No recent encounters for this patient.</div>`}</div>
+        </div>
+        <div class="drawerPanelCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Admissions</div><h3>Inpatient Summary</h3></div></div>
+          <div class="stack10">${admissions.length ? admissions.map(a => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(a.ward || 'Ward')} • ${escapeHtml(a.status || '--')}</div><div>${escapeHtml(a.doctorName || '--')}</div><div class="itemMeta"><span>${escapeHtml(a.bed || '--')}</span><span>${fmtDateTime(a.admittedAt || a.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No admission records for this patient.</div>`}</div>
+        </div>
       </div>
       <div class="drawerSection">
         <div class="cardHead compact"><div><div class="eyebrow">Billing</div><h3>Receipt Preview Queue</h3></div></div>
         <div class="stack10">${billing.length ? billing.map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span><span>${fmtDateTime(b.createdAt)}</span></div><div class="inlineActions"><button class="pillBtn" type="button" data-receipt="${escapeHtml(b.billId || '')}">Open Receipt</button><button class="pillBtn warn" type="button" data-edit-bill="${escapeHtml(b.billId || '')}" data-category="${escapeHtml(b.category || '')}" data-total="${escapeHtml(String(b.total || ''))}" data-paid="${escapeHtml(String(b.paid || ''))}" data-status="${escapeHtml(b.status || '')}" data-payment="${escapeHtml(b.paymentMethod || '')}" data-description="${escapeHtml(b.description || '')}">Edit Bill</button></div></div>`).join('') : `<div class="emptyState">No bills created for this patient.</div>`}</div>
-      </div>
-      <div class="drawerSection">
-        <div class="cardHead compact"><div><div class="eyebrow">Admissions</div><h3>Inpatient Summary</h3></div></div>
-        <div class="stack10">${admissions.length ? admissions.map(a => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(a.ward || 'Ward')} • ${escapeHtml(a.status || '--')}</div><div>${escapeHtml(a.doctorName || '--')}</div><div class="itemMeta"><span>${escapeHtml(a.bed || '--')}</span><span>${fmtDateTime(a.admittedAt || a.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No admission records for this patient.</div>`}</div>
       </div>
     `);
     document.getElementById('drawerBillBtn')?.addEventListener('click', () => { closeModal(); openBillModal(p.patientId || patientId, p.fullName || p.patientName || ''); });
@@ -797,7 +876,6 @@ async function openPatientDrawer(patientId) {
     showToast('Profile Unavailable', err.message || 'Unable to load patient profile');
   }
 }
-
 
 function openBillEditModal(bill = {}) {
   showModal(`Update Bill • ${bill.billId || ''}`, `
@@ -828,26 +906,41 @@ async function openReceiptPreview(billId) {
     showModal(`Receipt Preview • ${receipt.billNo || billId}`, `
       <div class="receiptShell">
         <div class="receiptPaper">
-          <div class="receiptCenter">
-            <div class="receiptClinic">${escapeHtml(receipt.clinicName || 'Clinic Pro NG')}</div>
-            <div>${escapeHtml(receipt.branchName || 'Main Branch')}</div>
-            <div>${escapeHtml(receipt.generatedLabel || '')}</div>
+          <div class="receiptBanner">
+            <div class="receiptBannerTop">
+              <div>
+                <div class="eyebrow" style="color:#b7d7ff">Billing Receipt</div>
+                <div class="receiptTitle">${escapeHtml(receipt.clinicName || 'Clinic Pro NG')}</div>
+                <div>${escapeHtml(receipt.branchName || 'Main Branch')}</div>
+              </div>
+              <div class="receiptBadge">${escapeHtml(receipt.status || 'Pending')}</div>
+            </div>
           </div>
-          <div class="receiptLine"></div>
-          <div class="receiptRow"><span>Patient</span><strong>${escapeHtml(receipt.patientName || '--')}</strong></div>
-          <div class="receiptRow"><span>Patient ID</span><strong>${escapeHtml(receipt.patientId || '--')}</strong></div>
-          <div class="receiptRow"><span>Bill No</span><strong>${escapeHtml(receipt.billNo || '--')}</strong></div>
-          <div class="receiptRow"><span>Category</span><strong>${escapeHtml(receipt.category || '--')}</strong></div>
-          <div class="receiptRow"><span>Description</span><strong>${escapeHtml(receipt.description || '--')}</strong></div>
-          <div class="receiptLine"></div>
-          <div class="receiptRow"><span>Total</span><strong>${money(receipt.total || 0)}</strong></div>
-          <div class="receiptRow"><span>Paid</span><strong>${money(receipt.paid || 0)}</strong></div>
-          <div class="receiptRow"><span>Balance</span><strong>${money(receipt.balance || 0)}</strong></div>
-          <div class="receiptRow"><span>Status</span><strong>${escapeHtml(receipt.status || '--')}</strong></div>
-          <div class="receiptRow"><span>Payment</span><strong>${escapeHtml(receipt.paymentMethod || '--')}</strong></div>
-          <div class="receiptLine"></div>
-          <div class="receiptCenter receiptSmall">Web portal preview for direct billing workflow. Android thermal receipt can print the same bill from the device.</div>
-          <div class="inlineActions" style="justify-content:center;margin-top:14px"><button class="pillBtn" type="button" id="receiptPrintBtn">Print</button><button class="pillBtn warn" type="button" id="receiptEditBtn">Edit Bill</button></div>
+          <div class="receiptClinicBlock">
+            <div class="receiptExecutiveGrid">
+              <div class="receiptIdentityCard">
+                <h4>Billing Identity</h4>
+                <div class="receiptRow"><span>Patient</span><strong>${escapeHtml(receipt.patientName || '--')}</strong></div>
+                <div class="receiptRow"><span>Patient ID</span><strong>${escapeHtml(receipt.patientId || '--')}</strong></div>
+                <div class="receiptRow"><span>Bill No</span><strong>${escapeHtml(receipt.billNo || '--')}</strong></div>
+                <div class="receiptRow"><span>Category</span><strong>${escapeHtml(receipt.category || '--')}</strong></div>
+                <div class="receiptRow"><span>Description</span><strong>${escapeHtml(receipt.description || '--')}</strong></div>
+              </div>
+              <div class="receiptMetaCard">
+                <h4>Receipt Meta</h4>
+                <div class="receiptSpotlight"><span>Generated</span><strong>${escapeHtml(receipt.generatedLabel || fmtDateTime(new Date().toISOString()))}</strong></div>
+                <div class="receiptSpotlight" style="margin-top:12px"><span>Payment Method</span><strong>${escapeHtml(receipt.paymentMethod || '--')}</strong></div>
+                <div class="receiptSpotlight" style="margin-top:12px"><span>Workflow Note</span><strong>World-class portal preview aligned with Android receipt flow.</strong></div>
+              </div>
+            </div>
+            <div class="receiptTotalsGrid">
+              <div class="receiptTotalCard"><span>Total</span><strong>${money(receipt.total || 0)}</strong></div>
+              <div class="receiptTotalCard"><span>Paid</span><strong>${money(receipt.paid || 0)}</strong></div>
+              <div class="receiptTotalCard"><span>Balance</span><strong>${money(receipt.balance || 0)}</strong></div>
+            </div>
+          </div>
+          <div class="receiptFooterNote receiptCenter receiptSmall">This premium preview is optimized for executive billing review, while Android can still print the thermal version instantly.</div>
+          <div class="receiptActionBar"><button class="pillBtn receiptActionBtn" type="button" id="receiptPrintBtn">Print</button><button class="pillBtn warn receiptActionBtn" type="button" id="receiptEditBtn">Edit Bill</button></div>
         </div>
       </div>
     `);
@@ -1139,10 +1232,11 @@ function renderCommandCenter() {
   if (rb) rb.innerHTML = (cc.recentBills || []).length ? (cc.recentBills || []).map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.patientName || 'Patient')}</div><div>${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span></div><div class="inlineActions"><button class="pillBtn" data-receipt="${escapeHtml(b.billId || '')}">Receipt</button></div></div>`).join('') : `<div class="emptyState">Recent bills will appear here.</div>`;
   if (bc) {
     const f = state.data.finance?.finance || {};
+    const collectionRate = num(f.totalBill) ? Math.round((num(f.totalPaid) / Math.max(num(f.totalBill), 1)) * 100) : 0;
     const cards = [
-      { title:'Instant Revenue', value: money(f.totalPaid), sub:'Collected revenue now', cta:'New Bill', action:'bill' },
-      { title:'Pending Collection', value: money(f.outstanding), sub:'Outstanding exposure', cta:'Find Patient', action:'search' },
-      { title:'Bills Created', value: num(f.billCount), sub:'Billing volume in system', cta:'Direct Billing', action:'bill' }
+      { title:'Instant Revenue', value: money(f.totalPaid), sub:`${collectionRate}% collection strength`, cta:'New Bill', action:'bill' },
+      { title:'Pending Collection', value: money(f.outstanding), sub:'Outstanding exposure requiring action', cta:'Find Patient', action:'search' },
+      { title:'Bills Created', value: num(f.billCount), sub:'Billing volume across the system', cta:'Direct Billing', action:'bill' }
     ];
     bc.innerHTML = cards.map(c => `<button class="billQuickCard" type="button" data-quick-action="${c.action}"><div class="itemTitle">${escapeHtml(c.title)}</div><div style="font-size:24px;font-weight:900">${escapeHtml(String(c.value))}</div><div class="itemMeta"><span>${escapeHtml(c.sub)}</span><span>${escapeHtml(c.cta)}</span></div></button>`).join('');
     $$('[data-quick-action]', bc).forEach(btn => btn.addEventListener('click', () => btn.dataset.quickAction === 'search' ? switchTab('search') : openBillModal()));

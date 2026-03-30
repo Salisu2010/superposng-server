@@ -64,6 +64,15 @@
           <div class="miniPanel"><div class="itemTitle">Status</div><div>Connect portal to start live mode.</div></div>
         </div>
       </section>
+
+      <section class="panel stack8 sidebarFooterPanel">
+        <div class="sectionTitle">Shift Readiness</div>
+        <div class="sidebarFooterGrid">
+          <div class="footerSignal"><span>Portal</span><strong id="sidebarPortalState">Standby</strong></div>
+          <div class="footerSignal"><span>Queue</span><strong id="sidebarQueueState">0 Open</strong></div>
+          <div class="footerSignal"><span>Billing</span><strong id="sidebarBillingState">NGN 0</strong></div>
+        </div>
+      </section>
     </div>
   </aside>
 
@@ -186,6 +195,11 @@
     </section>
 
     <section id="tab-operations" class="tabPane hidden revealUp">
+      <div class="commandRibbon operationsRibbon">
+        <div class="ribbonCard accentBlue"><span>Operations Status</span><strong id="opsRibbonStatus">Live Control</strong><small>Command your front desk, doctor queue, billing flow and live operational activity from a single board.</small></div>
+        <div class="ribbonCard accentOrange"><span>Billing Engine</span><strong id="opsRibbonBilling">Collections Ready</strong><small>Track collection pressure, recent bills and receipt flow without leaving the operations board.</small></div>
+        <div class="ribbonCard accentGreen"><span>Doctor Coverage</span><strong id="opsRibbonDoctors">Balanced Load</strong><small>Watch service load, average waits and queue concentration across doctors in realtime.</small></div>
+      </div>
       <div class="operationsShell">
         <article class="glass card spanWide">
           <div class="cardHead">
@@ -206,8 +220,8 @@
           <div id="recentBills" class="stack10 mt16"></div>
         </article>
 
-        <article class="glass card">
-          <div class="cardHead compact"><div><div class="eyebrow">Doctor Coverage</div><h3>Operational Load</h3></div></div>
+        <article class="glass card doctorCommandCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Doctor Coverage</div><h3>Operational Load</h3></div><span class="badge">Live Widget Matrix</span></div>
           <div id="doctors" class="stack10"></div>
         </article>
 
@@ -219,6 +233,11 @@
     </section>
 
     <section id="tab-analytics" class="tabPane hidden revealUp">
+      <div class="commandRibbon analyticsRibbon">
+        <div class="ribbonCard accentViolet"><span>Analytics Layer</span><strong id="analyticsRibbonTitle">Executive Intelligence</strong><small>Premium board-level visibility into revenue, patient throughput, queue pressure and clinical workflow performance.</small></div>
+        <div class="ribbonCard accentCyan"><span>Financial Signal</span><strong id="analyticsRibbonFinance">Revenue Engine</strong><small>Monitor collections, outstanding exposure and pharmacy contribution with fast-reading visual summaries.</small></div>
+        <div class="ribbonCard accentPink"><span>Workflow Signal</span><strong id="analyticsRibbonWorkflow">Workflow Under Watch</strong><small>Labs, appointments, prescriptions and admissions are summarized into an executive intelligence feed.</small></div>
+      </div>
       <div class="analyticsSuite">
         <article class="glass card">
           <div class="cardHead compact"><div><div class="eyebrow">Financial Engine</div><h3>Revenue vs Outstanding</h3></div></div>
@@ -232,14 +251,19 @@
           <div class="cardHead compact"><div><div class="eyebrow">Realtime Signals</div><h3>Signals and Alerts</h3></div></div>
           <div id="analyticsSignals" class="stack10"></div>
         </article>
-        <article class="glass card spanFull">
-          <div class="cardHead compact"><div><div class="eyebrow">Executive Notes</div><h3>Board Summary</h3></div></div>
+        <article class="glass card spanFull analyticsExecutiveCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Executive Notes</div><h3>Board Summary</h3></div><span class="badge">Board View</span></div>
           <div id="boardSummary" class="summaryGrid"></div>
         </article>
       </div>
     </section>
 
     <section id="tab-patients" class="tabPane hidden revealUp">
+      <div class="commandRibbon patientRibbon" id="patientCommandRibbon">
+        <div class="ribbonCard accentBlue"><span>Registry Pulse</span><strong id="patientRibbonCount">0 Patients</strong><small>Connected records flowing across Android and portal.</small></div>
+        <div class="ribbonCard accentViolet"><span>Search Ready</span><strong id="patientRibbonSearch">Live Search</strong><small>Quickly jump from registry to profile, AI and billing.</small></div>
+        <div class="ribbonCard accentGreen"><span>Sync Confidence</span><strong id="patientRibbonSync">Stable</strong><small>Two-way sync intelligence is active for patient rows.</small></div>
+      </div>
       <div class="grid2 patientsShell">
         <article class="glass card">
           <div class="cardHead cardHeadWrap">
@@ -265,15 +289,24 @@
             <div class="span2 row end"><button type="submit" class="btn btnPrimary">Save Patient</button></div>
           </form>
         </article>
-        <article class="glass card">
-          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div></div>
-          <div id="patientsList" class="stack10"></div>
+        <article class="glass card registryCard">
+          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div><div class="row gap8"><span class="badge">Live Feed</span><span class="badge">Profile Drawer</span></div></div>
+          <div class="registryToolbar">
+            <div class="registryHint">Select any patient card to open full profile, receipt, AI insight and quick actions.</div>
+            <button class="btn btnGhost small" type="button" id="patientsOpenSearchBtn">Open Search Desk</button>
+          </div>
+          <div id="patientsList" class="stack10 patientDeck"></div>
           <div id="recentPatients" class="stack10 mt16"></div>
         </article>
       </div>
     </section>
 
     <section id="tab-workflow" class="tabPane hidden revealUp">
+      <div class="commandRibbon workflowRibbon">
+        <div class="ribbonCard accentCyan"><span>Billing Desk</span><strong>Live Receipt Flow</strong><small>Create, preview and update bills without leaving the workspace.</small></div>
+        <div class="ribbonCard accentOrange"><span>Clinical Desk</span><strong>Visit + Queue</strong><small>Drive doctor queue and patient movement from one unified control area.</small></div>
+        <div class="ribbonCard accentPink"><span>Care Desk</span><strong>Lab + Rx + Nurse</strong><small>Track care actions with a richer command layout and faster sync.</small></div>
+      </div>
       <div class="workspaceHero">
         <article class="glass card spanWide">
           <div class="cardHead compact"><div><div class="eyebrow">Unified Command Workspace</div><h3>Cross Desk Pulse</h3></div></div>
@@ -367,6 +400,10 @@
     </section>
 
     <section id="tab-search" class="tabPane hidden revealUp">
+      <div class="commandRibbon searchRibbon">
+        <div class="ribbonCard accentBlue"><span>Search Intelligence</span><strong>Find by ID, MRN, name, phone, email</strong><small>Optimized for quick profile launch and Android/web sync verification.</small></div>
+        <div class="ribbonCard accentGreen"><span>AI Co-Pilot</span><strong>Watch risk and patient pulse instantly</strong><small>Use AI summary to inspect outstanding, queue risk and next action.</small></div>
+      </div>
       <div class="grid2">
         <article class="glass card">
           <div class="cardHead"><div><div class="eyebrow">Patient Search</div><h3>Find Patient + AI Summary</h3></div></div>
@@ -376,8 +413,15 @@
           </div>
           <div id="searchResults" class="stack10 mt16"></div>
         </article>
-        <article class="glass card">
+        <article class="glass card aiSpotlightCard">
           <div class="cardHead"><div><div class="eyebrow">AI Summary</div><h3>Patient Intelligence</h3></div></div>
+          <div class="aiSpotlight" id="aiSpotlightBox">
+            <div class="spotlightGlow"></div>
+            <div>
+              <div class="spotlightLabel">Clinical Spotlight</div>
+              <h4>Search a patient to unlock AI summary, risk watch and fast actions.</h4>
+            </div>
+          </div>
           <div id="patientAiSummary" class="stack10"></div>
         </article>
       </div>
