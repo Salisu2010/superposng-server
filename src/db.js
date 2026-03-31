@@ -40,6 +40,7 @@ function initDB() {
       tgPairCodes: [],
 
       // StayMasterNG FCM device tokens (background push notifications)
+      stmnLicenses: [],
       stmnFcmTokens: [],
       // StayMasterNG internal messaging
       stmnChatMessages: [],
@@ -130,6 +131,7 @@ function readDB() {
     if (!Array.isArray(db.trials)) db.trials = []
     if (!Array.isArray(db.trialAuditLogs)) db.trialAuditLogs = []
     if (!Array.isArray(db.trialBlocks)) db.trialBlocks = []
+    if (!Array.isArray(db.stmnLicenses)) db.stmnLicenses = []
     if (!Array.isArray(db.stmnFcmTokens)) db.stmnFcmTokens = []
     if (!Array.isArray(db.stmnChatMessages)) db.stmnChatMessages = []
     if (!Array.isArray(db.stmnChatSeen)) db.stmnChatSeen = []
@@ -185,6 +187,8 @@ function readDB() {
       tgLocations: [],
       tgHeartbeats: [],
       tgPairCodes: [],
+
+      stmnLicenses: [],
 
       // StayMasterNG FCM device tokens (background push notifications)
       stmnFcmTokens: [],

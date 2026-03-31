@@ -128,6 +128,37 @@ function trialMatchesIdentity(t, ids) {
   return scoreTrialMatch(t, ids) > 0;
 }
 
+
+function hasActiveLikeStatus(v) {
+  const s = normalizeId(v).toUpperCase();
+  return s === "ACTIVE" || s === "OK" || s === "VALID" || s === "APPROVED";
+}
+
+function findActivatedLicense(db, ids) {
+  const androidId = normalizeId(ids.androidId || ids.deviceId);
+  const fpHash = normalizeId(ids.fpHash);
+  const collections = [];
+  collections.push(...(Array.isArray(db.licenses) ? db.licenses.map((x) => ({ kind: "SPNG", row: x })) : []));
+  collections.push(...(Array.isArray(db.rmpLicenses) ? db.rmpLicenses.map((x) => ({ kind: "RMP", row: x })) : []));
+  collections.push(...(Array.isArray(db.stmnLicenses) ? db.stmnLicenses.map((x) => ({ kind: "STMN", row: x })) : []));
+
+  const allowedKind = ids.app === "STMN" ? new Set(["STMN"]) : new Set([ids.app]);
+
+  for (const item of collections) {
+    if (!allowedKind.has(item.kind)) continue;
+    const x = item.row || {};
+    const status = normalizeId(x.status).toUpperCase();
+    const boundDeviceId = normalizeId(x.boundDeviceId || x.androidId || x.deviceId);
+    const recFpHash = normalizeId(x.fpHash);
+    const deviceMatch = androidId && boundDeviceId && androidId === boundDeviceId;
+    const fpMatch = fpHash && recFpHash && fpHash === recFpHash;
+    if ((deviceMatch || fpMatch) && hasActiveLikeStatus(status)) {
+      return { kind: item.kind, row: x };
+    }
+  }
+  return null;
+}
+
 function blockMatchesIdentity(b, ids) {
   if (!b) return false;
   if (b.app && ids.app && b.app !== ids.app) return false;
@@ -301,6 +332,30 @@ function getAbuseState(db, ids, nowYmd, currentTrial) {
   }
 
   const relatedTrials = db.trials.filter((t) => t && t.app === ids.app && trialMatchesIdentity(t, ids));
+
+  const activated = findActivatedLicense(db, ids);
+  if (activated) {
+    if (currentTrial) {
+      markRevoked(currentTrial, "already-activated-no-trial", nowYmd);
+      markBlocked(currentTrial, "already-activated-no-trial", nowYmd);
+    }
+    ensureBlock(db, ids, "already-activated-no-trial", {
+      nowYmd,
+      licenseKind: activated.kind,
+      licenseId: normalizeId(activated.row?.licenseId),
+      boundDeviceId: normalizeId(activated.row?.boundDeviceId)
+    });
+    logTrialEvent(db, "trial_block_after_activation", ids, {
+      reason: "already-activated-no-trial",
+      licenseKind: activated.kind,
+      licenseId: normalizeId(activated.row?.licenseId)
+    });
+    return {
+      blocked: true,
+      reason: "already-activated-no-trial",
+      payload: blockPayload(ids.app, "already-activated-no-trial", nowYmd)
+    };
+  }
   const hasEnded = relatedTrials.some((t) => {
     const s = computeStatus(nowYmd, t);
     return s === "EXPIRED" || s === "REVOKED" || s === "BLOCKED";
@@ -329,11 +384,12 @@ function getAbuseState(db, ids, nowYmd, currentTrial) {
       const prevClientYmd = Number(currentTrial.lastClientDateYmd || currentTrial.firstClientDateYmd || 0);
       const diffAbs = Math.abs(Number(ids.clientDateYmd) - Number(nowYmd));
       const backward = prevClientYmd > 0 && Number(ids.clientDateYmd) < Number(prevClientYmd);
-      if (backward || diffAbs > 3) {
+      const tooFarFromServer = diffAbs > 1;
+      if (backward || tooFarFromServer) {
         markRevoked(currentTrial, "device-date-tamper", nowYmd);
         markBlocked(currentTrial, "device-date-tamper", nowYmd);
         ensureBlock(db, ids, "device-date-tamper", { nowYmd, clientDateYmd: ids.clientDateYmd, prevClientYmd });
-        logTrialEvent(db, "trial_date_tamper_block", ids, { reason: "device-date-tamper", prevClientYmd });
+        logTrialEvent(db, "trial_date_tamper_block", ids, { reason: "device-date-tamper", prevClientYmd, serverDateYmd: nowYmd, clientDateYmd: ids.clientDateYmd });
         return { blocked: true, reason: "device-date-tamper", payload: blockPayload(ids.app, "device-date-tamper", nowYmd) };
       }
     }
