@@ -27,6 +27,8 @@ function initDB() {
 
       // Trial (server-backed) for SPNG + RMP
       trials: [],
+      trialAuditLogs: [],
+      trialBlocks: [],
 
       // TrackGuard Registry (Lite + Enterprise)
       tgOrgs: [],
@@ -126,6 +128,8 @@ function readDB() {
     if (!Array.isArray(db.owners)) db.owners = []
     if (!Array.isArray(db.shopAliases)) db.shopAliases = []
     if (!Array.isArray(db.trials)) db.trials = []
+    if (!Array.isArray(db.trialAuditLogs)) db.trialAuditLogs = []
+    if (!Array.isArray(db.trialBlocks)) db.trialBlocks = []
     if (!Array.isArray(db.stmnFcmTokens)) db.stmnFcmTokens = []
     if (!Array.isArray(db.stmnChatMessages)) db.stmnChatMessages = []
     if (!Array.isArray(db.stmnChatSeen)) db.stmnChatSeen = []
@@ -170,6 +174,8 @@ function readDB() {
 
       // Trial (server-backed) for SPNG + RMP
       trials: [],
+      trialAuditLogs: [],
+      trialBlocks: [],
 
       // TrackGuard Registry (Lite + Enterprise)
       tgOrgs: [],
