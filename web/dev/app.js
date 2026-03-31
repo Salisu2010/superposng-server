@@ -26,6 +26,7 @@ function setKey(v) {
 let _lastGenerated = null; // { licenseId, token }
 let _lastRmpGenerated = null; // { licenseId, token }
 let _lastStmnGenerated = null; // { licenseId, token }
+let _lastCpngGenerated = null; // { licenseId, token }
 let _tblOffset = 0;
 const _tblLimit = 50;
 
@@ -296,6 +297,38 @@ async function doRegisterExistingToken() {
   return out;
 }
 
+
+async function doGenerateCpngToken() {
+  const plan = ($("cpngPlan")?.value || "MONTHLY").trim();
+  const deviceId = ($("cpngDeviceId")?.value || "").trim();
+  const use2 = $("cpngUseSpng2") ? !!$("cpngUseSpng2").checked : false;
+  const fpHash = use2 ? ($("cpngFpHash")?.value || "").trim() : "";
+  if (!deviceId) { toast("ANDROID_ID/Device ID is required"); return; }
+  if (use2 && !fpHash) { toast("Paste Device Code"); return; }
+  const payload = { app: "CPNG", plan, deviceId, fpHash: use2 ? fpHash : "" };
+  const out = await api("/api/dev/generate-token", { method: "POST", body: JSON.stringify(payload) });
+  _lastCpngGenerated = out?.license ? { licenseId: out.license.licenseId, token: out.license.token } : null;
+  if ($("cpngToken")) $("cpngToken").value = _lastCpngGenerated?.token || "";
+  toast("CPNG token generated");
+  return out;
+}
+
+async function doAssignCpngOnline() {
+  const deviceId = ($("cpngDeviceId")?.value || "").trim();
+  const token = ($("cpngToken")?.value || _lastCpngGenerated?.token || "").trim();
+  if (!deviceId) { toast("ANDROID_ID/Device ID is required"); return; }
+  if (!token) { toast("Generate or paste token first"); return; }
+  const out = await api("/api/dev/assign-token", { method: "POST", body: JSON.stringify({ app: "CPNG", deviceId, token }) });
+  toast("ClinicProNG device activated online ✅");
+  return out;
+}
+
+function updateCpngUi() {
+  const use = $("cpngUseSpng2") ? !!$("cpngUseSpng2").checked : false;
+  if ($("cpngFpWrap")) $("cpngFpWrap").style.display = use ? "block" : "none";
+  if (!use && $("cpngFpHash")) $("cpngFpHash").value = "";
+}
+
 // ------------------------------
 // RepairMasterPro token generator
 // ------------------------------
@@ -527,6 +560,236 @@ function renderTokenTable(out) {
   });
 }
 
+
+let _cpngTblOffset = 0;
+const _cpngTblLimit = 50;
+
+function renderKpiCards(elId, cards) {
+  const box = $(elId);
+  if (!box) return;
+  const items = Array.isArray(cards) ? cards : [];
+  box.innerHTML = items.map((c) => `
+    <div class="kpiCard">
+      <div class="kpiLabel">${c.label || ""}</div>
+      <div class="kpiValue">${c.value ?? 0}</div>
+      <div class="kpiSub">${c.sub || ""}</div>
+    </div>
+  `).join("");
+}
+
+function cpngTableParams() {
+  return {
+    q: ($("cpngTblQ")?.value || "").trim(),
+    status: ($("cpngTblStatus")?.value || "").trim(),
+    plan: ($("cpngTblPlan")?.value || "").trim(),
+  };
+}
+
+async function refreshCpngStats() {
+  const out = await api(`/api/dev/licenses-summary?app=CPNG`, { method: "GET" });
+  const s = out?.stats || {};
+  renderKpiCards("cpngStats", [
+    { label: "Total Licenses", value: s.total || 0, sub: `Pending ${s.pending || 0}` },
+    { label: "Active", value: s.active || 0, sub: `Expiring soon ${s.expiringSoon || 0}` },
+    { label: "Issued", value: s.issued || 0, sub: `Revoked ${s.revoked || 0}` },
+    { label: "Plans", value: `${s.monthly || 0}/${s.yearly || 0}`, sub: `Monthly / Yearly` },
+  ]);
+  return out;
+}
+
+async function refreshCpngTokenTable(resetOffset) {
+  if (resetOffset) _cpngTblOffset = 0;
+  const { q, status, plan } = cpngTableParams();
+  const qs = new URLSearchParams();
+  qs.set("app", "CPNG");
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  if (plan) qs.set("plan", plan);
+  qs.set("limit", String(_cpngTblLimit));
+  qs.set("offset", String(_cpngTblOffset));
+  const out = await api(`/api/dev/licenses?${qs.toString()}`, { method: "GET" });
+  renderCpngTokenTable(out);
+  return out;
+}
+
+function renderCpngTokenTable(out) {
+  const box = $("cpngTokenTable");
+  const meta = $("cpngTblMeta");
+  if (!box) return;
+
+  const items = Array.isArray(out?.items) ? out.items : [];
+  const total = Number(out?.total || 0);
+  const start = total === 0 ? 0 : (_cpngTblOffset + 1);
+  const end = Math.min(_cpngTblOffset + _cpngTblLimit, total);
+  if (meta) meta.textContent = `Showing ${start}-${end} of ${total}`;
+
+  const rows = items.map((m) => {
+    const id = m.licenseId || "";
+    const token = m.token || "";
+    const status = m.status || "";
+    const plan = m.plan || "";
+    const exp = fmtTs(m.expiresAt);
+    const dev = m.boundDeviceId || "-";
+    const notes = m.notes || "-";
+    return `
+      <tr>
+        <td><code>${id}</code></td>
+        <td><code>${token}</code></td>
+        <td>${status}</td>
+        <td>${plan}</td>
+        <td>${exp}</td>
+        <td><code>${dev}</code></td>
+        <td>${notes}</td>
+        <td style="white-space:nowrap">
+          ${actionBtn("Copy", "", { act: "cpng_copy", token })}
+          ${actionBtn("Target", "", { act: "cpng_target", id })}
+          ${actionBtn("+1M", "", { act: "cpng_add", id, months: 1 })}
+          ${actionBtn("+12M", "", { act: "cpng_add", id, months: 12 })}
+          ${actionBtn("Reset", "warn", { act: "cpng_reset", id })}
+          ${actionBtn("Revoke", "danger", { act: "cpng_revoke", id })}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>License ID</th>
+          <th>Token</th>
+          <th>Status</th>
+          <th>Plan</th>
+          <th>Expiry</th>
+          <th>Device</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td colspan="8" style="color:var(--muted)">No CPNG licenses found</td></tr>`}
+      </tbody>
+    </table>
+  `;
+
+  box.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id") || "";
+      const token = btn.getAttribute("data-token") || "";
+      const months = Number(btn.getAttribute("data-months") || 0);
+      try {
+        if (act === "cpng_copy") {
+          copyText(token);
+          toast("Copied CPNG token");
+          return;
+        }
+        if (act === "cpng_target") {
+          if ($("target")) $("target").value = id;
+          copyText(id);
+          toast("Target set");
+          return;
+        }
+        if (act === "cpng_add") {
+          await api("/api/dev/extend", { method: "POST", body: JSON.stringify({ licenseId: id, months, app: "CPNG" }) });
+          toast("CPNG license extended");
+        } else if (act === "cpng_reset") {
+          await api("/api/dev/revoke", { method: "POST", body: JSON.stringify({ licenseId: id, resetOnly: true, reason: "Portal reset" }) });
+          toast("CPNG binding reset");
+        } else if (act === "cpng_revoke") {
+          await api("/api/dev/revoke", { method: "POST", body: JSON.stringify({ licenseId: id, reason: "Portal revoke" }) });
+          toast("CPNG license revoked");
+        }
+        await Promise.all([refreshCpngStats(), refreshCpngTokenTable(false)]);
+      } catch (e) {
+        toast(e.message || "Action failed");
+      }
+    });
+  });
+}
+
+async function refreshCpngTrialDashboard() {
+  const q = ($("cpngTrialQ")?.value || "").trim();
+  const status = ($("cpngTrialStatus")?.value || "").trim();
+
+  const sum = await api(`/api/trial/admin/summary?app=CPNG`, { method: "GET" });
+  const s = sum?.stats || {};
+  renderKpiCards("cpngTrialStats", [
+    { label: "Trials Used", value: s.total || 0, sub: `Today ${s.todayConsumed || 0}` },
+    { label: "Active", value: s.active || 0, sub: `Expired ${s.expired || 0}` },
+    { label: "Blocked", value: s.blocked || 0, sub: `Revoked ${s.revoked || 0}` },
+    { label: "Security", value: s.blocks || 0, sub: `Audit logs ${s.audits || 0}` },
+  ]);
+
+  const qs = new URLSearchParams({ app: "CPNG", limit: "50", offset: "0" });
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  const consumed = await api(`/api/trial/admin/consumed?${qs.toString()}`, { method: "GET" });
+  const items = Array.isArray(consumed?.items) ? consumed.items : [];
+  if ($("cpngTrialMeta")) $("cpngTrialMeta").textContent = `Showing ${items.length} of ${consumed?.total || 0} trials`;
+  $("cpngTrialTable").innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Device ID</th>
+          <th>Android ID</th>
+          <th>Install ID</th>
+          <th>Start</th>
+          <th>Expiry</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((t) => `
+          <tr>
+            <td>${t.status || ""}</td>
+            <td><code>${t.deviceId || "-"}</code></td>
+            <td><code>${t.androidId || "-"}</code></td>
+            <td><code>${t.installId || "-"}</code></td>
+            <td>${t.startYmd || "-"}</td>
+            <td>${t.expiryYmd || "-"}</td>
+            <td>${t.revokeReason || t.blockReason || "-"}</td>
+          </tr>
+        `).join("") || `<tr><td colspan="7" style="color:var(--muted)">No trial records</td></tr>`}
+      </tbody>
+    </table>
+  `;
+
+  const audit = await api(`/api/trial/admin/audit?app=CPNG&limit=30&offset=0`, { method: "GET" });
+  const audits = Array.isArray(audit?.items) ? audit.items : [];
+  $("cpngAuditTable").innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Type</th>
+          <th>Device ID</th>
+          <th>Android ID</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${audits.map((a) => `
+          <tr>
+            <td>${fmtTs(a.createdAt)}</td>
+            <td>${a.type || "-"}</td>
+            <td><code>${a.deviceId || "-"}</code></td>
+            <td><code>${a.androidId || "-"}</code></td>
+            <td>${JSON.stringify(a.meta || {}).slice(0, 180) || "-"}</td>
+          </tr>
+        `).join("") || `<tr><td colspan="5" style="color:var(--muted)">No audit logs</td></tr>`}
+      </tbody>
+    </table>
+  `;
+}
+
+async function doCpngTrialCleanup() {
+  await api("/api/trial/admin/cleanup", { method: "POST", body: JSON.stringify({ app: "CPNG" }) });
+  toast("CPNG anti-abuse cleanup complete");
+  await refreshCpngTrialDashboard();
+}
+
 // ------------------------------
 // RepairMasterPro license table (listing)
 // ------------------------------
@@ -635,6 +898,11 @@ $("btnSaveKey").addEventListener("click", () => {
   const v = $("devKey").value.trim();
   setKey(v);
   toast("DEV KEY saved");
+  Promise.all([
+    refreshCpngStats().catch(() => {}),
+    refreshCpngTokenTable(true).catch(() => {}),
+    refreshCpngTrialDashboard().catch(() => {}),
+  ]);
 });
 
 // Generator
@@ -670,6 +938,51 @@ if ($("btnCopyId")) {
     copyText(_lastGenerated?.licenseId || "");
     toast("Copied license ID");
   });
+}
+
+
+if ($("cpngUseSpng2")) {
+  $("cpngUseSpng2").addEventListener("change", updateCpngUi);
+  updateCpngUi();
+}
+if ($("btnCpngGenerate")) {
+  $("btnCpngGenerate").addEventListener("click", () => doGenerateCpngToken().catch((e) => toast(e.message)));
+}
+if ($("btnCpngAssignOnline")) {
+  $("btnCpngAssignOnline").addEventListener("click", () => doAssignCpngOnline().catch((e) => toast(e.message)));
+}
+if ($("btnCpngCopy")) {
+  $("btnCpngCopy").addEventListener("click", () => { copyText($("cpngToken")?.value || ""); toast("Copied CPNG token"); });
+}
+if ($("btnCpngTblRefresh")) {
+  $("btnCpngTblRefresh").addEventListener("click", () => Promise.all([refreshCpngStats(), refreshCpngTokenTable(true)]).catch((e) => toast(e.message)));
+}
+if ($("btnCpngTblPrev")) {
+  $("btnCpngTblPrev").addEventListener("click", () => { if (_cpngTblOffset >= _cpngTblLimit) { _cpngTblOffset -= _cpngTblLimit; refreshCpngTokenTable(false).catch((e) => toast(e.message)); } });
+}
+if ($("btnCpngTblNext")) {
+  $("btnCpngTblNext").addEventListener("click", () => { _cpngTblOffset += _cpngTblLimit; refreshCpngTokenTable(false).catch((e) => toast(e.message)); });
+}
+if ($("cpngTblQ")) {
+  $("cpngTblQ").addEventListener("input", () => refreshCpngTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("cpngTblStatus")) {
+  $("cpngTblStatus").addEventListener("change", () => refreshCpngTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("cpngTblPlan")) {
+  $("cpngTblPlan").addEventListener("change", () => refreshCpngTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialRefresh")) {
+  $("btnCpngTrialRefresh").addEventListener("click", () => refreshCpngTrialDashboard().catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialCleanup")) {
+  $("btnCpngTrialCleanup").addEventListener("click", () => doCpngTrialCleanup().catch((e) => toast(e.message)));
+}
+if ($("cpngTrialQ")) {
+  $("cpngTrialQ").addEventListener("input", () => refreshCpngTrialDashboard().catch((e) => toast(e.message)));
+}
+if ($("cpngTrialStatus")) {
+  $("cpngTrialStatus").addEventListener("change", () => refreshCpngTrialDashboard().catch((e) => toast(e.message)));
 }
 
 // RMP Generator
@@ -1579,5 +1892,12 @@ window.addEventListener("load", () => {
   const smDel = $("btnSmDelete"); if (smDel) smDel.onclick = smDeleteSelected;
 
   // Load shops once key is present (or after user saves)
-  if (getKey()) smRefresh();
+  if (getKey()) {
+    smRefresh();
+    Promise.all([
+      refreshCpngStats().catch(() => {}),
+      refreshCpngTokenTable(true).catch(() => {}),
+      refreshCpngTrialDashboard().catch(() => {}),
+    ]);
+  }
 });

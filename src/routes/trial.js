@@ -29,6 +29,7 @@ function normalizeApp(app) {
   if (a === "SPNG" || a === "SUPERPOSNG") return "SPNG";
   if (a === "RMP" || a === "REPAIRMASTERPRO") return "RMP";
   if (a === "STMN" || a === "STAYMASTER" || a === "STAYMASTERNG" || a === "STMNG") return "STMN";
+  if (a === "CPNG" || a === "CLINICPRONG" || a === "CLINICPRO" || a === "CLINIC_PRO_NG") return "CPNG";
   return "";
 }
 
@@ -138,7 +139,7 @@ function findActivatedLicense(db, ids) {
   const androidId = normalizeId(ids.androidId || ids.deviceId);
   const fpHash = normalizeId(ids.fpHash);
   const collections = [];
-  collections.push(...(Array.isArray(db.licenses) ? db.licenses.map((x) => ({ kind: "SPNG", row: x })) : []));
+  collections.push(...(Array.isArray(db.licenses) ? db.licenses.flatMap((x) => ([{ kind: "SPNG", row: x }, { kind: "CPNG", row: x }])) : []));
   collections.push(...(Array.isArray(db.rmpLicenses) ? db.rmpLicenses.map((x) => ({ kind: "RMP", row: x })) : []));
   collections.push(...(Array.isArray(db.stmnLicenses) ? db.stmnLicenses.map((x) => ({ kind: "STMN", row: x })) : []));
 
@@ -413,7 +414,7 @@ router.get("/claim", (req, res) => {
   const app = ids.app;
 
   if (!app) {
-    return res.status(400).json({ ok: false, message: "Missing/invalid app. Use app=SPNG, app=RMP or app=STMN" });
+    return res.status(400).json({ ok: false, message: "Missing/invalid app. Use app=SPNG, app=RMP, app=STMN or app=CPNG" });
   }
   if (!hasPrimaryIdentity(ids)) {
     return res.status(400).json({ ok: false, message: "Missing device identity (fpHash/androidId/deviceId)" });
@@ -527,6 +528,41 @@ router.get("/status", (req, res) => {
   return res.json(payload);
 });
 
+
+router.get("/admin/summary", requireDevKey, (req, res) => {
+  const db = readDB();
+  ensureTrialCollections(db);
+  const app = normalizeApp(req.query.app);
+  const nowYmd = ymdFromDate(new Date());
+  let items = db.trials.map((t) => ({ ...t, status: computeStatus(nowYmd, t) }));
+  if (app) items = items.filter((t) => t.app === app);
+
+  const stats = {
+    total: items.length,
+    active: 0,
+    expired: 0,
+    revoked: 0,
+    blocked: 0,
+    todayConsumed: 0,
+    blocks: 0,
+    audits: 0,
+  };
+
+  for (const t of items) {
+    const st = String(t.status || '').toUpperCase();
+    if (st === 'ACTIVE') stats.active += 1;
+    else if (st === 'EXPIRED') stats.expired += 1;
+    else if (st === 'REVOKED') stats.revoked += 1;
+    else if (st === 'BLOCKED') stats.blocked += 1;
+    if (Number(t.createdAt || 0) >= (Date.now() - 24 * 60 * 60 * 1000)) stats.todayConsumed += 1;
+  }
+
+  stats.blocks = [...db.trialBlocks].filter((x) => x && x.active !== false && (!app || x.app === app)).length;
+  stats.audits = [...db.trialAuditLogs].filter((x) => !app || x.app === app).length;
+
+  return res.json({ ok: true, app: app || '', stats, serverTime: nowTs() });
+});
+
 router.get("/admin/consumed", requireDevKey, (req, res) => {
   const db = readDB();
   ensureTrialCollections(db);
@@ -562,6 +598,20 @@ router.get("/admin/audit", requireDevKey, (req, res) => {
   let items = [...db.trialAuditLogs];
   if (app) items = items.filter((x) => x.app === app);
   if (type) items = items.filter((x) => x.type === type);
+  const total = items.length;
+  return res.json({ ok: true, total, offset, limit, items: items.slice(offset, offset + limit), serverTime: nowTs() });
+});
+
+router.get("/admin/blocks", requireDevKey, (req, res) => {
+  const db = readDB();
+  ensureTrialCollections(db);
+  const app = normalizeApp(req.query.app);
+  const q = normalizeId(req.query.q).toLowerCase();
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit || 100)));
+  const offset = Math.max(0, Number(req.query.offset || 0));
+  let items = [...db.trialBlocks].filter((x) => x && x.active !== false);
+  if (app) items = items.filter((x) => x.app === app);
+  if (q) items = items.filter((x) => [x.reason, x.fpHash, x.androidId, x.deviceId, x.installId].map((v) => String(v || "").toLowerCase()).some((v) => v.includes(q)));
   const total = items.length;
   return res.json({ ok: true, total, offset, limit, items: items.slice(offset, offset + limit), serverTime: nowTs() });
 });

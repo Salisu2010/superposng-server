@@ -71,6 +71,127 @@
       <p class="hint">Formats: <code>SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (legacy) or <code>SPNG2|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (Anti-Clone with Device Code).</p>
     </section>
 
+
+    <section class="card">
+      <h2>ClinicProNG Token Generator (CPNG)</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="cpngPlan">
+            <option value="MONTHLY" selected>MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID / Device ID (required)</label>
+          <input id="cpngDeviceId" placeholder="paste ANDROID_ID from ClinicProNG" />
+        </div>
+        <div>
+          <label>Anti-Clone (Recommended)</label>
+          <div class="switchRow">
+            <label class="switch">
+              <input id="cpngUseSpng2" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+            <div class="switchText">
+              <div class="switchTitle">Use Device Code</div>
+              <div class="hint" style="margin:0">From app: Activation -> copy Device Code</div>
+            </div>
+          </div>
+        </div>
+        <div id="cpngFpWrap">
+          <label>Device Code</label>
+          <input id="cpngFpHash" placeholder="paste device code from ClinicProNG" />
+        </div>
+        <div class="row">
+          <button id="btnCpngGenerate" class="btn primary">Generate CPNG Token</button>
+          <button id="btnCpngAssignOnline" class="btn">Activate Online</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>CPNG Token</label>
+          <input id="cpngToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnCpngCopy" class="btn">Copy CPNG Token</button>
+        </div>
+      </div>
+      <p class="hint">ClinicProNG uses the same hardened SPNG-style token engine, but licenses are stored under <b>CPNG</b> so you can manage them separately.</p>
+    </section>
+
+    <section class="card">
+      <h2>ClinicProNG License Dashboard</h2>
+      <div id="cpngStats" class="kpiGrid"></div>
+      <div class="grid3" style="margin-top:12px;">
+        <div>
+          <label>Search (token/license/device/devHash/notes)</label>
+          <input id="cpngTblQ" placeholder="type to filter CPNG licenses" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="cpngTblStatus">
+            <option value="">All</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="REVOKED">REVOKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="cpngTblPlan">
+            <option value="">All</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+            <option value="TRIAL">TRIAL</option>
+            <option value="LEGACY">LEGACY</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnCpngTblRefresh" class="btn primary">Refresh CPNG</button>
+        <button id="btnCpngTblPrev" class="btn">Prev</button>
+        <button id="btnCpngTblNext" class="btn">Next</button>
+        <span id="cpngTblMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+      <div id="cpngTokenTable" class="results"></div>
+      <p class="hint">Quick actions: Copy token, set as Target, +1 month, +12 months, Reset binding, or Revoke.</p>
+    </section>
+
+    <section class="card">
+      <h2>ClinicProNG Trial Control</h2>
+      <div id="cpngTrialStats" class="kpiGrid"></div>
+      <div class="grid3" style="margin-top:12px;">
+        <div>
+          <label>Search Trials</label>
+          <input id="cpngTrialQ" placeholder="deviceId / androidId / installId / reason" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="cpngTrialStatus">
+            <option value="">All</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="REVOKED">REVOKED</option>
+            <option value="BLOCKED">BLOCKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Actions</label>
+          <div class="row">
+            <button id="btnCpngTrialRefresh" class="btn primary">Refresh Trials</button>
+            <button id="btnCpngTrialCleanup" class="btn danger">Run Cleanup</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <span id="cpngTrialMeta" class="hint"></span>
+      </div>
+      <div id="cpngTrialTable" class="results"></div>
+      <h3 style="margin-top:16px;">Recent Trial Audit</h3>
+      <div id="cpngAuditTable" class="results"></div>
+    </section>
+
     <section class="card">
       <h2>RepairMasterPro Token Generator (RMP)</h2>
       <div class="grid2">

@@ -188,3 +188,11 @@ input::placeholder{color:rgba(142,160,194,0.7)}
 /* Shop Manager table selection */
 .table tr.table-active td{background:rgba(43,108,255,.14)}
 .table tr:hover td{background:rgba(255,255,255,.03)}
+
+.kpiGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpiCard{padding:14px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(7,11,20,.58),rgba(18,27,46,.88));box-shadow:var(--shadow)}
+.kpiLabel{font-size:12px;color:var(--muted);margin-bottom:6px}
+.kpiValue{font-size:24px;font-weight:800;line-height:1.05}
+.kpiSub{font-size:11px;color:var(--muted);margin-top:6px}
+@media(max-width:1000px){.kpiGrid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.kpiGrid{grid-template-columns:1fr}}

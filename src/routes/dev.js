@@ -41,6 +41,13 @@ function ensureSecurity(db) {
   return db.security;
 }
 function normalizeDh(v) { return trim(v).toUpperCase(); }
+function normalizeApp(v) {
+  const a = trim(v).toUpperCase();
+  if (!a) return "SPNG";
+  if (a === "SPNG" || a === "SUPERPOSNG") return "SPNG";
+  if (a === "CPNG" || a === "CLINICPRONG" || a === "CLINICPRO" || a === "CLINIC_PRO_NG") return "CPNG";
+  return "SPNG";
+}
 
 
 function genToken(prefix = "SPNG") {
@@ -147,6 +154,7 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   const db = readDB();
 
   const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
+  const app = normalizeApp(req.body?.app);
   const createdAt = now();
   const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 
@@ -184,6 +192,7 @@ r.post("/generate-token", requireDevKey, (req, res) => {
   const lic = {
     licenseId,
     token,
+    app,
     tokenVersion,
     plan,
     status: "ISSUED",
@@ -216,6 +225,7 @@ r.post("/bulk-generate-tokens", requireDevKey, (req, res) => {
   const db = readDB();
 
   const plan = trim(req.body?.plan || "MONTHLY").toUpperCase();
+  const app = normalizeApp(req.body?.app);
   const useSpng2 = !!req.body?.useSpng2;
 
   const rawLines = trim(req.body?.lines || "");
@@ -287,6 +297,7 @@ r.post("/bulk-generate-tokens", requireDevKey, (req, res) => {
     const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
     const lic = {
       licenseId,
+      app,
       token,
       tokenVersion,
       plan,
@@ -324,6 +335,7 @@ r.post("/register-token", requireDevKey, (req, res) => {
 
   const parsedAny = parseTokenAny(token);
   const createdAt = now();
+  const app = normalizeApp(req.body?.app);
   let plan = trim(req.body?.plan || (parsedAny?.plan || "MONTHLY")).toUpperCase();
   if (!plan) plan = "MONTHLY";
   let expiresAt = parseInt(req.body?.expiresAt || "0", 10);
@@ -335,6 +347,7 @@ r.post("/register-token", requireDevKey, (req, res) => {
   const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
   const lic = {
     licenseId,
+    app,
     token,
     plan,
     status: "ISSUED",
@@ -360,6 +373,7 @@ r.get("/licenses", requireDevKey, (req, res) => {
   const q = trim(req.query?.q).toUpperCase();
   const status = trim(req.query?.status).toUpperCase();
   const plan = trim(req.query?.plan).toUpperCase();
+  const app = normalizeApp(req.query?.app || "SPNG");
   const limit = Math.max(1, Math.min(500, parseInt(req.query?.limit || "100", 10)));
   const offset = Math.max(0, parseInt(req.query?.offset || "0", 10));
 
@@ -369,9 +383,11 @@ r.get("/licenses", requireDevKey, (req, res) => {
     const o = x || {};
     if (!trim(o.plan)) o.plan = "LEGACY";
     if (!trim(o.status)) o.status = "ISSUED";
+    if (!trim(o.app)) o.app = "SPNG";
     return o;
   });
 
+  if (app) items = items.filter((x) => normalizeApp(x.app) === app);
   if (status) items = items.filter((x) => trim(x.status).toUpperCase() === status);
   if (plan) items = items.filter((x) => trim(x.plan).toUpperCase() === plan);
   if (q) {
@@ -380,7 +396,10 @@ r.get("/licenses", requireDevKey, (req, res) => {
       const id = trim(x.licenseId).toUpperCase();
       const did = trim(x.boundDeviceId).toUpperCase();
       const sid = trim(x.boundShopId).toUpperCase();
-      return t.includes(q) || id.includes(q) || did.includes(q) || sid.includes(q);
+      const dh = trim(x.devHash).toUpperCase();
+      const notes = trim(x.notes).toUpperCase();
+      const fp = trim(x.fpHash).toUpperCase();
+      return t.includes(q) || id.includes(q) || did.includes(q) || sid.includes(q) || dh.includes(q) || notes.includes(q) || fp.includes(q);
     });
   }
 
@@ -389,11 +408,65 @@ r.get("/licenses", requireDevKey, (req, res) => {
   res.json({ ok: true, total, offset, limit, items: page, serverTime: now() });
 });
 
+
+// -------------------------
+// DEV: License summary (dashboard cards)
+// -------------------------
+r.get("/licenses-summary", requireDevKey, (req, res) => {
+  const db = readDB();
+  const app = normalizeApp(req.query?.app || "SPNG");
+  const nowTsValue = now();
+  let items = Array.isArray(db.licenses) ? db.licenses.slice() : [];
+  items = items.map((x) => {
+    const o = x || {};
+    if (!trim(o.plan)) o.plan = "LEGACY";
+    if (!trim(o.status)) o.status = "ISSUED";
+    if (!trim(o.app)) o.app = "SPNG";
+    return o;
+  });
+  if (app) items = items.filter((x) => normalizeApp(x.app) === app);
+
+  const stats = {
+    total: items.length,
+    issued: 0,
+    active: 0,
+    revoked: 0,
+    expired: 0,
+    monthly: 0,
+    yearly: 0,
+    trial: 0,
+    pending: 0,
+    expiringSoon: 0,
+  };
+
+  for (const lic of items) {
+    const status = trim(lic.status).toUpperCase();
+    const plan = trim(lic.plan).toUpperCase();
+    const exp = Number(lic.expiresAt || 0);
+    if (status === "REVOKED") stats.revoked += 1;
+    else if (exp > 0 && exp < nowTsValue) stats.expired += 1;
+    else if (status === "ACTIVE") stats.active += 1;
+    else stats.issued += 1;
+
+    if (plan === "MONTHLY") stats.monthly += 1;
+    else if (plan === "YEARLY") stats.yearly += 1;
+    else if (plan === "TRIAL") stats.trial += 1;
+
+    if (exp > nowTsValue && exp <= (nowTsValue + (30 * 24 * 60 * 60 * 1000))) stats.expiringSoon += 1;
+  }
+
+  stats.pending = (Array.isArray(db.pendingActivations) ? db.pendingActivations : [])
+    .filter((p) => normalizeApp(p?.app || "SPNG") === app).length;
+
+  return res.json({ ok: true, app, stats, serverTime: nowTsValue });
+});
+
 // -------------------------
 // DEV: Assign token to device (for claim)
 // -------------------------
 r.post("/assign-token", requireDevKey, (req, res) => {
   const db = readDB();
+  const app = normalizeApp(req.body?.app);
   const deviceId = trim(req.body?.deviceId);
   const token = trim(req.body?.token);
   const shopId = trim(req.body?.shopId);
@@ -418,6 +491,7 @@ r.post("/assign-token", requireDevKey, (req, res) => {
       const licenseId = `LIC-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
       lic = {
         licenseId,
+        app,
         token,
         plan: (parsed.plan || "MONTHLY").toUpperCase(),
         status: "ISSUED",
@@ -448,6 +522,7 @@ r.post("/assign-token", requireDevKey, (req, res) => {
     token: lic.token,
     plan: lic.plan,
     expiresAt: lic.expiresAt,
+    app: app || lic.app || "SPNG",
     shopId: shopId || lic.boundShopId || "",
     assignedAt: now()
   };
@@ -463,19 +538,21 @@ r.post("/assign-token", requireDevKey, (req, res) => {
 // -------------------------
 r.get("/search", requireDevKey, (req, res) => {
   const db = readDB();
+  const app = normalizeApp(req.query?.app || "SPNG");
   const deviceId = trim(req.query?.deviceId);
   const token = trim(req.query?.token);
   const shopId = trim(req.query?.shopId);
 
   const matches = [];
   for (const lic of db.licenses) {
+    if (normalizeApp(lic.app || "SPNG") !== app) continue;
     const hit =
       (token && trim(lic.token) === token) ||
       (deviceId && trim(lic.boundDeviceId) === deviceId) ||
       (shopId && trim(lic.boundShopId) === shopId);
     if (hit) matches.push(lic);
   }
-  const pending = db.pendingActivations.filter((p) =>
+  const pending = db.pendingActivations.filter((p) => normalizeApp(p.app || "SPNG") === app).filter((p) =>
     (deviceId && trim(p.deviceId) === deviceId) ||
     (token && trim(p.token) === token) ||
     (shopId && trim(p.shopId) === shopId)
@@ -573,6 +650,7 @@ r.post("/extend", requireDevKey, (req, res) => {
   const parsed2 = parseAndVerifySpng1(newToken);
   const newLic = {
     licenseId: licenseId2,
+    app: normalizeApp(lic.app || "SPNG"),
     token: newToken,
     plan,
     status: "ACTIVE",
