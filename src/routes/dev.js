@@ -97,6 +97,109 @@ function monthKey(ts) {
   return `${y}-${m}`;
 }
 
+function parseDateOrTs(v, endOfDay = false) {
+  const raw = trim(v);
+  if (!raw) return 0;
+  if (/^\d{13}$/.test(raw)) return Number(raw);
+  if (/^\d{10}$/.test(raw)) return Number(raw) * 1000;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split('-').map((x) => parseInt(x, 10));
+    return Date.UTC(y, m - 1, d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  }
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? t : 0;
+}
+function inTsRange(ts, fromTs = 0, toTs = 0) {
+  const n = Number(ts || 0);
+  if (!n) return !fromTs && !toTs;
+  if (fromTs && n < fromTs) return false;
+  if (toTs && n > toTs) return false;
+  return true;
+}
+function buildTrendBuckets(fromTs = 0, toTs = 0) {
+  const end = toTs || now();
+  const start = fromTs || (() => {
+    const d = new Date(end);
+    d.setUTCDate(1);
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCMonth(d.getUTCMonth() - 5);
+    return d.getTime();
+  })();
+  const diffDays = Math.max(1, Math.ceil((end - start) / 86400000));
+  const out = [];
+  if (diffDays <= 31) {
+    for (let ts = startOfUtcDay(Math.floor((start - startOfUtcDay(0)) / 86400000)); ts <= end; ts += 86400000) {
+      const d = new Date(ts);
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      out.push({ key, label: key, startTs: ts, endTs: ts + 86400000 - 1, SPNG:0, CPNG:0, STMN:0, RMP:0, revoke:0, blocked:0 });
+    }
+    return out.filter((b) => b.endTs >= start && b.startTs <= end);
+  }
+  if (diffDays <= 120) {
+    let ts = start;
+    while (ts <= end) {
+      const endTs = Math.min(end, ts + (7 * 86400000) - 1);
+      const label = `${new Date(ts).toISOString().slice(0,10)} → ${new Date(endTs).toISOString().slice(0,10)}`;
+      out.push({ key: `${ts}`, label, startTs: ts, endTs, SPNG:0, CPNG:0, STMN:0, RMP:0, revoke:0, blocked:0 });
+      ts += 7 * 86400000;
+    }
+    return out;
+  }
+  const d = new Date(start);
+  d.setUTCDate(1);
+  d.setUTCHours(0,0,0,0);
+  while (d.getTime() <= end) {
+    const s = d.getTime();
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`;
+    const next = new Date(s);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const e = next.getTime() - 1;
+    out.push({ key, label: key, startTs: s, endTs: e, SPNG:0, CPNG:0, STMN:0, RMP:0, revoke:0, blocked:0 });
+    d.setUTCMonth(d.getUTCMonth() + 1);
+  }
+  return out.filter((b) => b.endTs >= start && b.startTs <= end);
+}
+
+function ensureRestoreAudit(db) {
+  db.accountRestoreAudit = Array.isArray(db.accountRestoreAudit) ? db.accountRestoreAudit : [];
+}
+function collectRestoreAudit(db) {
+  ensureRestoreAudit(db);
+  return db.accountRestoreAudit.map((x) => ({
+    ...x,
+    app: normalizeApp(x?.app || 'SPNG'),
+    action: trim(x?.action || ''),
+    entityType: trim(x?.entityType || ''),
+    entityId: trim(x?.entityId || ''),
+    entityCode: trim(x?.entityCode || ''),
+    entityName: trim(x?.entityName || ''),
+    ownerPhone: trim(x?.ownerPhone || ''),
+    ownerEmail: trim(x?.ownerEmail || ''),
+    deviceId: trim(x?.deviceId || ''),
+    reuseReason: trim(x?.reuseReason || ''),
+    reused: x?.reused === true,
+    createdAt: Number(x?.createdAt || x?.updatedAt || 0),
+    updatedAt: Number(x?.updatedAt || x?.createdAt || 0),
+  }));
+}
+function filterRestoreAudit(rows, { appFilter = '', q = '', reason = '', fromTs = 0, toTs = 0 } = {}) {
+  const qq = trim(q).toLowerCase();
+  const rr = trim(reason).toLowerCase();
+  return rows.filter((x) => {
+    const appOk = !appFilter || normalizeApp(x?.app || 'SPNG') === appFilter;
+    if (!appOk) return false;
+    const ts = Number(x?.createdAt || x?.updatedAt || 0);
+    if ((fromTs || toTs) && !inTsRange(ts, fromTs, toTs)) return false;
+    if (rr) {
+      const hayReason = [x?.reuseReason, x?.action].map((v) => trim(v).toLowerCase()).join(' ');
+      if (!hayReason.includes(rr)) return false;
+    }
+    if (!qq) return true;
+    const hay = [x?.app, x?.entityType, x?.entityId, x?.entityCode, x?.entityName, x?.ownerPhone, x?.ownerEmail, x?.deviceId, x?.reuseReason, x?.action].map((v) => trim(v).toLowerCase()).join(' ');
+    return hay.includes(qq);
+  });
+}
+
 function collectAllLicenses(db) {
   const out = [];
   const base = Array.isArray(db.licenses) ? db.licenses : [];
@@ -1433,6 +1536,78 @@ r.post("/shops/:shopCodeOrId/cashiers/apply-template", requireDevKey, (req, res)
 
 
 // ------------------------------------------------------------
+// ACCOUNT RESTORE HISTORY / ANALYTICS
+// GET /api/dev/account-restore/history
+// GET /api/dev/account-restore/summary
+// GET /api/dev/account-restore/export
+// ------------------------------------------------------------
+r.get("/account-restore/history", requireDevKey, (req, res) => {
+  const db = readDB();
+  const appParam = trim(req.query?.app).toUpperCase();
+  const appFilter = !appParam || appParam === 'ALL' ? '' : normalizeApp(appParam);
+  const q = trim(req.query?.q);
+  const reason = trim(req.query?.reason);
+  const fromTs = parseDateOrTs(req.query?.from, false);
+  const toTs = parseDateOrTs(req.query?.to, true);
+  const page = Math.max(1, Number(req.query?.page || 1));
+  const pageSize = Math.max(1, Math.min(200, Number(req.query?.pageSize || 50)));
+  const allRows = filterRestoreAudit(collectRestoreAudit(db), { appFilter, q, reason, fromTs, toTs }).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  const start = (page - 1) * pageSize;
+  return res.json({ ok:true, rows: allRows.slice(start, start + pageSize), total: allRows.length, page, pageSize });
+});
+
+r.get("/account-restore/summary", requireDevKey, (req, res) => {
+  const db = readDB();
+  const appParam = trim(req.query?.app).toUpperCase();
+  const appFilter = !appParam || appParam === 'ALL' ? '' : normalizeApp(appParam);
+  const q = trim(req.query?.q);
+  const reason = trim(req.query?.reason);
+  const fromTs = parseDateOrTs(req.query?.from, false);
+  const toTs = parseDateOrTs(req.query?.to, true);
+  const rows = filterRestoreAudit(collectRestoreAudit(db), { appFilter, q, reason, fromTs, toTs });
+  const apps = appFilter ? [appFilter] : ['SPNG','CPNG','STMN','RMP'];
+  const byApp = apps.map((app) => {
+    const list = rows.filter((x) => normalizeApp(x.app) === app);
+    return {
+      app,
+      total: list.length,
+      restored: list.filter((x) => x.reused).length,
+      created: list.filter((x) => !x.reused).length,
+      loginRestore: list.filter((x) => x.action === 'restore_login').length,
+    };
+  });
+  const reasons = new Map();
+  rows.forEach((x) => {
+    const key = `${normalizeApp(x.app)}|${x.reuseReason || x.action || 'unknown'}`;
+    const prev = reasons.get(key) || { app: normalizeApp(x.app), reason: x.reuseReason || x.action || 'unknown', count: 0 };
+    prev.count += 1;
+    reasons.set(key, prev);
+  });
+  return res.json({
+    ok:true,
+    overview: { total: rows.length, restored: rows.filter((x)=>x.reused).length, created: rows.filter((x)=>!x.reused).length, loginRestore: rows.filter((x)=>x.action==='restore_login').length },
+    byApp,
+    reasons: Array.from(reasons.values()).sort((a,b)=>b.count-a.count).slice(0,12),
+    recent: rows.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)).slice(0,20),
+  });
+});
+
+r.get("/account-restore/export", requireDevKey, (req, res) => {
+  const db = readDB();
+  const appParam = trim(req.query?.app).toUpperCase();
+  const appFilter = !appParam || appParam === 'ALL' ? '' : normalizeApp(appParam);
+  const q = trim(req.query?.q);
+  const reason = trim(req.query?.reason);
+  const fromTs = parseDateOrTs(req.query?.from, false);
+  const toTs = parseDateOrTs(req.query?.to, true);
+  const rows = filterRestoreAudit(collectRestoreAudit(db), { appFilter, q, reason, fromTs, toTs }).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  const csv = toCsv(rows, ['app','entityType','action','reused','reuseReason','entityId','entityCode','entityName','ownerPhone','ownerEmail','deviceId','createdAt']);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="account_restore_${(appFilter || 'all').toLowerCase()}.csv"`);
+  return res.send(csv);
+});
+
+// ------------------------------------------------------------
 // GLOBAL LICENSE / TRIAL DASHBOARD
 // GET /api/dev/global-dashboard
 // ------------------------------------------------------------
@@ -1443,55 +1618,69 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
   db.trialAuditLogs = Array.isArray(db.trialAuditLogs) ? db.trialAuditLogs : [];
   db.trialBlocks = Array.isArray(db.trialBlocks) ? db.trialBlocks : [];
   db.trialConsumedKeys = Array.isArray(db.trialConsumedKeys) ? db.trialConsumedKeys : [];
+  ensureRestoreAudit(db);
 
-  const licenses = collectAllLicenses(db);
-  const apps = ["SPNG", "CPNG", "STMN", "RMP"];
+  const appParam = trim(req.query?.app).toUpperCase();
+  const appFilter = !appParam || appParam === 'ALL' ? '' : normalizeApp(appParam);
+  const fromTs = parseDateOrTs(req.query?.from, false);
+  const toTs = parseDateOrTs(req.query?.to, true);
+  const customRange = !!(fromTs || toTs);
+
+  const licensesAll = collectAllLicenses(db).filter((x) => !appFilter || normalizeApp(x?.app || 'SPNG') === appFilter);
+  const licenses = licensesAll;
+  const licenseAudit = db.licenseAuditLogs.filter((x) => (!appFilter || normalizeApp(x?.app || 'SPNG') === appFilter) && (!customRange || inTsRange(x?.createdAt || x?.updatedAt || 0, fromTs, toTs)));
+  const trialAudit = db.trialAuditLogs.filter((x) => (!appFilter || normalizeApp(x?.app || 'SPNG') === appFilter) && (!customRange || inTsRange(x?.createdAt || x?.updatedAt || 0, fromTs, toTs)));
+  const trialBlocks = db.trialBlocks.filter((x) => (!appFilter || normalizeApp(x?.app || 'SPNG') === appFilter) && (!customRange || inTsRange(x?.updatedAt || x?.createdAt || 0, fromTs, toTs)));
+  const trials = db.trials.filter((x) => !appFilter || normalizeApp(x?.app || 'SPNG') === appFilter);
+  const restoreAudit = filterRestoreAudit(collectRestoreAudit(db), { appFilter, fromTs, toTs });
+
+  const apps = appFilter ? [appFilter] : ['SPNG', 'CPNG', 'STMN', 'RMP'];
   const nowTsValue = now();
-  const todayStart = startOfUtcDay(0);
-  const tomorrowStart = startOfUtcDay(1);
-  const soonCutoff = startOfUtcDay(15);
+  const rangeStart = customRange ? fromTs : startOfUtcDay(0);
+  const rangeEnd = customRange ? (toTs || nowTsValue) : startOfUtcDay(1);
+  const soonCutoff = nowTsValue + (14 * 86400000);
   const activeLicenses = licenses.filter((x) => isActiveLicense(x, nowTsValue));
   const expiringSoonRows = activeLicenses
     .filter((x) => Number(x?.expiresAt || 0) > 0 && Number(x?.expiresAt || 0) < soonCutoff)
     .sort((a, b) => Number(a?.expiresAt || 0) - Number(b?.expiresAt || 0))
     .slice(0, 16)
     .map((x) => ({
-      app: normalizeApp(x?.app || "SPNG"),
-      licenseId: x?.licenseId || "",
-      token: x?.token || "",
-      deviceId: x?.boundDeviceId || x?.androidId || x?.deviceId || "",
-      plan: x?.plan || "",
+      app: normalizeApp(x?.app || 'SPNG'),
+      licenseId: x?.licenseId || '',
+      token: x?.token || '',
+      deviceId: x?.boundDeviceId || x?.androidId || x?.deviceId || '',
+      plan: x?.plan || '',
       expiresAt: Number(x?.expiresAt || 0),
-      status: x?.status || "",
+      status: x?.status || '',
     }));
 
-  const revokedToday = db.licenseAuditLogs.filter((x) => Number(x?.createdAt || 0) >= todayStart && Number(x?.createdAt || 0) < tomorrowStart && ["revoke_license", "reset_binding"].includes(trim(x?.type))).length;
-  const blockedToday = db.trialAuditLogs.filter((x) => Number(x?.createdAt || 0) >= todayStart && Number(x?.createdAt || 0) < tomorrowStart && /(block|denied|tamper|reinstall|multi_identity)/i.test(trim(x?.type))).length;
-  const recentRevokes = db.licenseAuditLogs
-    .filter((x) => ["revoke_license", "reset_binding"].includes(trim(x?.type)))
+  const revokedInRange = licenseAudit.filter((x) => ['revoke_license', 'reset_binding'].includes(trim(x?.type))).length;
+  const blockedInRange = trialAudit.filter((x) => /(block|denied|tamper|reinstall|multi_identity)/i.test(trim(x?.type))).length;
+  const recentRevokes = licenseAudit
+    .filter((x) => ['revoke_license', 'reset_binding'].includes(trim(x?.type)))
     .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
     .slice(0, 12)
     .map((x) => ({
-      app: normalizeApp(x?.app || "SPNG"),
-      type: x?.type || "",
-      licenseId: x?.licenseId || "",
-      deviceId: x?.deviceId || "",
-      reason: x?.reason || "",
+      app: normalizeApp(x?.app || 'SPNG'),
+      type: x?.type || '',
+      licenseId: x?.licenseId || '',
+      deviceId: x?.deviceId || '',
+      reason: x?.reason || '',
       createdAt: Number(x?.createdAt || 0),
     }));
 
   const topAbuseMap = new Map();
   const abuseRows = [
-    ...db.trialAuditLogs.filter((x) => /(block|denied|tamper|reinstall|multi_identity|blacklist)/i.test(trim(x?.type))),
-    ...db.trialBlocks,
+    ...trialAudit.filter((x) => /(block|denied|tamper|reinstall|multi_identity|blacklist)/i.test(trim(x?.type))),
+    ...trialBlocks,
   ];
   for (const row of abuseRows) {
-    const app = normalizeApp(row?.app || "SPNG");
+    const app = normalizeApp(row?.app || 'SPNG');
     const idents = [
-      ["deviceId", trim(row?.deviceId)],
-      ["androidId", trim(row?.androidId)],
-      ["installId", trim(row?.installId)],
-      ["fpHash", trim(row?.fpHash)],
+      ['deviceId', trim(row?.deviceId)],
+      ['androidId', trim(row?.androidId)],
+      ['installId', trim(row?.installId)],
+      ['fpHash', trim(row?.fpHash)],
     ].filter((x) => x[1]);
     for (const [kind, value] of idents) {
       const key = `${app}|${kind}|${value}`;
@@ -1506,80 +1695,98 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
     .slice(0, 12);
 
   const appCards = apps.map((app) => {
-    const appLic = licenses.filter((x) => normalizeApp(x?.app || "SPNG") === app);
-    const appAuditToday = db.licenseAuditLogs.filter((x) => normalizeApp(x?.app || "SPNG") === app && Number(x?.createdAt || 0) >= todayStart && Number(x?.createdAt || 0) < tomorrowStart);
-    const appTrialToday = db.trialAuditLogs.filter((x) => normalizeApp(x?.app || "SPNG") === app && Number(x?.createdAt || 0) >= todayStart && Number(x?.createdAt || 0) < tomorrowStart);
+    const appLic = licenses.filter((x) => normalizeApp(x?.app || 'SPNG') === app);
+    const appAuditRange = licenseAudit.filter((x) => normalizeApp(x?.app || 'SPNG') === app);
+    const appTrialRange = trialAudit.filter((x) => normalizeApp(x?.app || 'SPNG') === app);
     return {
       app,
       total: appLic.length,
       active: appLic.filter((x) => isActiveLicense(x, nowTsValue)).length,
       expiringSoon: appLic.filter((x) => isActiveLicense(x, nowTsValue) && Number(x?.expiresAt || 0) > 0 && Number(x?.expiresAt || 0) < soonCutoff).length,
-      monthly: appLic.filter((x) => trim(x?.plan).toUpperCase() === "MONTHLY").length,
-      yearly: appLic.filter((x) => trim(x?.plan).toUpperCase() === "YEARLY").length,
-      revokedToday: appAuditToday.filter((x) => trim(x?.type) === "revoke_license").length,
-      resetToday: appAuditToday.filter((x) => trim(x?.type) === "reset_binding").length,
-      blockedToday: appTrialToday.filter((x) => /(block|denied|tamper|reinstall|multi_identity)/i.test(trim(x?.type))).length,
+      monthly: appLic.filter((x) => trim(x?.plan).toUpperCase() === 'MONTHLY').length,
+      yearly: appLic.filter((x) => trim(x?.plan).toUpperCase() === 'YEARLY').length,
+      revokedToday: appAuditRange.filter((x) => trim(x?.type) === 'revoke_license').length,
+      resetToday: appAuditRange.filter((x) => trim(x?.type) === 'reset_binding').length,
+      blockedToday: appTrialRange.filter((x) => /(block|denied|tamper|reinstall|multi_identity)/i.test(trim(x?.type))).length,
+      restores: restoreAudit.filter((x) => normalizeApp(x?.app || 'SPNG') === app).length,
     };
   });
 
-  const monthBuckets = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setUTCDate(1);
-    d.setUTCHours(0, 0, 0, 0);
-    d.setUTCMonth(d.getUTCMonth() - i);
-    const key = monthKey(d.getTime());
-    monthBuckets.push({ key, label: key });
-  }
-  const trendMap = new Map(monthBuckets.map((m) => [m.key, { month: m.key, label: m.label, SPNG: 0, CPNG: 0, STMN: 0, RMP: 0, revoke: 0, blocked: 0 }]));
-  for (const row of db.licenseAuditLogs) {
-    const key = monthKey(row?.createdAt || 0);
-    if (!trendMap.has(key)) continue;
-    const bucket = trendMap.get(key);
+  const trendBuckets = buildTrendBuckets(fromTs, toTs);
+  for (const row of licenseAudit) {
     const type = trim(row?.type);
-    const app = normalizeApp(row?.app || "SPNG");
-    if (["assign_token", "extend_license", "resend_activation"].includes(type)) bucket[app] += 1;
-    if (type === "revoke_license") bucket.revoke += 1;
+    const app = normalizeApp(row?.app || 'SPNG');
+    const ts = Number(row?.createdAt || 0);
+    const bucket = trendBuckets.find((b) => ts >= b.startTs && ts <= b.endTs);
+    if (!bucket) continue;
+    if (['assign_token', 'extend_license', 'resend_activation'].includes(type)) bucket[app] += 1;
+    if (type === 'revoke_license') bucket.revoke += 1;
   }
-  for (const row of db.trialAuditLogs) {
-    const key = monthKey(row?.createdAt || 0);
-    if (!trendMap.has(key)) continue;
-    if (/(block|denied|tamper|reinstall|multi_identity)/i.test(trim(row?.type))) trendMap.get(key).blocked += 1;
+  for (const row of restoreAudit) {
+    const ts = Number(row?.createdAt || 0);
+    const app = normalizeApp(row?.app || 'SPNG');
+    const bucket = trendBuckets.find((b) => ts >= b.startTs && ts <= b.endTs);
+    if (!bucket) continue;
+    if (trim(row?.action) === 'restore_login' || row?.reused === true) bucket[app] += 1;
+  }
+  for (const row of trialAudit) {
+    const ts = Number(row?.createdAt || 0);
+    const bucket = trendBuckets.find((b) => ts >= b.startTs && ts <= b.endTs);
+    if (!bucket) continue;
+    if (/(block|denied|tamper|reinstall|multi_identity)/i.test(trim(row?.type))) bucket.blocked += 1;
   }
 
   const reasonMap = new Map();
   const reasonRows = [
-    ...db.licenseAuditLogs.filter((x) => ["revoke_license", "reset_binding"].includes(trim(x?.type))),
-    ...db.trialBlocks,
-    ...db.trials.filter((x) => trim(x?.revokeReason) || trim(x?.blockReason)),
+    ...licenseAudit.filter((x) => ['revoke_license', 'reset_binding'].includes(trim(x?.type))),
+    ...trialBlocks,
+    ...trials.filter((x) => trim(x?.revokeReason) || trim(x?.blockReason)),
   ];
   for (const row of reasonRows) {
-    const app = normalizeApp(row?.app || "SPNG");
-    const reason = normalizeReason(row?.reason || row?.revokeReason || row?.blockReason || row?.type || "unspecified");
-    const key = `${app}|${reason || "unspecified"}`;
-    const prev = reasonMap.get(key) || { app, reason: reason || "unspecified", count: 0 };
+    const app = normalizeApp(row?.app || 'SPNG');
+    const reason = normalizeReason(row?.reason || row?.revokeReason || row?.blockReason || row?.type || 'unspecified');
+    const key = `${app}|${reason || 'unspecified'}`;
+    const prev = reasonMap.get(key) || { app, reason: reason || 'unspecified', count: 0 };
     prev.count += 1;
     reasonMap.set(key, prev);
   }
   const topReasons = Array.from(reasonMap.values()).sort((a, b) => b.count - a.count).slice(0, 12);
+  const restoreReasonsMap = new Map();
+  for (const row of restoreAudit) {
+    const app = normalizeApp(row?.app || 'SPNG');
+    const reason = normalizeReason(row?.reuseReason || row?.action || 'unknown');
+    const key = `${app}|${reason}`;
+    const prev = restoreReasonsMap.get(key) || { app, reason, count: 0 };
+    prev.count += 1;
+    restoreReasonsMap.set(key, prev);
+  }
+  const restoreReasons = Array.from(restoreReasonsMap.values()).sort((a,b)=>b.count-a.count).slice(0, 10);
+  const recentRestores = restoreAudit.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0)).slice(0, 12);
 
   return res.json({
     ok: true,
+    filters: { app: appFilter || 'ALL', fromTs: fromTs || 0, toTs: toTs || 0, customRange },
     overview: {
       totalLicenses: licenses.length,
       activeLicenses: activeLicenses.length,
       expiringSoon: expiringSoonRows.length,
-      revokedToday,
-      blockedToday,
-      trialsTracked: db.trials.length,
-      blocksActive: db.trialBlocks.filter((x) => x?.active !== false).length,
+      revokedToday: revokedInRange,
+      blockedToday: blockedInRange,
+      trialsTracked: trials.length,
+      blocksActive: trialBlocks.filter((x) => x?.active !== false).length,
+      restoresTracked: restoreAudit.length,
+      restoredEntities: restoreAudit.filter((x)=>x.reused).length,
+      rangeStart,
+      rangeEnd,
     },
     appCards,
     expiringSoonRows,
     recentRevokes,
+    recentRestores,
     topAbuse,
     topReasons,
-    trend: monthBuckets.map((m) => trendMap.get(m.key)),
+    restoreReasons,
+    trend: trendBuckets.map(({ startTs, endTs, ...rest }) => rest),
   });
 });
 

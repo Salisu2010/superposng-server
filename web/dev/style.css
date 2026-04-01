@@ -66,8 +66,9 @@ input::placeholder{color:rgba(142,160,194,0.7)}
 
 .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px}
 .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px}
+.grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
 @media(max-width:900px){
-  .grid2,.grid3{grid-template-columns:1fr}
+  .grid2,.grid3,.grid4{grid-template-columns:1fr}
 }
 
 .row{display:flex; gap:10px; align-items:center; margin-top:10px}

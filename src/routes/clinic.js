@@ -48,10 +48,30 @@ function requireClinic(req, res){
 }
 function createId(prefix){ return `${prefix}_${nanoid(12)}`; }
 function cleanPhone(v){ return toStr(v).replace(/\s+/g, ''); }
+function sameClinicContact(row, ownerEmail, ownerPhone){
+  if (!row) return false;
+  const rowEmail = safeEmail(row.ownerEmail || row.email);
+  const rowPhone = cleanPhone(row.ownerPhone || row.phone);
+  return !!((ownerEmail && rowEmail && rowEmail === ownerEmail) || (ownerPhone && rowPhone && rowPhone === ownerPhone));
+}
 function pickPatientId(x){ return toStr(x?.patientId || x?.patient_id || x?.id); }
 function pickDoctorName(x){ return toStr(x?.doctorName || x?.doctor_name || x?.doctor || x?.doctorId || 'Unassigned'); }
 function pickStatus(x, fallback='pending'){ return toStr(x?.status || fallback) || fallback; }
 function cap(v){ const s = toStr(v); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+function ensureRestoreAudit(db){
+  db.accountRestoreAudit = Array.isArray(db.accountRestoreAudit) ? db.accountRestoreAudit : [];
+}
+function pushRestoreAudit(db, payload = {}){
+  ensureRestoreAudit(db);
+  db.accountRestoreAudit.unshift({
+    id: `RST-${now()}-${nanoid(6)}`,
+    createdAt: now(),
+    updatedAt: now(),
+    ...payload
+  });
+  if (db.accountRestoreAudit.length > 5000) db.accountRestoreAudit.length = 5000;
+}
 
 function ensureArrays(db){
   db.clinics = arr(db.clinics);
@@ -98,6 +118,7 @@ function clinicPublicRow(c){
     clinicName: c.clinicName,
     hospitalName: c.clinicName,
     ownerEmail: c.ownerEmail,
+    ownerPhone: c.ownerPhone || '',
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
     branchCount: toNum(c.branchCount, 1)
@@ -719,20 +740,33 @@ r.post('/hospital/create', (req, res) => {
   try {
     const body = req.body || {};
     const clinicName = toStr(body.hospitalName || body.clinicName || body.shopName);
-    const ownerEmail = safeEmail(body.ownerEmail || body.email || body.ownerPhone);
+    const ownerEmail = safeEmail(body.ownerEmail || body.email);
+    const ownerPhone = cleanPhone(body.ownerPhone || body.phone);
     const ownerPassword = toStr(body.ownerPassword || body.password || body.ownerPin || '1234');
     const ownerDeviceId = toStr(body.ownerDeviceId || body.deviceId);
     const branchName = toStr(body.branchName || 'Main Branch');
-    if (!clinicName || !ownerEmail || !ownerDeviceId) return res.status(400).json({ ok:false, error:'hospitalName, ownerEmail and ownerDeviceId are required' });
-    const db = readDB(); ensureArrays(db);
-    let clinic = db.clinics.find(x => safeEmail(x.ownerEmail) === ownerEmail && lower(x.clinicName) === lower(clinicName));
-    const reused = !!clinic;
+    if (!clinicName || !(ownerEmail || ownerPhone) || !ownerDeviceId) return res.status(400).json({ ok:false, error:'hospitalName, ownerEmail/ownerPhone and ownerDeviceId are required' });
+    const db = readDB(); ensureArrays(db); ensureRestoreAudit(db);
+
+    // Hard restore: same email or same phone must return the previous clinicId/hospitalId.
+    let clinic = db.clinics.find(x => sameClinicContact(x, ownerEmail, ownerPhone));
+    let reused = !!clinic;
+    let reuseReason = reused ? ((ownerEmail && safeEmail(clinic.ownerEmail) === ownerEmail) ? 'ownerEmail_reused' : 'ownerPhone_reused') : '';
+
+    // Backward compatibility for old records that only matched name+email.
+    if (!clinic && ownerEmail) {
+      clinic = db.clinics.find(x => safeEmail(x.ownerEmail) === ownerEmail && lower(x.clinicName) === lower(clinicName));
+      reused = !!clinic;
+      if (reused) reuseReason = 'ownerEmailClinicName_reused';
+    }
+
     if (!clinic) {
       clinic = {
         clinicId: 'cln_' + nanoid(12),
         clinicCode: clinicCode(),
         clinicName,
         ownerEmail,
+        ownerPhone,
         ownerPassword,
         createdAt: now(),
         updatedAt: now(),
@@ -744,15 +778,31 @@ r.post('/hospital/create', (req, res) => {
     } else {
       clinic.updatedAt = now();
       clinic.ownerPassword = ownerPassword || clinic.ownerPassword;
+      clinic.clinicName = clinic.clinicName || clinicName;
+      if (ownerEmail) clinic.ownerEmail = ownerEmail;
+      if (ownerPhone) clinic.ownerPhone = ownerPhone;
     }
     const adminUser = ensureClinicUser(db, clinic, ownerEmail, ownerPassword, 'Admin');
     const d = { deviceId: ownerDeviceId, clinicId: clinic.clinicId, role: 'Admin', trusted: true, name: toStr(body.deviceName || 'Admin Device'), updatedAt: now(), createdAt: now(), active: true };
     const i = db.clinicDevices.findIndex(x => String(x.deviceId) === d.deviceId && String(x.clinicId) === d.clinicId);
     if (i >= 0) db.clinicDevices[i] = { ...db.clinicDevices[i], ...d };
     else db.clinicDevices.push(d);
+    pushRestoreAudit(db, {
+      app: 'CPNG',
+      entityType: 'HOSPITAL',
+      action: reused ? 'restore_by_contact' : 'create_entity',
+      reused,
+      reuseReason,
+      entityId: clinic.clinicId,
+      entityCode: clinic.clinicCode,
+      entityName: clinic.clinicName,
+      ownerPhone,
+      ownerEmail,
+      deviceId: ownerDeviceId,
+    });
     writeDB(db);
     const token = sign({ clinicId: clinic.clinicId, hospitalId: clinic.clinicId, deviceId: ownerDeviceId, userId: adminUser?.userId, email: ownerEmail, role: 'Admin' });
-    return res.json({ ok:true, reused, token, clinic: clinicPublicRow(clinic), hospital: clinicPublicRow(clinic) });
+    return res.json({ ok:true, reused, reuseReason, token, clinic: clinicPublicRow(clinic), hospital: clinicPublicRow(clinic) });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'create failed' });
   }
@@ -765,10 +815,14 @@ r.post('/auth/login', (req, res) => {
     const password = toStr(body.password || body.ownerPassword || body.ownerPin);
     const clinicRef = toStr(body.hospitalId || body.clinicId || req.headers['x-clinic-id'] || req.headers['x-hospital-id']);
     const deviceId = toStr(body.deviceId);
-    const db = readDB(); ensureArrays(db);
+    const db = readDB(); ensureArrays(db); ensureRestoreAudit(db);
     let clinic = null;
     if (clinicRef) clinic = db.clinics.find(x => String(x.clinicId) === clinicRef || String(x.clinicCode) === clinicRef);
     if (!clinic && email) clinic = db.clinics.find(x => safeEmail(x.ownerEmail) === email);
+    if (!clinic) {
+      const phoneLogin = cleanPhone(body.phone || body.ownerPhone);
+      if (phoneLogin) clinic = db.clinics.find(x => cleanPhone(x.ownerPhone || x.phone) === phoneLogin);
+    }
     if (!clinic) return res.status(404).json({ ok:false, error:'Hospital not found' });
     let user = db.clinicUsers.find(x => String(x.clinicId) === String(clinic.clinicId) && safeEmail(x.email) === email);
     if (!user && email === safeEmail(clinic.ownerEmail) && password === toStr(clinic.ownerPassword)) {
@@ -776,6 +830,19 @@ r.post('/auth/login', (req, res) => {
     }
     if (!user || toStr(user.password) !== password) return res.status(401).json({ ok:false, error:'Invalid credentials' });
     const trusted = db.clinicDevices.find(x => String(x.clinicId) === String(clinic.clinicId) && String(x.deviceId) === deviceId && x.trusted === true);
+    pushRestoreAudit(db, {
+      app: 'CPNG',
+      entityType: 'HOSPITAL',
+      action: 'restore_login',
+      reused: true,
+      reuseReason: email ? 'email_login_restore' : 'phone_login_restore',
+      entityId: clinic.clinicId,
+      entityCode: clinic.clinicCode,
+      entityName: clinic.clinicName,
+      ownerPhone: cleanPhone(body.phone || body.ownerPhone || clinic.ownerPhone),
+      ownerEmail: safeEmail(body.email || body.ownerEmail || clinic.ownerEmail),
+      deviceId,
+    });
     const token = sign({ clinicId: clinic.clinicId, hospitalId: clinic.clinicId, deviceId, userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) });
     writeDB(db);
     return res.json({ ok:true, token, trusted: !!trusted, user: { userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) }, clinic: clinicPublicRow(clinic) });

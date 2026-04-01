@@ -29,10 +29,43 @@
           <h2 style="margin:0">Global License & Trial Command Center</h2>
           <p class="muted" style="margin-top:6px">One dashboard for SPNG, CPNG/CLP, STMN/SMTN, and RMP.</p>
         </div>
-        <div class="row">
+        <div class="row" style="flex-wrap:wrap">
           <button id="btnGlobalRefresh" class="btn primary">Refresh Global Dashboard</button>
+          <button id="btnGlobalOpenHistory" class="btn">Open History</button>
+          <button id="btnGlobalExportCsv" class="btn">Export Global CSV</button>
+          <button id="btnGlobalExportPdf" class="btn">Export Global PDF</button>
         </div>
       </div>
+      <div class="grid4" style="margin-top:12px">
+        <div>
+          <label>App Filter</label>
+          <select id="globalAppFilter">
+            <option value="ALL" selected>ALL APPS</option>
+            <option value="CPNG">CLP / CPNG</option>
+            <option value="SPNG">SPNG</option>
+            <option value="STMN">SMTN / STMN</option>
+            <option value="RMP">RMP</option>
+          </select>
+        </div>
+        <div>
+          <label>Action Filter</label>
+          <select id="globalActionFilter">
+            <option value="ALL" selected>ALL ACTIONS</option>
+            <option value="ACTIVATIONS">ACTIVATIONS</option>
+            <option value="REVOKES">REVOKES / RESETS</option>
+            <option value="ABUSE">TRIAL ABUSE</option>
+          </select>
+        </div>
+        <div>
+          <label>From</label>
+          <input id="globalFrom" type="date" />
+        </div>
+        <div>
+          <label>To</label>
+          <input id="globalTo" type="date" />
+        </div>
+      </div>
+      <div id="globalMeta" class="muted" style="margin-top:10px"></div>
       <div id="globalOverview" class="kpiGrid"></div>
       <h3 style="margin-top:16px;">By App</h3>
       <div id="globalAppCards" class="kpiGrid"></div>
@@ -199,7 +232,7 @@
 
     <section class="card">
       <h2>ClinicProNG Activation / License Action Center</h2>
-      <div class="grid3">
+      <div class="grid4">
         <div>
           <label>Target License ID</label>
           <input id="cpngActionLicenseId" placeholder="paste or use Target from table" />
@@ -933,7 +966,7 @@
         </div>
       </div>
 
-      <div class="grid3" style="margin-top:12px">
+      <div class="grid4" style="margin-top:12px">
         <div>
           <label>Status</label>
           <select id="histStatus">
@@ -964,6 +997,14 @@
             <option value="100">100</option>
           </select>
         </div>
+        <div>
+          <label>From</label>
+          <input id="histFrom" type="date" />
+        </div>
+        <div>
+          <label>To</label>
+          <input id="histTo" type="date" />
+        </div>
       </div>
 
       <div class="historyTabs" style="margin-top:12px">
@@ -972,6 +1013,7 @@
         <button class="tabBtn" data-hist-tab="trials">Trials</button>
         <button class="tabBtn" data-hist-tab="trialAudit">Trial Audit</button>
         <button class="tabBtn" data-hist-tab="blocks">Blocks</button>
+        <button class="tabBtn" data-hist-tab="restores">Restores</button>
       </div>
 
       <div id="histStats" class="kpiGrid" style="margin-top:14px"></div>
@@ -992,6 +1034,7 @@
         <div class="row" style="margin-top:0">
           <button id="btnHistRefresh" class="btn primary">Refresh History</button>
           <button id="btnHistExport" class="btn">Export Current View CSV</button>
+          <button id="btnHistPdf" class="btn">Export Current View PDF</button>
           <button id="btnHistPrev" class="btn">Prev</button>
           <button id="btnHistNext" class="btn">Next</button>
         </div>

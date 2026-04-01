@@ -195,6 +195,7 @@ app.use("/api/trackguard", trackguardRoutes);
 app.use("/api/rmp", rmpRoutes);
 
 app.use("/api/shop", shopRoutes);
+app.use("/api/stmn/hotel", shopRoutes);
 app.use("/api/pair", pairRoutes);
 app.use("/api/sync", authMiddleware, syncRoutes);
 app.use("/api/stmn/sync", authMiddleware, stmnSyncRoutes);

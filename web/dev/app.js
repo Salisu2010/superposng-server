@@ -2099,7 +2099,7 @@ const HISTORY_APP_LABELS = {
 let _histTab = "licenses";
 let _histPage = 1;
 let _histPageSize = 50;
-let _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [] };
+let _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [], restores: [] };
 
 function histResolveApps(v) {
   const key = String(v || "ALL").toUpperCase();
@@ -2135,15 +2135,17 @@ async function histLoadData() {
     jobs.push(histFetchAllPages(`/api/trial/admin/consumed?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
     jobs.push(histFetchAllPages(`/api/trial/admin/audit?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
     jobs.push(histFetchAllPages(`/api/trial/admin/blocks?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
+    jobs.push(api(`/api/dev/account-restore/history?app=${encodeURIComponent(app)}&page=1&pageSize=500`, { method: 'GET' }).then((out) => (Array.isArray(out?.rows) ? out.rows : []).map((x) => ({ ...x, app: x.app || app }))));
   }
   const out = await Promise.all(jobs);
-  _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [] };
-  for (let i = 0; i < out.length; i += 5) {
+  _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [], restores: [] };
+  for (let i = 0; i < out.length; i += 6) {
     _histCache.licenses.push(...out[i]);
     _histCache.licenseAudit.push(...out[i + 1]);
     _histCache.trials.push(...out[i + 2]);
     _histCache.trialAudit.push(...out[i + 3]);
     _histCache.blocks.push(...out[i + 4]);
+    _histCache.restores.push(...out[i + 5]);
   }
 }
 function histGetFilters() {
@@ -2152,6 +2154,8 @@ function histGetFilters() {
     reason: String($("histReason")?.value || "").trim().toLowerCase(),
     status: String($("histStatus")?.value || "").trim().toUpperCase(),
     plan: String($("histPlan")?.value || "").trim().toUpperCase(),
+    from: String($("histFrom")?.value || "").trim(),
+    to: String($("histTo")?.value || "").trim(),
   };
 }
 function histFiltered(kind) {
@@ -2164,12 +2168,15 @@ function histFiltered(kind) {
     const needle = histNeedle([
       row.app, row.licenseId, row.fromLicenseId, row.token, row.deviceId, row.boundDeviceId,
       row.androidId, row.installId, row.fpHash, row.devHash, row.notes, row.type, reason,
-      row.id, row.shopId, row.boundShopId, row.plan, row.status,
+      row.id, row.shopId, row.boundShopId, row.plan, row.status, row.entityId, row.entityCode, row.entityName, row.ownerPhone, row.ownerEmail, row.action, row.reuseReason, row.entityType,
     ]);
     if (f.q && !needle.includes(f.q)) return false;
     if (f.reason && !reason.includes(f.reason)) return false;
     if (f.status && status !== f.status) return false;
     if (f.plan && plan !== f.plan) return false;
+    const ts = Number(row.createdAt || row.updatedAt || row.lastSeenAt || row.activatedAt || 0);
+    if (f.from && ts && ts < Date.parse(`${f.from}T00:00:00Z`)) return false;
+    if (f.to && ts && ts > Date.parse(`${f.to}T23:59:59Z`)) return false;
     return true;
   }).sort((a, b) => Number(b.createdAt || b.updatedAt || 0) - Number(a.createdAt || a.updatedAt || 0));
 }
@@ -2186,6 +2193,7 @@ function histCountReasons() {
   });
   histFiltered("trials").forEach((x) => pushReason(x.app, x.revokeReason || x.blockReason));
   histFiltered("blocks").forEach((x) => pushReason(x.app, x.reason));
+  histFiltered('restores').forEach((x) => pushReason(x.app, x.reuseReason || x.action));
   return [...reasonMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
 }
 function histAbuseStats() {
@@ -2226,11 +2234,13 @@ function histRenderStats() {
   const revokedLic = licenses.filter((x) => String(x.status || "").toUpperCase() === "REVOKED").length;
   const activeTrials = trials.filter((x) => String(x.status || "").toUpperCase() === "ACTIVE").length;
   const endedTrials = trials.filter((x) => ["EXPIRED","REVOKED","BLOCKED"].includes(String(x.status || "").toUpperCase())).length;
+  const restores = histFiltered('restores');
+  const restoredRows = restores.filter((x) => x.reused).length;
   renderKpiCards("histStats", [
     { label: "Licenses", value: licenses.length, sub: `Active ${activeLic} • Revoked ${revokedLic}` },
     { label: "Trials", value: trials.length, sub: `Active ${activeTrials} • Ended ${endedTrials}` },
     { label: "Blocks", value: blocks.length, sub: `Audit ${histFiltered("trialAudit").length}` },
-    { label: "Revoke Reasons", value: histCountReasons().length, sub: `Top reasons dashboard` },
+    { label: "Restores", value: restores.length, sub: `Recovered ${restoredRows} • Fresh ${Math.max(0, restores.length-restoredRows)}` },
   ]);
   const reasons = histCountReasons();
   const rBox = $("histReasons");
@@ -2274,6 +2284,8 @@ function histRenderTable() {
     wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Status</th><th>Device</th><th>Android ID</th><th>Install ID</th><th>FP Hash</th><th>Start</th><th>Expiry</th><th>Reason</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.status || "")}</td><td><code>${escHtml(x.deviceId || "-")}</code></td><td><code>${escHtml(x.androidId || "-")}</code></td><td><code>${escHtml(x.installId || "-")}</code></td><td><code>${escHtml(x.fpHash || "-")}</code></td><td>${escHtml(String(x.startYmd || "-"))}</td><td>${escHtml(String(x.expiryYmd || "-"))}</td><td>${escHtml(x.revokeReason || x.blockReason || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
   } else if (_histTab === "trialAudit") {
     wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Type</th><th>Device</th><th>Android ID</th><th>Install ID</th><th>FP Hash</th><th>IP</th><th>Time</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.type || "")}</td><td><code>${escHtml(x.deviceId || "-")}</code></td><td><code>${escHtml(x.androidId || "-")}</code></td><td><code>${escHtml(x.installId || "-")}</code></td><td><code>${escHtml(x.fpHash || "-")}</code></td><td><code>${escHtml(x.ip || "-")}</code></td><td>${escHtml(fmtTs(x.createdAt) || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
+  } else if (_histTab === 'restores') {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Entity</th><th>Action</th><th>Reuse</th><th>Reason</th><th>Name</th><th>Phone</th><th>Email</th><th>Device</th><th>Time</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td><code>${escHtml(x.entityId || '-')}</code><div class="muted">${escHtml(x.entityType || '-')}</div></td><td>${escHtml(x.action || '-')}</td><td>${x.reused ? 'YES' : 'NO'}</td><td>${escHtml(x.reuseReason || '-')}</td><td>${escHtml(x.entityName || '-')}</td><td><code>${escHtml(x.ownerPhone || '-')}</code></td><td><code>${escHtml(x.ownerEmail || '-')}</code></td><td><code>${escHtml(x.deviceId || '-')}</code></td><td>${escHtml(fmtTs(x.createdAt) || '-')}</td></tr>`).join('') || noData}</tbody></table>`;
   } else {
     wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Reason</th><th>Device</th><th>Android ID</th><th>Install ID</th><th>FP Hash</th><th>Active</th><th>Updated</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.reason || "-")}</td><td><code>${escHtml(x.deviceId || "-")}</code></td><td><code>${escHtml(x.androidId || "-")}</code></td><td><code>${escHtml(x.installId || "-")}</code></td><td><code>${escHtml(x.fpHash || "-")}</code></td><td>${x.active === false ? "No" : "Yes"}</td><td>${escHtml(fmtTs(x.updatedAt || x.createdAt) || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
   }
@@ -2301,7 +2313,7 @@ function histBind() {
   const instantReloadIds = ["histApp"];
   instantReloadIds.forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(true); }); });
   ["histQ", "histReason"].forEach((id) => { const el = $(id); if (el) el.addEventListener("input", () => { _histPage = 1; clearTimeout(histBind._t); histBind._t = setTimeout(() => histRefresh(false), 250); }); });
-  ["histStatus", "histPlan", "histPageSize"].forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(false); }); });
+  ["histStatus", "histPlan", "histPageSize", "histFrom", "histTo"].forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(false); }); });
   const rf = $("btnHistRefresh"); if (rf) rf.addEventListener("click", () => { _histPage = 1; histRefresh(true); });
   const prev = $("btnHistPrev"); if (prev) prev.addEventListener("click", () => { if (_histPage > 1) { _histPage -= 1; histRenderTable(); } });
   const next = $("btnHistNext"); if (next) next.addEventListener("click", () => {
@@ -2322,6 +2334,13 @@ function histBind() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
+  const pdf = $("btnHistPdf"); if (pdf) pdf.addEventListener("click", () => {
+    const rows = histFiltered(_histTab);
+    const shown = rows.slice(0, 200);
+    const headers = shown.length ? Object.keys(shown[0]) : [];
+    const html = `<div class="muted">App ${escHtml(String($("histApp")?.value || 'ALL'))} • Tab ${escHtml(_histTab)} • Rows ${rows.length}</div>` + (shown.length ? `<table><thead><tr>${headers.map((h)=>`<th>${escHtml(h)}</th>`).join('')}</tr></thead><tbody>${shown.map((row)=>`<tr>${headers.map((h)=>`<td>${escHtml(typeof row[h] === 'object' ? JSON.stringify(row[h]) : String(row[h] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="muted">No rows to export.</div>`);
+    printHtmlReport('License / Trial History Report', html);
+  });
 }
 
 
@@ -2331,7 +2350,14 @@ let _globalDashboardCache = null;
 function badge(text) {
   return `<span class="pill">${escHtml(text)}</span>`;
 }
-
+function globalFilters() {
+  return {
+    app: String($('globalAppFilter')?.value || 'ALL').trim().toUpperCase(),
+    action: String($('globalActionFilter')?.value || 'ALL').trim().toUpperCase(),
+    from: String($('globalFrom')?.value || '').trim(),
+    to: String($('globalTo')?.value || '').trim(),
+  };
+}
 function renderMiniTable(targetId, headers, rows, emptyText = "No data") {
   const el = $(targetId);
   if (!el) return;
@@ -2341,46 +2367,54 @@ function renderMiniTable(targetId, headers, rows, emptyText = "No data") {
   }
   el.innerHTML = `<table class="miniTable"><thead><tr>${headers.map((h) => `<th>${escHtml(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${headers.map((h) => `<td>${h.render ? h.render(row) : escHtml(row[h.key] ?? "-")}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
-
-function renderGlobalTrend(rows) {
+function renderGlobalTrend(rows, action = 'ALL') {
   const box = $("globalTrend");
   if (!box) return;
   if (!rows || !rows.length) {
     box.innerHTML = '<div class="muted">No trend data yet.</div>';
     return;
   }
-  box.innerHTML = rows.map((row) => `
+  box.innerHTML = rows.map((row) => {
+    const nums = action === 'ABUSE'
+      ? `<span>Blocked ${Number(row.blocked || 0)}</span>`
+      : action === 'REVOKES'
+        ? `<span>Revoke ${Number(row.revoke || 0)}</span>`
+        : `<span>SPNG ${Number(row.SPNG || 0)}</span><span>CPNG ${Number(row.CPNG || 0)}</span><span>STMN ${Number(row.STMN || 0)}</span><span>RMP ${Number(row.RMP || 0)}</span><span>Revoke ${Number(row.revoke || 0)}</span><span>Blocked ${Number(row.blocked || 0)}</span>`;
+    return `
     <div class="trendRow">
-      <div class="trendLabel">${escHtml(row.label || row.month || "-")}</div>
+      <div class="trendLabel">${escHtml(row.label || row.month || '-')}</div>
       <div class="trendBar">
         <div class="trendHead">Activation / safety events</div>
-        <div class="trendNums">
-          <span>SPNG ${Number(row.SPNG || 0)}</span>
-          <span>CPNG ${Number(row.CPNG || 0)}</span>
-          <span>STMN ${Number(row.STMN || 0)}</span>
-          <span>RMP ${Number(row.RMP || 0)}</span>
-          <span>Revoke ${Number(row.revoke || 0)}</span>
-          <span>Blocked ${Number(row.blocked || 0)}</span>
-        </div>
+        <div class="trendNums">${nums}</div>
       </div>
-    </div>
-  `).join("");
+    </div>`;
+  }).join('');
 }
 
+
 async function refreshGlobalDashboard() {
-  const data = await api('/api/dev/global-dashboard', { method: 'GET' });
-  _globalDashboardCache = data || null;
+  const f = globalFilters();
+  const data = await api(`/api/dev/global-dashboard${buildQuery({ app: f.app, from: f.from, to: f.to })}`, { method: 'GET' });
+  _globalDashboardCache = { ...(data || {}), uiFilters: f };
   const ov = data?.overview || {};
+  const action = f.action || 'ALL';
+  const meta = $('globalMeta');
+  if (meta) {
+    const rangeText = (f.from || f.to) ? `Range ${f.from || 'start'} → ${f.to || 'today'}` : 'Default 6-month view';
+    meta.textContent = `${f.app || 'ALL'} • ${action} • ${rangeText}`;
+  }
   const overviewEl = $("globalOverview");
   if (overviewEl) {
+    const revokeLabel = (f.from || f.to) ? 'Revoked in range' : 'Revoked today';
+    const blockedLabel = (f.from || f.to) ? 'Blocked in range' : 'Blocked today';
     overviewEl.innerHTML = [
-      ["Total licenses", ov.totalLicenses, "Across all apps"],
+      ["Total licenses", ov.totalLicenses, "Across selected app scope"],
       ["Active licenses", ov.activeLicenses, "Valid + not expired"],
       ["Expiring soon", ov.expiringSoon, "Next 14 days"],
-      ["Revoked today", ov.revokedToday, "License revokes + resets"],
-      ["Blocked today", ov.blockedToday, "Trial abuse / deny events"],
+      [revokeLabel, ov.revokedToday, "License revokes + resets"],
+      [blockedLabel, ov.blockedToday, "Trial abuse / deny events"],
       ["Trials tracked", ov.trialsTracked, "Historic records"],
-      ["Active blocks", ov.blocksActive, "Current blacklist / blocks"],
+      ["Restores tracked", ov.restoresTracked, `Recovered ${Number(ov.restoredEntities || 0)}`],
     ].map(([label, value, sub]) => `<div class="kpiCard"><div class="kpiLabel">${escHtml(label)}</div><div class="kpiValue">${escHtml(String(value ?? 0))}</div><div class="kpiSub">${escHtml(sub)}</div></div>`).join("");
   }
 
@@ -2388,8 +2422,13 @@ async function refreshGlobalDashboard() {
   if (appCardsEl) {
     appCardsEl.innerHTML = (data?.appCards || []).map((x) => `
       <div class="kpiCard">
-        <div class="kpiLabel">${escHtml(x.app || '')}</div>
-        <div class="kpiValue">${Number(x.active || 0)}</div>
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px">
+          <div>
+            <div class="kpiLabel">${escHtml(x.app || '')}</div>
+            <div class="kpiValue">${Number(x.active || 0)}</div>
+          </div>
+          <button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'licenses')">Open History</button>
+        </div>
         <div class="kpiSub">Active • Total ${Number(x.total || 0)} • Soon ${Number(x.expiringSoon || 0)}</div>
         <div class="trendNums" style="margin-top:8px;">
           <span>M ${Number(x.monthly || 0)}</span>
@@ -2397,17 +2436,18 @@ async function refreshGlobalDashboard() {
           <span>Revoked ${Number(x.revokedToday || 0)}</span>
           <span>Reset ${Number(x.resetToday || 0)}</span>
           <span>Blocked ${Number(x.blockedToday || 0)}</span>
+          <span>Restore ${Number(x.restores || 0)}</span>
         </div>
       </div>
     `).join("");
   }
 
-  renderGlobalTrend(data?.trend || []);
+  renderGlobalTrend(data?.trend || [], action);
 
   const reasons = $("globalReasons");
   if (reasons) {
-    const list = data?.topReasons || [];
-    reasons.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.reason || 'unspecified')}</b><div class="muted">${escHtml(x.app || '')}</div></div><div class="pill">${Number(x.count || 0)}</div></div>`).join("") : '<div class="muted">No revoke or block reasons yet.</div>';
+    const list = (data?.topReasons || []).filter((x) => action !== 'ACTIVATIONS');
+    reasons.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.reason || 'unspecified')}</b><div class="muted">${escHtml(x.app || '')}</div></div><div class="row"><div class="pill">${Number(x.count || 0)}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'licenseAudit')">View</button></div></div>`).join("") : '<div class="muted">No revoke or block reasons yet for current filters.</div>';
   }
 
   renderMiniTable("globalExpiring", [
@@ -2416,14 +2456,22 @@ async function refreshGlobalDashboard() {
     { label: 'Plan', key: 'plan' },
     { label: 'Expiry', render: (r) => escHtml(fmtTs(r.expiresAt) || '-') },
     { label: 'Device', render: (r) => `<code>${escHtml(r.deviceId || '-')}</code>` },
-  ], data?.expiringSoonRows || [], 'No active licenses expiring soon.');
+    { label: 'Action', render: (r) => `<button class="btn" onclick="openHistoryForApp('${escHtml(r.app || 'ALL')}', 'licenses')">History</button>` },
+  ], action === 'ABUSE' ? [] : (data?.expiringSoonRows || []), 'No active licenses expiring soon.');
+
+  const restoreBox = $('globalRestores');
+  if (restoreBox) {
+    const list = data?.recentRestores || [];
+    restoreBox.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.action || '')}</code><div class="muted">${escHtml(x.entityName || x.entityId || '')}</div></div><div class="row"><div class="pill">${x.reused ? 'RESTORE' : 'CREATE'}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'restores')">Open</button></div></div>`).join('') : '<div class="muted">No restore activity yet.</div>';
+  }
 
   const abuseEl = $("globalAbuse");
   if (abuseEl) {
     const list = data?.topAbuse || [];
-    abuseEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.kind || '')}</code><div class="muted"><code>${escHtml(x.value || '')}</code></div></div><div class="pill">${Number(x.count || 0)}</div></div>`).join("") : '<div class="muted">No abuse hotspots yet.</div>';
+    abuseEl.innerHTML = (action === 'ACTIVATIONS') ? '<div class="muted">Switch action filter to ABUSE to view device abuse hotspots.</div>' : (list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.kind || '')}</code><div class="muted"><code>${escHtml(x.value || '')}</code></div></div><div class="row"><div class="pill">${Number(x.count || 0)}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'trialAudit')">Open</button></div></div>`).join("") : '<div class="muted">No abuse hotspots yet.</div>');
   }
 
+  const recentRows = (data?.recentRevokes || []).filter((r) => action !== 'ACTIVATIONS');
   renderMiniTable("globalRevokes", [
     { label: 'App', key: 'app' },
     { label: 'Type', key: 'type' },
@@ -2431,8 +2479,11 @@ async function refreshGlobalDashboard() {
     { label: 'Device', render: (r) => `<code>${escHtml(r.deviceId || '-')}</code>` },
     { label: 'Reason', key: 'reason' },
     { label: 'Date', render: (r) => escHtml(fmtTs(r.createdAt) || '-') },
-  ], data?.recentRevokes || [], 'No recent revoke/reset activity.');
+    { label: 'Open', render: (r) => `<button class="btn" onclick="openHistoryForApp('${escHtml(r.app || 'ALL')}', 'licenseAudit')">History</button>` },
+  ], recentRows, 'No recent revoke/reset activity.');
 }
+
+window.openHistoryForApp = openHistoryForApp;
 
 window.addEventListener("load", () => {
   const b1 = $("btnBulkGenerate"); if (b1) b1.onclick = bulkGenerateSpng;
@@ -2450,6 +2501,46 @@ window.addEventListener("load", () => {
   const smDel = $("btnSmDelete"); if (smDel) smDel.onclick = smDeleteSelected;
 
   const gref = $("btnGlobalRefresh"); if (gref) gref.onclick = () => refreshGlobalDashboard().catch((e) => toast(e.message));
+  ["globalAppFilter", "globalActionFilter", "globalFrom", "globalTo"].forEach((id) => { const el = $(id); if (el) el.addEventListener(el.tagName === 'INPUT' ? 'change' : 'change', () => refreshGlobalDashboard().catch((e) => toast(e.message))); });
+  const gh = $("btnGlobalOpenHistory"); if (gh) gh.onclick = () => openHistoryForApp(String($("globalAppFilter")?.value || 'ALL'), 'licenses');
+  const gcsv = $("btnGlobalExportCsv"); if (gcsv) gcsv.onclick = () => {
+    const d = _globalDashboardCache;
+    if (!d) return toast('Load the global dashboard first');
+    const rows = [];
+    (d.appCards || []).forEach((x) => rows.push({ section:'appCards', ...x }));
+    (d.expiringSoonRows || []).forEach((x) => rows.push({ section:'expiringSoon', ...x }));
+    (d.recentRevokes || []).forEach((x) => rows.push({ section:'recentRevokes', ...x }));
+    (d.recentRestores || []).forEach((x) => rows.push({ section:'recentRestores', ...x }));
+    (d.topAbuse || []).forEach((x) => rows.push({ section:'topAbuse', ...x }));
+    (d.topReasons || []).forEach((x) => rows.push({ section:'topReasons', ...x }));
+    (d.trend || []).forEach((x) => rows.push({ section:'trend', ...x }));
+    const csv = histCsv(rows);
+    if (!csv) return toast('No rows to export');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `global_dashboard_${String(d?.uiFilters?.app || 'all').toLowerCase()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const gpdf = $("btnGlobalExportPdf"); if (gpdf) gpdf.onclick = () => {
+    const d = _globalDashboardCache;
+    if (!d) return toast('Load the global dashboard first');
+    const ov = d.overview || {};
+    const html = `
+      <div class="muted">App ${escHtml(d.uiFilters?.app || 'ALL')} • Action ${escHtml(d.uiFilters?.action || 'ALL')} • ${(d.uiFilters?.from || d.uiFilters?.to) ? `Range ${escHtml(d.uiFilters?.from || 'start')} → ${escHtml(d.uiFilters?.to || 'today')}` : 'Default 6-month view'}</div>
+      <div class="grid">
+        <div class="card"><b>Total licenses</b><div>${Number(ov.totalLicenses || 0)}</div></div>
+        <div class="card"><b>Active licenses</b><div>${Number(ov.activeLicenses || 0)}</div></div>
+        <div class="card"><b>Expiring soon</b><div>${Number(ov.expiringSoon || 0)}</div></div>
+        <div class="card"><b>Revoked / blocked</b><div>${Number(ov.revokedToday || 0)} / ${Number(ov.blockedToday || 0)}</div></div>
+      </div>
+      <h2>By App</h2><table><thead><tr><th>App</th><th>Total</th><th>Active</th><th>Expiring Soon</th><th>Monthly</th><th>Yearly</th><th>Revoked</th><th>Blocked</th></tr></thead><tbody>${(d.appCards || []).map((x)=>`<tr><td>${escHtml(x.app || '')}</td><td>${Number(x.total || 0)}</td><td>${Number(x.active || 0)}</td><td>${Number(x.expiringSoon || 0)}</td><td>${Number(x.monthly || 0)}</td><td>${Number(x.yearly || 0)}</td><td>${Number(x.revokedToday || 0)}</td><td>${Number(x.blockedToday || 0)}</td></tr>`).join('')}</tbody></table>
+      <h2>Recent Revokes</h2><table><thead><tr><th>App</th><th>Type</th><th>License</th><th>Device</th><th>Reason</th><th>Date</th></tr></thead><tbody>${(d.recentRevokes || []).map((x)=>`<tr><td>${escHtml(x.app || '')}</td><td>${escHtml(x.type || '')}</td><td>${escHtml(x.licenseId || '')}</td><td>${escHtml(x.deviceId || '')}</td><td>${escHtml(x.reason || '')}</td><td>${escHtml(fmtTs(x.createdAt) || '')}</td></tr>`).join('') || '<tr><td colspan="6">No rows</td></tr>'}</tbody></table>
+      <h2>Recent Restores</h2><table><thead><tr><th>App</th><th>Action</th><th>Entity</th><th>Phone</th><th>Email</th><th>Date</th></tr></thead><tbody>${(d.recentRestores || []).map((x)=>`<tr><td>${escHtml(x.app || '')}</td><td>${escHtml(x.action || '')}</td><td>${escHtml(x.entityName || x.entityId || '')}</td><td>${escHtml(x.ownerPhone || '')}</td><td>${escHtml(x.ownerEmail || '')}</td><td>${escHtml(fmtTs(x.createdAt) || '')}</td></tr>`).join('') || '<tr><td colspan="6">No rows</td></tr>'}</tbody></table>
+    `;
+    printHtmlReport('Global License & Trial Report', html);
+  };
 
   // Load shops once key is present (or after user saves)
   histBind();
