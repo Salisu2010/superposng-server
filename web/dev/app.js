@@ -2615,6 +2615,43 @@ async function refreshGlobalDashboard() {
   ], recentRows, 'No recent revoke/reset activity.');
 }
 
+function openHistoryForApp(app, tab = "licenses") {
+  try {
+    const safeApp = String(app || 'ALL').toUpperCase();
+    const allowedTabs = new Set(["licenses", "licenseAudit", "trials", "trialAudit", "blocks", "restores"]);
+    const safeTab = allowedTabs.has(String(tab || "licenses")) ? String(tab) : "licenses";
+
+    const histSection = $("historySection") || document.getElementById("historySection");
+    const histApp = $("histApp") || document.getElementById("histApp");
+    const histButtons = Array.from(document.querySelectorAll("button[data-hist-tab]"));
+    const targetBtn = histButtons.find((b) => String(b.getAttribute("data-hist-tab") || "") === safeTab);
+
+    if (histApp) histApp.value = safeApp;
+    _histTab = safeTab;
+    _histPage = 1;
+
+    histButtons.forEach((b) => b.classList.toggle("active", b === targetBtn));
+    if (targetBtn && typeof targetBtn.click === 'function') {
+      targetBtn.click();
+    } else {
+      histRenderStats();
+      histRenderTable();
+    }
+
+    histRefresh(true);
+
+    if (histSection && typeof histSection.scrollIntoView === 'function') {
+      histSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  } catch (e) {
+    console.error('openHistoryForApp error:', e);
+    toast(e?.message || 'Unable to open history view');
+  }
+}
+
+
 window.openHistoryForApp = openHistoryForApp;
 
 window.addEventListener("load", () => {
