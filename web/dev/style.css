@@ -196,3 +196,25 @@ input::placeholder{color:rgba(142,160,194,0.7)}
 .kpiSub{font-size:11px;color:var(--muted);margin-top:6px}
 @media(max-width:1000px){.kpiGrid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:600px){.kpiGrid{grid-template-columns:1fr}}
+
+.historyTabs{display:flex;gap:8px;flex-wrap:wrap}
+.tabBtn{padding:10px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(7,11,20,.55);color:var(--text);cursor:pointer;font-weight:700}
+.tabBtn.active{background:linear-gradient(135deg,rgba(43,108,255,.95),rgba(124,58,237,.82));border-color:rgba(255,255,255,.14)}
+.subCard{padding:14px;border-radius:14px;border:1px solid var(--line);background:rgba(7,11,20,.38)}
+.subTitle{font-size:13px;font-weight:800;margin-bottom:10px}
+.stackList{display:flex;flex-direction:column;gap:8px}
+.stackItem{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.02)}
+.stackItem code{font-size:12px}
+
+
+.trendGrid{display:grid;gap:10px}
+.trendRow{display:grid;grid-template-columns:90px 1fr;gap:10px;align-items:center}
+.trendLabel{font-size:12px;color:var(--muted);font-weight:700}
+.trendBars{display:flex;gap:6px;align-items:flex-end;min-height:64px}
+.trendBar{flex:1;min-width:0;padding:8px 6px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
+.trendNums{display:flex;flex-wrap:wrap;gap:4px;font-size:11px;color:var(--muted)}
+.trendNums span{display:inline-flex;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,.05)}
+.trendHead{font-size:11px;color:var(--muted);margin-bottom:6px}
+.miniTable{width:100%;border-collapse:collapse}
+.miniTable th,.miniTable td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:12px;text-align:left}
+.miniTable th{color:var(--muted)}
