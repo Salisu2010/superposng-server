@@ -223,6 +223,261 @@ function normalizeReason(v) {
   return trim(v).replace(/\s+/g, " ");
 }
 
+
+
+function firstNonEmpty(...vals) {
+  for (const v of vals) {
+    const t = trim(v);
+    if (t) return t;
+  }
+  return "";
+}
+function extractDeviceIdentity(row = {}) {
+  const deviceId = firstNonEmpty(row?.deviceKey, row?.boundDeviceId, row?.deviceId, row?.ownerDeviceId, row?.ownerAndroidId, row?.targetDeviceId);
+  const androidId = firstNonEmpty(row?.androidId, row?.ownerAndroidId);
+  const installId = firstNonEmpty(row?.installId, row?.installationId);
+  const fpHash = firstNonEmpty(row?.fpHash, row?.devHash, row?.fingerprintHash);
+  const primary = firstNonEmpty(deviceId, androidId, installId, fpHash);
+  return {
+    deviceKey: primary,
+    deviceId,
+    androidId,
+    installId,
+    fpHash,
+  };
+}
+function extractIdentitySet(row = {}) {
+  const ids = extractDeviceIdentity(row);
+  return [ids.deviceKey, ids.deviceId, ids.androidId, ids.installId, ids.fpHash].filter(Boolean);
+}
+function collectDeviceSignals(db, { appFilter = '', fromTs = 0, toTs = 0 } = {}) {
+  const pushSignal = (out, app, row = {}, source = '', extra = {}) => {
+    const ids = extractDeviceIdentity(row);
+    const ts = Number(row?.updatedAt || row?.createdAt || row?.startAt || row?.expiresAt || 0);
+    if ((fromTs || toTs) && !inTsRange(ts, fromTs, toTs)) return;
+    if (!ids.deviceKey && !ids.deviceId && !ids.androidId && !ids.installId && !ids.fpHash) return;
+    const appNorm = normalizeApp(app || row?.app || 'SPNG');
+    if (appFilter && appNorm !== appFilter) return;
+    out.push({
+      app: appNorm,
+      source,
+      createdAt: ts,
+      updatedAt: ts,
+      ownerPhone: trim(row?.ownerPhone || row?.phone || row?.contactPhone || ''),
+      ownerEmail: trim(row?.ownerEmail || row?.email || row?.contactEmail || ''),
+      shopId: trim(row?.shopId || row?.clinicId || row?.hotelId || row?.propertyId || row?.entityId || ''),
+      licenseId: trim(row?.licenseId || ''),
+      token: trim(row?.token || ''),
+      status: trim(row?.status || ''),
+      trialType: trim(row?.type || ''),
+      ...ids,
+      ...extra,
+    });
+  };
+
+  const out = [];
+  for (const row of collectAllLicenses(db)) pushSignal(out, row?.app || 'SPNG', row, 'license');
+  for (const row of (Array.isArray(db.pendingActivations) ? db.pendingActivations : [])) pushSignal(out, row?.app || 'SPNG', row, 'pending');
+  for (const row of (Array.isArray(db.trials) ? db.trials : [])) pushSignal(out, row?.app || 'SPNG', row, 'trial');
+  for (const row of (Array.isArray(db.trialAuditLogs) ? db.trialAuditLogs : [])) pushSignal(out, row?.app || 'SPNG', row, 'trialAudit', { eventType: trim(row?.type || '') });
+  for (const row of (Array.isArray(db.trialBlocks) ? db.trialBlocks : [])) pushSignal(out, row?.app || 'SPNG', row, 'trialBlock', { eventType: trim(row?.reason || row?.type || 'block') });
+  for (const row of collectRestoreAudit(db)) pushSignal(out, row?.app || 'SPNG', row, 'restore', { reused: row?.reused === true, action: trim(row?.action || '') });
+  for (const row of (Array.isArray(db.licenseAuditLogs) ? db.licenseAuditLogs : [])) pushSignal(out, row?.app || 'SPNG', row, 'licenseAudit', { eventType: trim(row?.type || '') });
+  for (const row of (Array.isArray(db.devices) ? db.devices : [])) pushSignal(out, row?.app || 'SPNG', row, 'devices');
+  return out;
+}
+function buildDeviceIntelligence(db, { appFilter = '', fromTs = 0, toTs = 0 } = {}) {
+  const signals = collectDeviceSignals(db, { appFilter, fromTs, toTs });
+  const devices = new Map();
+  for (const row of signals) {
+    const app = normalizeApp(row?.app || 'SPNG');
+    const key = `${app}|${trim(row?.deviceKey || '')}`;
+    if (!trim(row?.deviceKey)) continue;
+    let entry = devices.get(key);
+    if (!entry) {
+      entry = {
+        app,
+        deviceKey: trim(row?.deviceKey),
+        deviceId: trim(row?.deviceId),
+        androidId: trim(row?.androidId),
+        installId: trim(row?.installId),
+        fpHash: trim(row?.fpHash),
+        firstSeenAt: Number(row?.createdAt || row?.updatedAt || 0),
+        lastSeenAt: Number(row?.updatedAt || row?.createdAt || 0),
+        sources: new Set(),
+        phones: new Set(),
+        emails: new Set(),
+        entities: new Set(),
+        appsSeen: new Set([app]),
+        eventTypes: new Set(),
+        tokenSet: new Set(),
+        licenseSet: new Set(),
+        identitySet: new Set(),
+        sourceRows: 0,
+        blockedHits: 0,
+        tamperHits: 0,
+        revokeHits: 0,
+        restoreHits: 0,
+        multiIdentityHints: 0,
+      };
+      devices.set(key, entry);
+    }
+    entry.firstSeenAt = entry.firstSeenAt ? Math.min(entry.firstSeenAt, Number(row?.createdAt || row?.updatedAt || 0) || entry.firstSeenAt) : Number(row?.createdAt || row?.updatedAt || 0);
+    entry.lastSeenAt = Math.max(entry.lastSeenAt || 0, Number(row?.updatedAt || row?.createdAt || 0));
+    entry.sources.add(trim(row?.source || 'unknown'));
+    entry.sourceRows += 1;
+    if (trim(row?.ownerPhone)) entry.phones.add(trim(row.ownerPhone));
+    if (trim(row?.ownerEmail)) entry.emails.add(trim(row.ownerEmail));
+    if (trim(row?.shopId)) entry.entities.add(trim(row.shopId));
+    if (trim(row?.token)) entry.tokenSet.add(trim(row.token));
+    if (trim(row?.licenseId)) entry.licenseSet.add(trim(row.licenseId));
+    for (const ident of [row?.deviceId, row?.androidId, row?.installId, row?.fpHash]) if (trim(ident)) entry.identitySet.add(trim(ident));
+    const evt = trim(row?.eventType || row?.trialType || row?.action || row?.status || '');
+    if (evt) entry.eventTypes.add(evt);
+    if (/(block|blacklist|deny|denied)/i.test(evt) || row?.source === 'trialBlock') entry.blockedHits += 1;
+    if (/(tamper|reinstall|date|time|multi_identity)/i.test(evt)) entry.tamperHits += 1;
+    if (/(revoke|reset_binding)/i.test(evt)) entry.revokeHits += 1;
+    if (row?.reused === true || /restore/i.test(evt)) entry.restoreHits += 1;
+    if (entry.identitySet.size > 2) entry.multiIdentityHints = entry.identitySet.size - 2;
+  }
+
+  const rows = Array.from(devices.values()).map((entry) => {
+    const phoneCount = entry.phones.size;
+    const emailCount = entry.emails.size;
+    const accountCount = new Set([...entry.phones, ...entry.emails, ...entry.entities]).size;
+    const clusterKey = entry.fpHash || entry.androidId || entry.installId || entry.deviceId || entry.deviceKey;
+    const suspiciousReasons = [];
+    let fraudScore = 0;
+    if (entry.blockedHits > 0) { fraudScore += Math.min(40, entry.blockedHits * 10); suspiciousReasons.push(`blocked ${entry.blockedHits}x`); }
+    if (entry.tamperHits > 0) { fraudScore += Math.min(30, entry.tamperHits * 10); suspiciousReasons.push(`tamper ${entry.tamperHits}x`); }
+    if (accountCount > 1) { fraudScore += Math.min(25, (accountCount - 1) * 8); suspiciousReasons.push(`${accountCount} accounts`); }
+    if (entry.licenseSet.size > 1) { fraudScore += Math.min(20, (entry.licenseSet.size - 1) * 6); suspiciousReasons.push(`${entry.licenseSet.size} licenses`); }
+    if (entry.identitySet.size > 2) { fraudScore += Math.min(15, (entry.identitySet.size - 2) * 4); suspiciousReasons.push(`${entry.identitySet.size} identities`); }
+    if (entry.revokeHits > 0) { fraudScore += Math.min(15, entry.revokeHits * 5); suspiciousReasons.push(`revoked ${entry.revokeHits}x`); }
+    fraudScore = Math.max(0, Math.min(100, fraudScore));
+    const riskLevel = fraudScore >= 70 ? 'HIGH' : fraudScore >= 40 ? 'MEDIUM' : 'LOW';
+    return {
+      app: entry.app,
+      clusterKey,
+      deviceKey: entry.deviceKey,
+      deviceId: entry.deviceId,
+      androidId: entry.androidId,
+      installId: entry.installId,
+      fpHash: entry.fpHash,
+      firstSeenAt: entry.firstSeenAt,
+      lastSeenAt: entry.lastSeenAt,
+      sourceRows: entry.sourceRows,
+      sources: Array.from(entry.sources),
+      accountCount,
+      phoneCount,
+      emailCount,
+      entityCount: entry.entities.size,
+      tokenCount: entry.tokenSet.size,
+      licenseCount: entry.licenseSet.size,
+      identityCount: entry.identitySet.size,
+      blockedHits: entry.blockedHits,
+      tamperHits: entry.tamperHits,
+      revokeHits: entry.revokeHits,
+      restoreHits: entry.restoreHits,
+      fraudScore,
+      riskLevel,
+      suspicious: fraudScore >= 40,
+      suspiciousReasons,
+      phones: Array.from(entry.phones).slice(0, 6),
+      emails: Array.from(entry.emails).slice(0, 6),
+      entities: Array.from(entry.entities).slice(0, 6),
+    };
+  });
+
+  const clusterMap = new Map();
+  for (const row of rows) {
+    const key = `${row.app}|${row.clusterKey}`;
+    const prev = clusterMap.get(key) || { app: row.app, clusterKey: row.clusterKey, devices: 0, accounts: new Set(), licenses: 0, blockedHits: 0, fraudMax: 0 };
+    prev.devices += 1;
+    row.phones.forEach((x) => prev.accounts.add(`P:${x}`));
+    row.emails.forEach((x) => prev.accounts.add(`E:${x}`));
+    row.entities.forEach((x) => prev.accounts.add(`N:${x}`));
+    prev.licenses += Number(row.licenseCount || 0);
+    prev.blockedHits += Number(row.blockedHits || 0);
+    prev.fraudMax = Math.max(prev.fraudMax, Number(row.fraudScore || 0));
+    clusterMap.set(key, prev);
+  }
+  const clusters = Array.from(clusterMap.values())
+    .map((x) => ({ app: x.app, clusterKey: x.clusterKey, deviceCount: x.devices, accountCount: x.accounts.size, licenseCount: x.licenses, blockedHits: x.blockedHits, fraudScore: x.fraudMax }))
+    .sort((a, b) => (b.deviceCount - a.deviceCount) || (b.accountCount - a.accountCount) || (b.fraudScore - a.fraudScore));
+
+  const suspiciousDevices = rows.filter((x) => x.suspicious).sort((a, b) => (b.fraudScore - a.fraudScore) || (b.blockedHits - a.blockedHits) || (b.lastSeenAt - a.lastSeenAt));
+  const multiAccountDevices = rows.filter((x) => x.accountCount > 1).sort((a, b) => (b.accountCount - a.accountCount) || (b.fraudScore - a.fraudScore));
+  const fraudScores = [...rows].sort((a, b) => (b.fraudScore - a.fraudScore) || (b.lastSeenAt - a.lastSeenAt));
+  const perApp = {};
+  for (const app of ['SPNG', 'CPNG', 'STMN', 'RMP']) {
+    const list = rows.filter((x) => x.app === app);
+    perApp[app] = {
+      devices: list.length,
+      suspicious: list.filter((x) => x.suspicious).length,
+      multiAccount: list.filter((x) => x.accountCount > 1).length,
+      clusters: clusters.filter((x) => x.app === app && x.deviceCount > 0).length,
+      avgFraudScore: list.length ? Math.round(list.reduce((n, x) => n + Number(x.fraudScore || 0), 0) / list.length) : 0,
+    };
+  }
+  return {
+    totalDevices: rows.length,
+    suspiciousCount: suspiciousDevices.length,
+    multiAccountCount: multiAccountDevices.length,
+    clusterCount: clusters.length,
+    rows,
+    suspiciousDevices,
+    multiAccountDevices,
+    clusters,
+    fraudScores,
+    perApp,
+  };
+}
+function buildDeviceDetail(db, { app = '', deviceKey = '' } = {}) {
+  const appNorm = normalizeApp(app || 'SPNG');
+  const intel = buildDeviceIntelligence(db, { appFilter: appNorm });
+  const row = intel.rows.find((x) => trim(x.deviceKey) === trim(deviceKey)) || null;
+  if (!row) return null;
+  const idSet = new Set([row.deviceKey, row.deviceId, row.androidId, row.installId, row.fpHash].map(trim).filter(Boolean));
+  const signals = collectDeviceSignals(db, { appFilter: appNorm }).filter((s) => {
+    const vals = [s.deviceKey, s.deviceId, s.androidId, s.installId, s.fpHash].map(trim).filter(Boolean);
+    return vals.some((v) => idSet.has(v));
+  });
+  const timeline = signals.map((s) => ({
+    app: normalizeApp(s.app || appNorm),
+    source: trim(s.source || ''),
+    type: trim(s.eventType || s.status || s.trialType || s.source || 'event'),
+    status: trim(s.status || ''),
+    token: trim(s.token || ''),
+    licenseId: trim(s.licenseId || ''),
+    entityId: trim(s.shopId || ''),
+    ownerPhone: trim(s.ownerPhone || ''),
+    ownerEmail: trim(s.ownerEmail || ''),
+    deviceKey: trim(s.deviceKey || ''),
+    deviceId: trim(s.deviceId || ''),
+    androidId: trim(s.androidId || ''),
+    installId: trim(s.installId || ''),
+    fpHash: trim(s.fpHash || ''),
+    createdAt: Number(s.createdAt || s.updatedAt || 0),
+    updatedAt: Number(s.updatedAt || s.createdAt || 0),
+  })).sort((a,b)=>Number(b.updatedAt||0)-Number(a.updatedAt||0));
+  const licenseIds = [...new Set(timeline.map((x)=>x.licenseId).filter(Boolean))];
+  const tokens = [...new Set(timeline.map((x)=>x.token).filter(Boolean))];
+  const entities = [...new Set(timeline.map((x)=>x.entityId).filter(Boolean))];
+  const blocks = (Array.isArray(db.trialBlocks) ? db.trialBlocks : []).filter((b) => normalizeApp(b.app || 'SPNG') === appNorm).filter((b) => [b.deviceId,b.androidId,b.installId,b.fpHash].map(trim).some((v)=>idSet.has(v))).sort((a,b)=>Number(b.updatedAt||b.createdAt||0)-Number(a.updatedAt||a.createdAt||0));
+  const audits = (Array.isArray(db.licenseAuditLogs) ? db.licenseAuditLogs : []).filter((a) => normalizeApp(a.app || 'SPNG') === appNorm).filter((a) => [a.deviceId,a.androidId,a.installId,a.fpHash].map(trim).some((v)=>idSet.has(v)) || (a.licenseId && licenseIds.includes(trim(a.licenseId))) || (a.token && tokens.includes(trim(a.token)))).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  const restores = collectRestoreAudit(db).filter((r) => normalizeApp(r.app || 'SPNG') === appNorm).filter((r) => [r.deviceId,r.androidId,r.installId,r.fpHash].map(trim).some((v)=>idSet.has(v)) || (r.entityId && entities.includes(trim(r.entityId)))).sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+  return {
+    device: row,
+    related: { licenseIds, tokens, entities },
+    stats: { events: timeline.length, activeBlocks: blocks.filter((x)=>x.active!==false).length, licenseAudit: audits.length, restores: restores.length },
+    timeline: timeline.slice(0, 250),
+    blocks: blocks.slice(0, 50),
+    licenseAudit: audits.slice(0, 50),
+    restores: restores.slice(0, 50),
+  };
+}
+
 function genToken(prefix = "SPNG") {
   // Human-friendly: SPNG-XXXX-XXXX
   const part = () => crypto.randomBytes(2).toString("hex").toUpperCase();
@@ -1633,6 +1888,7 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
   const trialBlocks = db.trialBlocks.filter((x) => (!appFilter || normalizeApp(x?.app || 'SPNG') === appFilter) && (!customRange || inTsRange(x?.updatedAt || x?.createdAt || 0, fromTs, toTs)));
   const trials = db.trials.filter((x) => !appFilter || normalizeApp(x?.app || 'SPNG') === appFilter);
   const restoreAudit = filterRestoreAudit(collectRestoreAudit(db), { appFilter, fromTs, toTs });
+  const deviceIntel = buildDeviceIntelligence(db, { appFilter, fromTs, toTs });
 
   const apps = appFilter ? [appFilter] : ['SPNG', 'CPNG', 'STMN', 'RMP'];
   const nowTsValue = now();
@@ -1698,6 +1954,7 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
     const appLic = licenses.filter((x) => normalizeApp(x?.app || 'SPNG') === app);
     const appAuditRange = licenseAudit.filter((x) => normalizeApp(x?.app || 'SPNG') === app);
     const appTrialRange = trialAudit.filter((x) => normalizeApp(x?.app || 'SPNG') === app);
+    const appDevice = deviceIntel?.perApp?.[app] || { devices: 0, suspicious: 0, multiAccount: 0, clusters: 0, avgFraudScore: 0 };
     return {
       app,
       total: appLic.length,
@@ -1709,6 +1966,11 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
       resetToday: appAuditRange.filter((x) => trim(x?.type) === 'reset_binding').length,
       blockedToday: appTrialRange.filter((x) => /(block|denied|tamper|reinstall|multi_identity)/i.test(trim(x?.type))).length,
       restores: restoreAudit.filter((x) => normalizeApp(x?.app || 'SPNG') === app).length,
+      deviceCount: Number(appDevice.devices || 0),
+      suspiciousDevices: Number(appDevice.suspicious || 0),
+      multiAccountDevices: Number(appDevice.multiAccount || 0),
+      clusterCount: Number(appDevice.clusters || 0),
+      avgFraudScore: Number(appDevice.avgFraudScore || 0),
     };
   });
 
@@ -1776,6 +2038,10 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
       blocksActive: trialBlocks.filter((x) => x?.active !== false).length,
       restoresTracked: restoreAudit.length,
       restoredEntities: restoreAudit.filter((x)=>x.reused).length,
+      totalDevices: Number(deviceIntel.totalDevices || 0),
+      suspiciousDevices: Number(deviceIntel.suspiciousCount || 0),
+      multiAccountDevices: Number(deviceIntel.multiAccountCount || 0),
+      deviceClusters: Number(deviceIntel.clusterCount || 0),
       rangeStart,
       rangeEnd,
     },
@@ -1787,9 +2053,35 @@ r.get("/global-dashboard", requireDevKey, (req, res) => {
     topReasons,
     restoreReasons,
     trend: trendBuckets.map(({ startTs, endTs, ...rest }) => rest),
+    deviceIntelligence: {
+      totalDevices: Number(deviceIntel.totalDevices || 0),
+      suspiciousCount: Number(deviceIntel.suspiciousCount || 0),
+      multiAccountCount: Number(deviceIntel.multiAccountCount || 0),
+      clusterCount: Number(deviceIntel.clusterCount || 0),
+      perApp: deviceIntel.perApp,
+      fingerprintClusters: deviceIntel.clusters.slice(0, 16),
+      suspiciousDevices: deviceIntel.suspiciousDevices.slice(0, 16),
+      multiAccountDevices: deviceIntel.multiAccountDevices.slice(0, 16),
+      fraudScores: deviceIntel.fraudScores.slice(0, 20),
+    },
   });
 });
 
+
+// ------------------------------------------------------------
+// DEVICE DETAIL DRILL-DOWN
+// GET /api/dev/device-detail?app=CPNG&deviceKey=...
+// ------------------------------------------------------------
+r.get("/device-detail", requireDevKey, (req, res) => {
+  const db = readDB();
+  const appParam = trim(req.query?.app).toUpperCase();
+  const app = normalizeApp(appParam || 'SPNG');
+  const deviceKey = trim(req.query?.deviceKey || req.query?.deviceId || '');
+  if (!deviceKey) return res.status(400).json({ ok:false, error:'deviceKey required' });
+  const detail = buildDeviceDetail(db, { app, deviceKey });
+  if (!detail) return res.status(404).json({ ok:false, error:'Device not found' });
+  return res.json({ ok:true, app, ...detail });
+});
 
 // ------------------------------------------------------------
 // BLACKLIST / DEVICE BLOCK (DEV KEY)

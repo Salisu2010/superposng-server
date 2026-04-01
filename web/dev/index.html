@@ -100,6 +100,26 @@
           <div id="globalAbuse" class="stackList"></div>
         </div>
       </div>
+      <div class="grid2" style="margin-top:16px;">
+        <div class="subCard">
+          <div class="subTitle" id="globalClustersTitle">Device Fingerprint Clusters (0)</div>
+          <div id="globalClusters" class="stackList"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="globalSuspiciousTitle">Suspicious Devices (0)</div>
+          <div id="globalSuspicious" class="stackList"></div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px;">
+        <div class="subCard">
+          <div class="subTitle" id="globalMultiAccountTitle">Multi-Account Devices (0)</div>
+          <div id="globalMultiAccount" class="stackList"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="globalFraudTitle">Fraud Score Per Device (0)</div>
+          <div id="globalFraud" class="results"></div>
+        </div>
+      </div>
       <div class="subCard" style="margin-top:16px;">
         <div class="subTitle" id="globalRevokesTitle">Recent Revokes / Binding Resets (0)</div>
         <div id="globalRevokes" class="results"></div>
@@ -1052,6 +1072,53 @@
       </div>
 
       <div id="histTableWrap" style="margin-top:14px"></div>
+    </section>
+
+    <section class="card" id="deviceDetailSection">
+      <h2>Device Detail Drill-Down</h2>
+      <div class="grid4">
+        <div>
+          <label>App</label>
+          <select id="deviceDetailApp">
+            <option value="CPNG">CLP / CPNG</option>
+            <option value="SPNG">SPNG</option>
+            <option value="STMN">SMTN / STMN</option>
+            <option value="RMP">RMP</option>
+          </select>
+        </div>
+        <div style="grid-column:span 2">
+          <label>Device Key</label>
+          <input id="deviceDetailKey" placeholder="paste deviceKey / deviceId / androidId / installId / fpHash" />
+        </div>
+        <div style="display:flex;align-items:end;gap:8px">
+          <button id="btnDeviceDetailLoad" class="btn primary">Load Device</button>
+        </div>
+      </div>
+      <div id="deviceDetailMeta" class="muted" style="margin-top:8px">No device selected yet.</div>
+      <div id="deviceDetailStats" class="kpiGrid" style="margin-top:12px"></div>
+      <div class="grid2" style="margin-top:16px">
+        <div class="subCard">
+          <div class="subTitle">Actions</div>
+          <div class="grid2">
+            <div><label>Reason</label><input id="deviceActionReason" placeholder="e.g. abuse / manual review / customer request" /></div>
+            <div><label>Months</label><input id="deviceActionMonths" type="number" min="1" value="1" /></div>
+          </div>
+          <div class="row" style="margin-top:10px;flex-wrap:wrap">
+            <button id="btnDeviceBlacklist" class="btn danger">Blacklist Trial</button>
+            <button id="btnDeviceUnblock" class="btn">Unblock Trial</button>
+            <button id="btnDeviceRevoke" class="btn danger">Revoke License</button>
+            <button id="btnDeviceReset" class="btn">Reset Binding</button>
+          </div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle">Identities / Related</div>
+          <div id="deviceIdentityList" class="stackList"></div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px">
+        <div class="subCard"><div class="subTitle">Related Licenses / Blocks</div><div id="deviceRelatedTable" class="results"></div></div>
+        <div class="subCard"><div class="subTitle">Full Event Timeline</div><div id="deviceTimeline" class="results"></div></div>
+      </div>
     </section>
 
 </main>

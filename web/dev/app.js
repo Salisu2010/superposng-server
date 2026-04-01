@@ -2176,9 +2176,18 @@ function globalRenderSectionCounts(data) {
   const expiring = Array.isArray(data?.expiringSoonRows) ? data.expiringSoonRows : [];
   const abuse = Array.isArray(data?.topAbuse) ? data.topAbuse : [];
   const revokes = Array.isArray(data?.recentRevokes) ? data.recentRevokes : [];
+  const intel = data?.deviceIntelligence || {};
+  const clusters = Array.isArray(intel?.fingerprintClusters) ? intel.fingerprintClusters : [];
+  const suspicious = Array.isArray(intel?.suspiciousDevices) ? intel.suspiciousDevices : [];
+  const multi = Array.isArray(intel?.multiAccountDevices) ? intel.multiAccountDevices : [];
+  const fraud = Array.isArray(intel?.fraudScores) ? intel.fraudScores : [];
   setHtml('globalReasonsTitle', `<div class="sectionHeadRow"><span>Top Revoke / Block Reasons (${reasons.length})</span><span class="sectionChipRow">${appCountChips(reasons, (r) => Number(r.count || 0))}</span></div>`);
   setHtml('globalExpiringTitle', `<div class="sectionHeadRow"><span>Expiring Soon (${expiring.length})</span><span class="sectionChipRow">${appCountChips(expiring)}</span></div>`);
   setHtml('globalAbuseTitle', `<div class="sectionHeadRow"><span>Top Abused Identities (${abuse.length})</span><span class="sectionChipRow">${appCountChips(abuse, (r) => Number(r.count || 0))}</span></div>`);
+  setHtml('globalClustersTitle', `<div class="sectionHeadRow"><span>Device Fingerprint Clusters (${clusters.length})</span><span class="sectionChipRow">${appCountChips(clusters)}</span></div>`);
+  setHtml('globalSuspiciousTitle', `<div class="sectionHeadRow"><span>Suspicious Devices (${suspicious.length})</span><span class="sectionChipRow">${appCountChips(suspicious)}</span></div>`);
+  setHtml('globalMultiAccountTitle', `<div class="sectionHeadRow"><span>Multi-Account Devices (${multi.length})</span><span class="sectionChipRow">${appCountChips(multi)}</span></div>`);
+  setHtml('globalFraudTitle', `<div class="sectionHeadRow"><span>Fraud Score Per Device (${fraud.length})</span><span class="sectionChipRow">${appCountChips(fraud)}</span></div>`);
   setHtml('globalRevokesTitle', `<div class="sectionHeadRow"><span>Recent Revokes / Binding Resets (${revokes.length})</span><span class="sectionChipRow">${appCountChips(revokes)}</span></div>`);
 }
 let _histPage = 1;
@@ -2498,9 +2507,13 @@ async function refreshGlobalDashboard() {
     overviewEl.innerHTML = [
       ["Total licenses", ov.totalLicenses, "Across selected app scope"],
       ["Active licenses", ov.activeLicenses, "Valid + not expired"],
+      ["Tracked devices", Number(ov.totalDevices || 0) || (Array.isArray(data?.appCards) ? data.appCards.reduce((n,x)=>n+Number(x.deviceCount||0),0) : 0), "Unified device count"],
       ["Expiring soon", ov.expiringSoon, "Next 14 days"],
       [revokeLabel, ov.revokedToday, "License revokes + resets"],
       [blockedLabel, ov.blockedToday, "Trial abuse / deny events"],
+      ["Suspicious devices", ov.suspiciousDevices, "Fraud score >= 40"],
+      ["Multi-account devices", ov.multiAccountDevices, "Same device across multiple accounts"],
+      ["Device clusters", ov.deviceClusters, "Fingerprint-linked groups"],
       ["Trials tracked", ov.trialsTracked, "Historic records"],
       ["Restores tracked", ov.restoresTracked, `Recovered ${Number(ov.restoredEntities || 0)}`],
     ].map(([label, value, sub]) => `<div class="kpiCard"><div class="kpiLabel">${escHtml(label)}</div><div class="kpiValue">${escHtml(String(value ?? 0))}</div><div class="kpiSub">${escHtml(sub)}</div></div>`).join("");
@@ -2517,8 +2530,8 @@ async function refreshGlobalDashboard() {
           </div>
           <button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'licenses')">Open History</button>
         </div>
-        <div class="kpiSub">Active • Total ${Number(x.total || 0)} • Soon ${Number(x.expiringSoon || 0)}</div>
-        <div class="kpiChipRow">${chip('Active', Number(x.active || 0))}${chip('Total', Number(x.total || 0))}${chip('Soon', Number(x.expiringSoon || 0))}${chip('Blocked', Number(x.blockedToday || 0))}</div>
+        <div class="kpiSub">Active • Total ${Number(x.total || 0)} • Soon ${Number(x.expiringSoon || 0)} • Devices ${Number(x.deviceCount || 0)}</div>
+        <div class="kpiChipRow">${chip('Active', Number(x.active || 0))}${chip('Total', Number(x.total || 0))}${chip('Soon', Number(x.expiringSoon || 0))}${chip('Devices', Number(x.deviceCount || 0))}${chip('Blocked', Number(x.blockedToday || 0))}</div>
         <div class="trendNums" style="margin-top:8px;">
           <span>M ${Number(x.monthly || 0)}</span>
           <span>Y ${Number(x.yearly || 0)}</span>
@@ -2526,6 +2539,10 @@ async function refreshGlobalDashboard() {
           <span>Reset ${Number(x.resetToday || 0)}</span>
           <span>Blocked ${Number(x.blockedToday || 0)}</span>
           <span>Restore ${Number(x.restores || 0)}</span>
+          <span>Suspicious ${Number(x.suspiciousDevices || 0)}</span>
+          <span>Multi ${Number(x.multiAccountDevices || 0)}</span>
+          <span>Clusters ${Number(x.clusterCount || 0)}</span>
+          <span>Fraud ${Number(x.avgFraudScore || 0)}</span>
         </div>
       </div>
     `).join("");
@@ -2559,6 +2576,32 @@ async function refreshGlobalDashboard() {
     const list = data?.topAbuse || [];
     abuseEl.innerHTML = (action === 'ACTIVATIONS') ? '<div class="muted">Switch action filter to ABUSE to view device abuse hotspots.</div>' : (list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.kind || '')}</code><div class="muted"><code>${escHtml(x.value || '')}</code></div></div><div class="row"><div class="pill">${Number(x.count || 0)}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'trialAudit')">Open</button></div></div>`).join("") : '<div class="muted">No abuse hotspots yet.</div>');
   }
+
+  const intel = data?.deviceIntelligence || {};
+  const clusterEl = $('globalClusters');
+  if (clusterEl) {
+    const list = intel?.fingerprintClusters || [];
+    clusterEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.clusterKey || '-')}</code><div class="muted">Devices ${Number(x.deviceCount || 0)} • Accounts ${Number(x.accountCount || 0)} • Licenses ${Number(x.licenseCount || 0)}</div></div><div class="row"><div class="pill">Fraud ${Number(x.fraudScore || 0)}</div><button class="btn" onclick="openDeviceDetail('${escHtml(x.app || 'CPNG')}', '${escHtml(x.clusterKey || x.deviceKey || '')}')">Open</button></div></div>`).join('') : '<div class="muted">No fingerprint clusters yet.</div>';
+  }
+  const suspiciousEl = $('globalSuspicious');
+  if (suspiciousEl) {
+    const list = intel?.suspiciousDevices || [];
+    suspiciousEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.deviceKey || x.deviceId || '-')}</code><div class="muted">${escHtml((x.suspiciousReasons || []).join(' • ') || 'High-risk activity')}</div></div><div class="row"><div class="pill">${escHtml(x.riskLevel || 'LOW')} ${Number(x.fraudScore || 0)}</div><button class="btn" onclick="openDeviceDetail('${escHtml(x.app || 'CPNG')}', '${escHtml(x.deviceKey || x.deviceId || '')}')">Open</button></div></div>`).join('') : '<div class="muted">No suspicious devices found.</div>';
+  }
+  const multiEl = $('globalMultiAccount');
+  if (multiEl) {
+    const list = intel?.multiAccountDevices || [];
+    multiEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.deviceKey || x.deviceId || '-')}</code><div class="muted">Accounts ${Number(x.accountCount || 0)} • Phones ${Number(x.phoneCount || 0)} • Emails ${Number(x.emailCount || 0)}</div></div><div class="row"><div class="pill">Fraud ${Number(x.fraudScore || 0)}</div><button class="btn" onclick="openDeviceDetail('${escHtml(x.app || 'CPNG')}', '${escHtml(x.deviceKey || x.deviceId || '')}')">Open</button></div></div>`).join('') : '<div class="muted">No multi-account devices yet.</div>';
+  }
+  renderMiniTable('globalFraud', [
+    { label: 'App', key: 'app' },
+    { label: 'Device', render: (r) => `<code>${escHtml(r.deviceKey || r.deviceId || '-')}</code>` },
+    { label: 'Fraud', render: (r) => `${Number(r.fraudScore || 0)} <span class="muted">${escHtml(r.riskLevel || 'LOW')}</span>` },
+    { label: 'Accounts', render: (r) => Number(r.accountCount || 0) },
+    { label: 'Blocked', render: (r) => Number(r.blockedHits || 0) },
+    { label: 'Tamper', render: (r) => Number(r.tamperHits || 0) },
+    { label: 'Last Seen', render: (r) => escHtml(fmtTs(r.lastSeenAt) || '-') },
+  ], intel?.fraudScores || [], 'No fraud-score data yet.');
 
   const recentRows = (data?.recentRevokes || []).filter((r) => action !== 'ACTIVATIONS');
   renderMiniTable("globalRevokes", [
@@ -2650,3 +2693,96 @@ window.addEventListener("load", () => {
     renderLiveRefreshMeta();
   }
 });
+let currentDeviceDetail = null;
+
+function deviceActionPayload() {
+  const d = currentDeviceDetail?.device || {};
+  const key = ($("deviceDetailKey")?.value || d.deviceKey || '').trim();
+  return {
+    app: ($("deviceDetailApp")?.value || d.app || 'CPNG').trim(),
+    deviceKey: key,
+    deviceId: d.deviceId || key,
+    androidId: d.androidId || '',
+    installId: d.installId || '',
+    fpHash: d.fpHash || '',
+    licenseId: (currentDeviceDetail?.related?.licenseIds || [])[0] || '',
+    token: (currentDeviceDetail?.related?.tokens || [])[0] || '',
+    reason: ($("deviceActionReason")?.value || '').trim(),
+  };
+}
+
+async function openDeviceDetail(app, deviceKey) {
+  if ($("deviceDetailApp")) $("deviceDetailApp").value = app || 'CPNG';
+  if ($("deviceDetailKey")) $("deviceDetailKey").value = deviceKey || '';
+  const sec = document.getElementById('deviceDetailSection');
+  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return loadDeviceDetail();
+}
+
+async function loadDeviceDetail() {
+  const app = ($("deviceDetailApp")?.value || 'CPNG').trim();
+  const deviceKey = ($("deviceDetailKey")?.value || '').trim();
+  if (!deviceKey) throw new Error('Device key is required');
+  const out = await api(`/api/dev/device-detail?app=${encodeURIComponent(app)}&deviceKey=${encodeURIComponent(deviceKey)}`);
+  currentDeviceDetail = out;
+  renderDeviceDetail(out);
+}
+
+function renderDeviceDetail(out) {
+  const d = out?.device || {};
+  setText('deviceDetailMeta', `${d.app || out.app || ''} • ${d.deviceKey || '-'} • Risk ${d.riskLevel || 'LOW'} ${Number(d.fraudScore || 0)}`);
+  const stats = [
+    ['Tracked events', out?.stats?.events || 0, 'Signals linked to this device'],
+    ['Active blocks', out?.stats?.activeBlocks || 0, 'Trial blocks / blacklist'],
+    ['License audit', out?.stats?.licenseAudit || 0, 'License actions found'],
+    ['Restores', out?.stats?.restores || 0, 'Restore / re-link activity'],
+    ['Accounts', d.accountCount || 0, 'Phones + emails + entities'],
+    ['Fraud score', d.fraudScore || 0, d.suspicious ? 'Suspicious device' : 'Normal watch'],
+  ];
+  const statsEl = $('deviceDetailStats');
+  if (statsEl) statsEl.innerHTML = stats.map(([a,b,c]) => `<div class="kpiCard"><div class="kpiLabel">${escHtml(a)}</div><div class="kpiValue">${Number(b||0)}</div><div class="kpiSub">${escHtml(c||'')}</div></div>`).join('');
+  const ids = [
+    ['Device key', d.deviceKey], ['Device ID', d.deviceId], ['Android ID', d.androidId], ['Install ID', d.installId], ['FP Hash', d.fpHash],
+    ['Phones', (d.phones||[]).join(' , ')], ['Emails', (d.emails||[]).join(' , ')], ['Entities', (d.entities||[]).join(' , ')],
+  ].filter(x => x[1]);
+  setHtml('deviceIdentityList', ids.map(([k,v]) => `<div class="stackItem"><div><b>${escHtml(k)}</b><div class="muted">${escHtml(String(v))}</div></div></div>`).join('') || '<div class="muted">No identities found.</div>');
+  const rel = [];
+  (out?.related?.licenseIds || []).forEach(x => rel.push({type:'License', value:x}));
+  (out?.related?.tokens || []).forEach(x => rel.push({type:'Token', value:x}));
+  (out?.blocks || []).slice(0,20).forEach(x => rel.push({type:'Block', value:`${x.reason || x.type || 'block'} • ${fmtTs(x.updatedAt || x.createdAt)}`}));
+  renderMiniTable('deviceRelatedTable', [{label:'Type', render:r=>escHtml(r.type||'')},{label:'Value', render:r=>escHtml(r.value||'')}], rel, 'No related license or block data.');
+  renderMiniTable('deviceTimeline', [{label:'Time', render:r=>fmtTs(r.updatedAt || r.createdAt)},{label:'Source', render:r=>escHtml(r.source||'')},{label:'Type', render:r=>escHtml(r.type||r.status||'')},{label:'Entity', render:r=>escHtml(r.entityId||'')}], out?.timeline || [], 'No timeline yet.');
+}
+
+async function doDeviceBlacklist() {
+  const p = deviceActionPayload();
+  await api('/api/trial/admin/blacklist', { method:'POST', body: JSON.stringify(p) });
+  toast('Device blacklisted');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+async function doDeviceUnblock() {
+  const p = deviceActionPayload();
+  await api('/api/trial/admin/unblock', { method:'POST', body: JSON.stringify(p) });
+  toast('Device unblocked');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+async function doDeviceRevoke() {
+  const p = deviceActionPayload();
+  if (!p.licenseId && !p.token) throw new Error('No linked license or token found for this device');
+  await api('/api/dev/revoke', { method:'POST', body: JSON.stringify({ app:p.app, licenseId:p.licenseId, token:p.token, deviceId:p.deviceId, reason:p.reason || 'Device drill-down revoke' }) });
+  toast('License revoked for device');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+async function doDeviceReset() {
+  const p = deviceActionPayload();
+  if (!p.licenseId && !p.token) throw new Error('No linked license or token found for this device');
+  await api('/api/dev/revoke', { method:'POST', body: JSON.stringify({ app:p.app, licenseId:p.licenseId, token:p.token, resetOnly:true, deviceId:p.deviceId, reason:p.reason || 'Device drill-down reset binding' }) });
+  toast('Binding reset for device');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+
+
