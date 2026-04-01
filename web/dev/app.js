@@ -2336,6 +2336,7 @@ function histRenderStats() {
     { label: "Restores", value: restores.length, sub: `Recovered ${restoredRows} • Fresh ${Math.max(0, restores.length-restoredRows)}`, chips: appCountChips(restores) },
   ]);
   const reasons = histCountReasons();
+  const abuse = histAbuseStats();
   const rBox = $("histReasons");
   if (rBox) rBox.innerHTML = reasons.length ? reasons.map(([key, count]) => {
     const parts = key.split("::");
