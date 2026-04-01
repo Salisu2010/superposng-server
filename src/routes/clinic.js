@@ -59,6 +59,32 @@ function pickDoctorName(x){ return toStr(x?.doctorName || x?.doctor_name || x?.d
 function pickStatus(x, fallback='pending'){ return toStr(x?.status || fallback) || fallback; }
 function cap(v){ const s = toStr(v); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
+function cleanExpiredClinicPairCodes(db, clinicId = ''){
+  db.clinicPairCodes = arr(db.clinicPairCodes).filter(x => {
+    if (!x) return false;
+    if (x.used) return true;
+    const exp = toNum(x.expiresAt, 0);
+    if (exp && exp < now()) return false;
+    if (clinicId && String(x.clinicId) !== String(clinicId)) return true;
+    return true;
+  });
+}
+function clinicPairPayload(baseUrl, pairCodeRow){
+  return {
+    mode: 'clinic_cloud_join',
+    pairingCode: pairCodeRow.pairingCode,
+    pairCode: pairCodeRow.pairingCode,
+    hospitalId: pairCodeRow.clinicId,
+    clinicId: pairCodeRow.clinicId,
+    branchId: toStr(pairCodeRow.branchId),
+    role: normRole(pairCodeRow.targetRole),
+    targetRole: normRole(pairCodeRow.targetRole),
+    baseUrl: toStr(baseUrl),
+    issuedAt: toNum(pairCodeRow.createdAt, now()),
+    expiresAt: toNum(pairCodeRow.expiresAt, 0)
+  };
+}
+
 function ensureRestoreAudit(db){
   db.accountRestoreAudit = Array.isArray(db.accountRestoreAudit) ? db.accountRestoreAudit : [];
 }
@@ -84,6 +110,7 @@ function ensureArrays(db){
   db.clinicBranches = arr(db.clinicBranches);
   db.clinicSyncCursor = arr(db.clinicSyncCursor);
   db.clinicChangeLog = arr(db.clinicChangeLog);
+  db.clinicPairCodes = arr(db.clinicPairCodes);
 
   db.clinicPatients = arr(db.clinicPatients);
   db.clinicBills = arr(db.clinicBills);
@@ -848,6 +875,126 @@ r.post('/auth/login', (req, res) => {
     return res.json({ ok:true, token, trusted: !!trusted, user: { userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) }, clinic: clinicPublicRow(clinic) });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'login failed' });
+  }
+});
+
+
+r.post('/clinic/pair/create', (req, res) => {
+  try {
+    const clinicId = authClinicId(req) || toStr(req.body?.hospitalId || req.body?.clinicId);
+    if (!clinicId) return res.status(400).json({ ok:false, error:'Missing clinic context' });
+    const db = readDB(); ensureArrays(db);
+    const clinic = db.clinics.find(x => String(x.clinicId) === String(clinicId));
+    if (!clinic) return res.status(404).json({ ok:false, error:'Hospital not found' });
+    const actorRole = normRole(req.auth?.role || req.body?.actorRole || 'Admin');
+    if (actorRole !== 'Admin') return res.status(403).json({ ok:false, error:'Only Admin can generate pair code' });
+    cleanExpiredClinicPairCodes(db, clinicId);
+    const targetRole = normRole(req.body?.targetRole || req.body?.role || 'Receptionist');
+    const branchId = toStr(req.body?.branchId || req.auth?.branchId);
+    const expiresInMinutes = Math.max(1, Math.min(60, toNum(req.body?.expiresInMinutes, 10)));
+    const pairCodeRow = {
+      pairId: 'cpair_' + nanoid(12),
+      pairingCode: ('CPAIR-' + nanoid(6)).toUpperCase(),
+      clinicId,
+      targetRole,
+      branchId,
+      createdAt: now(),
+      expiresAt: now() + (expiresInMinutes * 60 * 1000),
+      used: false,
+      createdBy: toStr(req.auth?.email || req.body?.actor || 'admin'),
+      createdByDeviceId: toStr(req.auth?.deviceId || req.body?.deviceId),
+      trusted: true
+    };
+    db.clinicPairCodes.push(pairCodeRow);
+    const qrPayload = clinicPairPayload(req.protocol + '://' + req.get('host'), pairCodeRow);
+    recordClinicChange(db, clinicId, 'pair_code_created', ['clinic_devices'], { pairId: pairCodeRow.pairId, targetRole, branchId }, { actor: pairCodeRow.createdBy, role: actorRole, deviceId: pairCodeRow.createdByDeviceId, branchId });
+    pushEvent(db, clinicId, 'pair_code_created', { pairCode: pairCodeRow.pairingCode, targetRole, branchId, expiresAt: pairCodeRow.expiresAt });
+    writeDB(db);
+    return res.json({ ok:true, pairCode: pairCodeRow.pairingCode, pairingCode: pairCodeRow.pairingCode, expiresAt: pairCodeRow.expiresAt, targetRole, branchId, qrPayload, qrText: JSON.stringify(qrPayload) });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'pair create failed' });
+  }
+});
+
+r.post('/clinic/pair/consume', (req, res) => {
+  try {
+    const pairCode = toStr(req.body?.pairCode || req.body?.pairingCode).toUpperCase();
+    const deviceId = toStr(req.body?.deviceId);
+    const deviceName = toStr(req.body?.deviceName || req.body?.name || 'Role Device');
+    const requestedRole = normRole(req.body?.role || req.body?.targetRole);
+    if (!pairCode || !deviceId) return res.status(400).json({ ok:false, error:'pairCode and deviceId are required' });
+    const db = readDB(); ensureArrays(db);
+    cleanExpiredClinicPairCodes(db);
+    const pair = db.clinicPairCodes.find(x => String(x.pairingCode).toUpperCase() === pairCode);
+    if (!pair) return res.status(404).json({ ok:false, error:'Invalid pair code' });
+    if (pair.used) return res.status(400).json({ ok:false, error:'Pair code already used' });
+    if (toNum(pair.expiresAt, 0) > 0 && now() > toNum(pair.expiresAt, 0)) return res.status(400).json({ ok:false, error:'Pair code expired' });
+    const clinic = db.clinics.find(x => String(x.clinicId) === String(pair.clinicId));
+    if (!clinic) return res.status(404).json({ ok:false, error:'Hospital not found' });
+    const role = requestedRole && requestedRole !== 'Cashier' ? requestedRole : normRole(pair.targetRole || 'Receptionist');
+    const existing = db.clinicDevices.find(x => String(x.clinicId) === String(pair.clinicId) && String(x.deviceId) === deviceId);
+    const deviceRow = {
+      deviceId, clinicId: pair.clinicId, role, trusted: true,
+      branchId: toStr(req.body?.branchId || pair.branchId),
+      name: deviceName, active: true, updatedAt: now(), createdAt: existing?.createdAt || now(),
+      pairedAt: now(), pairId: pair.pairId
+    };
+    if (existing) Object.assign(existing, deviceRow);
+    else db.clinicDevices.push(deviceRow);
+    let user = db.clinicUsers.find(x => String(x.clinicId) === String(pair.clinicId) && normRole(x.role) === role);
+    if (!user) {
+      const username = lower(role) + '@' + String(clinic.clinicCode || pair.clinicId).toLowerCase() + '.local';
+      user = ensureClinicUser(db, clinic, username, '1234', role);
+      user.fullName = cap(role) + ' Cloud';
+      user.branchId = deviceRow.branchId;
+      user.active = true;
+      user.updatedAt = now();
+    }
+    pair.used = true;
+    pair.usedAt = now();
+    pair.usedByDeviceId = deviceId;
+    pair.usedByRole = role;
+    pair.usedByBranchId = deviceRow.branchId;
+    const token = sign({ clinicId: pair.clinicId, hospitalId: pair.clinicId, deviceId, userId: user?.userId, email: user?.email, role, branchId: deviceRow.branchId, trusted: true, bootstrap: true });
+    recordClinicChange(db, pair.clinicId, 'device_joined', ['clinic_devices'], { deviceId, role, branchId: deviceRow.branchId, via: 'pair_code' }, { actor: user?.email || role, role, deviceId, branchId: deviceRow.branchId });
+    pushEvent(db, pair.clinicId, 'device_joined', { deviceId, deviceName, role, branchId: deviceRow.branchId, trusted: true, via: 'pair_code' });
+    writeDB(db);
+    return res.json({
+      ok:true,
+      paired:true,
+      trusted:true,
+      token,
+      hospitalId: pair.clinicId,
+      clinicId: pair.clinicId,
+      role,
+      branchId: deviceRow.branchId,
+      baseUrl: req.protocol + '://' + req.get('host'),
+      bootstrap: {
+        enabled: true,
+        base_url: req.protocol + '://' + req.get('host'),
+        hospital_id: pair.clinicId,
+        clinic_id: pair.clinicId,
+        branch_id: deviceRow.branchId,
+        token,
+        role,
+        trusted: true,
+        sync_mode: 'delta_push_pull',
+        conflict_resolution: 'updated_at'
+      },
+      cloud_config: {
+        enabled: true,
+        base_url: req.protocol + '://' + req.get('host'),
+        hospital_id: pair.clinicId,
+        clinic_id: pair.clinicId,
+        branch_id: deviceRow.branchId,
+        token,
+        device_name: deviceName
+      },
+      user: { userId: user?.userId, email: user?.email, role, branchId: deviceRow.branchId },
+      clinic: clinicPublicRow(clinic)
+    });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'pair consume failed' });
   }
 });
 
