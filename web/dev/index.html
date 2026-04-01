@@ -34,6 +34,16 @@
           <button id="btnGlobalOpenHistory" class="btn">Open History</button>
           <button id="btnGlobalExportCsv" class="btn">Export Global CSV</button>
           <button id="btnGlobalExportPdf" class="btn">Export Global PDF</button>
+          <label class="autoRefreshBox" title="Auto refresh global dashboard and history counts">
+            <input id="autoRefreshToggle" type="checkbox" checked />
+            <span>Live counts</span>
+          </label>
+          <select id="autoRefreshEvery" style="width:auto;min-width:120px">
+            <option value="15000">15s</option>
+            <option value="30000" selected>30s</option>
+            <option value="60000">60s</option>
+            <option value="120000">120s</option>
+          </select>
         </div>
       </div>
       <div class="grid4" style="margin-top:12px">
@@ -66,6 +76,7 @@
         </div>
       </div>
       <div id="globalMeta" class="muted" style="margin-top:10px"></div>
+      <div id="liveRefreshMeta" class="muted" style="margin-top:6px"></div>
       <div id="globalOverview" class="kpiGrid"></div>
       <h3 style="margin-top:16px;">By App</h3>
       <div id="globalAppCards" class="kpiGrid"></div>
@@ -75,22 +86,22 @@
           <div id="globalTrend" class="trendGrid"></div>
         </div>
         <div class="subCard">
-          <div class="subTitle">Top Revoke / Block Reasons</div>
+          <div class="subTitle" id="globalReasonsTitle">Top Revoke / Block Reasons (0)</div>
           <div id="globalReasons" class="stackList"></div>
         </div>
       </div>
       <div class="grid2" style="margin-top:16px;">
         <div class="subCard">
-          <div class="subTitle">Expiring Soon</div>
+          <div class="subTitle" id="globalExpiringTitle">Expiring Soon (0)</div>
           <div id="globalExpiring" class="results"></div>
         </div>
         <div class="subCard">
-          <div class="subTitle">Top Abused Identities</div>
+          <div class="subTitle" id="globalAbuseTitle">Top Abused Identities (0)</div>
           <div id="globalAbuse" class="stackList"></div>
         </div>
       </div>
       <div class="subCard" style="margin-top:16px;">
-        <div class="subTitle">Recent Revokes / Binding Resets</div>
+        <div class="subTitle" id="globalRevokesTitle">Recent Revokes / Binding Resets (0)</div>
         <div id="globalRevokes" class="results"></div>
       </div>
     </section>
@@ -1008,29 +1019,29 @@
       </div>
 
       <div class="historyTabs" style="margin-top:12px">
-        <button class="tabBtn active" data-hist-tab="licenses">Licenses</button>
-        <button class="tabBtn" data-hist-tab="licenseAudit">License Audit</button>
-        <button class="tabBtn" data-hist-tab="trials">Trials</button>
-        <button class="tabBtn" data-hist-tab="trialAudit">Trial Audit</button>
-        <button class="tabBtn" data-hist-tab="blocks">Blocks</button>
-        <button class="tabBtn" data-hist-tab="restores">Restores</button>
+        <button class="tabBtn active" data-hist-tab="licenses">Licenses <span class="pill" id="histCount_licenses">0</span></button>
+        <button class="tabBtn" data-hist-tab="licenseAudit">License Audit <span class="pill" id="histCount_licenseAudit">0</span></button>
+        <button class="tabBtn" data-hist-tab="trials">Trials <span class="pill" id="histCount_trials">0</span></button>
+        <button class="tabBtn" data-hist-tab="trialAudit">Trial Audit <span class="pill" id="histCount_trialAudit">0</span></button>
+        <button class="tabBtn" data-hist-tab="blocks">Blocks <span class="pill" id="histCount_blocks">0</span></button>
+        <button class="tabBtn" data-hist-tab="restores">Restores <span class="pill" id="histCount_restores">0</span></button>
       </div>
 
       <div id="histStats" class="kpiGrid" style="margin-top:14px"></div>
 
       <div class="grid2" style="margin-top:14px">
         <div class="subCard">
-          <div class="subTitle">Revoke / Block Reasons Dashboard</div>
+          <div class="subTitle" id="histReasonsTitle">Revoke / Block Reasons Dashboard (0)</div>
           <div id="histReasons" class="stackList"></div>
         </div>
         <div class="subCard">
-          <div class="subTitle">Abuse Analytics</div>
+          <div class="subTitle" id="histAbuseTitle">Abuse Analytics (0)</div>
           <div id="histAbuse" class="stackList"></div>
         </div>
       </div>
 
       <div class="row" style="justify-content:space-between; margin-top:14px; flex-wrap:wrap">
-        <div id="histMeta" class="muted">No data loaded yet</div>
+        <div><div id="histMeta" class="muted">No data loaded yet</div><div id="histLiveMeta" class="muted" style="margin-top:4px"></div></div>
         <div class="row" style="margin-top:0">
           <button id="btnHistRefresh" class="btn primary">Refresh History</button>
           <button id="btnHistExport" class="btn">Export Current View CSV</button>

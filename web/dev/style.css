@@ -219,3 +219,13 @@ input::placeholder{color:rgba(142,160,194,0.7)}
 .miniTable{width:100%;border-collapse:collapse}
 .miniTable th,.miniTable td{padding:8px 8px;border-bottom:1px solid var(--line);font-size:12px;text-align:left}
 .miniTable th{color:var(--muted)}
+
+
+.autoRefreshBox{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(7,11,20,.45);font-size:12px;color:var(--text)}
+.autoRefreshBox input{width:auto;margin:0}
+.kpiChipRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.countChip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.05);font-size:11px;color:#d9e4ff}
+.countChip strong{font-size:11px}
+.sectionHeadRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.sectionChipRow{display:flex;flex-wrap:wrap;gap:6px}
+.tableHeaderMeta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}

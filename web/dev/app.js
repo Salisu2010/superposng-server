@@ -573,6 +573,7 @@ function renderKpiCards(elId, cards) {
       <div class="kpiLabel">${c.label || ""}</div>
       <div class="kpiValue">${c.value ?? 0}</div>
       <div class="kpiSub">${c.sub || ""}</div>
+      ${c.chips ? `<div class="kpiChipRow">${c.chips}</div>` : ''}
     </div>
   `).join("");
 }
@@ -2097,6 +2098,89 @@ const HISTORY_APP_LABELS = {
   CPNG: "CLP/CPNG",
 };
 let _histTab = "licenses";
+
+function setText(id, text) { const el = $(id); if (el) el.textContent = text; }
+function setHtml(id, html) { const el = $(id); if (el) el.innerHTML = html; }
+function chip(label, value) { return `<span class="countChip"><span>${escHtml(label)}</span><strong>${escHtml(String(value ?? 0))}</strong></span>`; }
+function appCountChips(rows, mapper) {
+  const counts = { SPNG: 0, CPNG: 0, STMN: 0, RMP: 0 };
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const app = String(row?.app || '').toUpperCase();
+    if (counts[app] != null) counts[app] += Number(mapper ? mapper(row) : 1) || 0;
+  });
+  return ['CPNG','SPNG','STMN','RMP'].map((app) => chip(histAppLabel(app), counts[app] || 0)).join('');
+}
+function fmtMs(ms) {
+  const sec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem ? `${min}m ${rem}s` : `${min}m`;
+}
+let _liveRefreshTimer = null;
+let _liveRefreshTickTimer = null;
+let _liveRefreshNextAt = 0;
+let _liveRefreshLastAt = 0;
+let _liveRefreshBusy = false;
+function autoRefreshEnabled() { return !!($('autoRefreshToggle')?.checked); }
+function autoRefreshEveryMs() { return Math.max(15000, Number($('autoRefreshEvery')?.value || 30000)); }
+function renderLiveRefreshMeta() {
+  const enabled = autoRefreshEnabled();
+  const every = autoRefreshEveryMs();
+  const nextIn = enabled && _liveRefreshNextAt ? Math.max(0, _liveRefreshNextAt - Date.now()) : 0;
+  const last = _liveRefreshLastAt ? `Last refresh ${fmtTs(_liveRefreshLastAt)}` : 'Last refresh -';
+  const state = enabled ? (_liveRefreshBusy ? 'Refreshing now' : `Auto refresh every ${fmtMs(every)}`) : 'Auto refresh paused';
+  setText('liveRefreshMeta', `${state} • ${last}${enabled ? ` • Next in ${fmtMs(nextIn)}` : ''}`);
+  setText('histLiveMeta', `${enabled ? 'Live counts enabled' : 'Live counts paused'}${enabled ? ` • Next sync ${fmtMs(nextIn)}` : ''}`);
+}
+async function runLiveRefreshCycle() {
+  if (!autoRefreshEnabled() || _liveRefreshBusy) { renderLiveRefreshMeta(); return; }
+  _liveRefreshBusy = true;
+  renderLiveRefreshMeta();
+  try {
+    await Promise.all([
+      refreshGlobalDashboard().catch(() => {}),
+      histRefresh(true).catch(() => {}),
+    ]);
+    _liveRefreshLastAt = Date.now();
+  } finally {
+    _liveRefreshBusy = false;
+    _liveRefreshNextAt = Date.now() + autoRefreshEveryMs();
+    renderLiveRefreshMeta();
+  }
+}
+function scheduleLiveRefresh() {
+  if (_liveRefreshTimer) clearInterval(_liveRefreshTimer);
+  if (_liveRefreshTickTimer) clearInterval(_liveRefreshTickTimer);
+  if (!autoRefreshEnabled()) { _liveRefreshNextAt = 0; renderLiveRefreshMeta(); return; }
+  const every = autoRefreshEveryMs();
+  _liveRefreshNextAt = Date.now() + every;
+  _liveRefreshTimer = setInterval(() => { runLiveRefreshCycle().catch(() => {}); }, every);
+  _liveRefreshTickTimer = setInterval(renderLiveRefreshMeta, 1000);
+  renderLiveRefreshMeta();
+}
+function histRenderTabCounts() {
+  ["licenses", "licenseAudit", "trials", "trialAudit", "blocks", "restores"].forEach((kind) => {
+    const el = $(`histCount_${kind}`);
+    if (el) el.textContent = String(histFiltered(kind).length);
+  });
+}
+function histRenderSectionCounts(reasonEntries = null, abuseEntries = null) {
+  const reasons = Array.isArray(reasonEntries) ? reasonEntries : histCountReasons();
+  const abuse = Array.isArray(abuseEntries) ? abuseEntries : histAbuseStats();
+  setHtml('histReasonsTitle', `<div class="sectionHeadRow"><span>Revoke / Block Reasons Dashboard (${reasons.length})</span><span class="sectionChipRow">${appCountChips(histFiltered('licenseAudit').filter((x) => String(x.type || '') === 'revoke_license' || String(x.type || '') === 'reset_binding'))}${appCountChips(histFiltered('blocks'))}</span></div>`);
+  setHtml('histAbuseTitle', `<div class="sectionHeadRow"><span>Abuse Analytics (${abuse.length})</span><span class="sectionChipRow">${appCountChips(histFiltered('trialAudit'))}</span></div>`);
+}
+function globalRenderSectionCounts(data) {
+  const reasons = Array.isArray(data?.topReasons) ? data.topReasons : [];
+  const expiring = Array.isArray(data?.expiringSoonRows) ? data.expiringSoonRows : [];
+  const abuse = Array.isArray(data?.topAbuse) ? data.topAbuse : [];
+  const revokes = Array.isArray(data?.recentRevokes) ? data.recentRevokes : [];
+  setHtml('globalReasonsTitle', `<div class="sectionHeadRow"><span>Top Revoke / Block Reasons (${reasons.length})</span><span class="sectionChipRow">${appCountChips(reasons, (r) => Number(r.count || 0))}</span></div>`);
+  setHtml('globalExpiringTitle', `<div class="sectionHeadRow"><span>Expiring Soon (${expiring.length})</span><span class="sectionChipRow">${appCountChips(expiring)}</span></div>`);
+  setHtml('globalAbuseTitle', `<div class="sectionHeadRow"><span>Top Abused Identities (${abuse.length})</span><span class="sectionChipRow">${appCountChips(abuse, (r) => Number(r.count || 0))}</span></div>`);
+  setHtml('globalRevokesTitle', `<div class="sectionHeadRow"><span>Recent Revokes / Binding Resets (${revokes.length})</span><span class="sectionChipRow">${appCountChips(revokes)}</span></div>`);
+}
 let _histPage = 1;
 let _histPageSize = 50;
 let _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [], restores: [] };
@@ -2237,10 +2321,10 @@ function histRenderStats() {
   const restores = histFiltered('restores');
   const restoredRows = restores.filter((x) => x.reused).length;
   renderKpiCards("histStats", [
-    { label: "Licenses", value: licenses.length, sub: `Active ${activeLic} • Revoked ${revokedLic}` },
-    { label: "Trials", value: trials.length, sub: `Active ${activeTrials} • Ended ${endedTrials}` },
-    { label: "Blocks", value: blocks.length, sub: `Audit ${histFiltered("trialAudit").length}` },
-    { label: "Restores", value: restores.length, sub: `Recovered ${restoredRows} • Fresh ${Math.max(0, restores.length-restoredRows)}` },
+    { label: "Licenses", value: licenses.length, sub: `Active ${activeLic} • Revoked ${revokedLic}`, chips: appCountChips(licenses) },
+    { label: "Trials", value: trials.length, sub: `Active ${activeTrials} • Ended ${endedTrials}`, chips: appCountChips(trials) },
+    { label: "Blocks", value: blocks.length, sub: `Audit ${histFiltered("trialAudit").length}`, chips: appCountChips(blocks) },
+    { label: "Restores", value: restores.length, sub: `Recovered ${restoredRows} • Fresh ${Math.max(0, restores.length-restoredRows)}`, chips: appCountChips(restores) },
   ]);
   const reasons = histCountReasons();
   const rBox = $("histReasons");
@@ -2249,7 +2333,6 @@ function histRenderStats() {
     return `<div class="stackItem"><div><div><b>${escHtml(parts[1] || key)}</b></div><div class="muted">${escHtml(parts[0] || "")}</div></div><div class="pill">${count}</div></div>`;
   }).join("") : '<div class="muted">No revoke/block reasons found for current filters.</div>';
   const aBox = $("histAbuse");
-  const abuse = histAbuseStats();
   if (aBox) aBox.innerHTML = abuse.map(([label, count]) => `<div class="stackItem"><span>${escHtml(label)}</span><div class="pill">${count}</div></div>`).join("");
 }
 function histPageRows(rows) {
@@ -2274,7 +2357,9 @@ function histRenderTable() {
   if (!wrap) return;
   const rows = histFiltered(_histTab);
   const { totalPages, start, page } = histPageRows(rows);
-  if (meta) meta.textContent = `View ${_histTab} • ${rows.length} rows • Page ${_histPage} of ${totalPages}`;
+  const showingFrom = rows.length ? (start + 1) : 0;
+  const showingTo = Math.min(start + page.length, rows.length);
+  if (meta) meta.innerHTML = `<div>View ${escHtml(_histTab)} • Total ${rows.length} • Showing ${showingFrom}-${showingTo} • Page ${_histPage} of ${totalPages}</div><div class="tableHeaderMeta">${appCountChips(rows.slice(start, start + page.length))}</div>`;
   const noData = `<tr><td colspan="12" style="color:var(--muted)">No records found for current filters.</td></tr>`;
   if (_histTab === "licenses") {
     wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>License ID</th><th>Status</th><th>Plan</th><th>Expiry</th><th>Device</th><th>Token</th><th>Notes</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td><code>${escHtml(x.licenseId || "-")}</code></td><td>${escHtml(x.status || "")}</td><td>${escHtml(x.plan || "")}</td><td>${escHtml(fmtTs(x.expiresAt) || x.expiryYmd || "-")}</td><td><code>${escHtml(x.boundDeviceId || "-")}</code></td><td><code>${escHtml(x.token || "-")}</code></td><td>${escHtml(x.notes || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
@@ -2295,6 +2380,7 @@ async function histRefresh(forceReload = true) {
     if (forceReload) await histLoadData();
     histRenderStats();
     histRenderTable();
+    renderLiveRefreshMeta();
   } catch (e) {
     toast(e?.message || "History refresh failed");
   }
@@ -2314,7 +2400,7 @@ function histBind() {
   instantReloadIds.forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(true); }); });
   ["histQ", "histReason"].forEach((id) => { const el = $(id); if (el) el.addEventListener("input", () => { _histPage = 1; clearTimeout(histBind._t); histBind._t = setTimeout(() => histRefresh(false), 250); }); });
   ["histStatus", "histPlan", "histPageSize", "histFrom", "histTo"].forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(false); }); });
-  const rf = $("btnHistRefresh"); if (rf) rf.addEventListener("click", () => { _histPage = 1; histRefresh(true); });
+  const rf = $("btnHistRefresh"); if (rf) rf.addEventListener("click", () => { _histPage = 1; histRefresh(true).then(() => { _liveRefreshLastAt = Date.now(); _liveRefreshNextAt = Date.now() + autoRefreshEveryMs(); renderLiveRefreshMeta(); }); });
   const prev = $("btnHistPrev"); if (prev) prev.addEventListener("click", () => { if (_histPage > 1) { _histPage -= 1; histRenderTable(); } });
   const next = $("btnHistNext"); if (next) next.addEventListener("click", () => {
     const rows = histFiltered(_histTab);
@@ -2365,7 +2451,7 @@ function renderMiniTable(targetId, headers, rows, emptyText = "No data") {
     el.innerHTML = `<div class="muted">${escHtml(emptyText)}</div>`;
     return;
   }
-  el.innerHTML = `<table class="miniTable"><thead><tr>${headers.map((h) => `<th>${escHtml(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${headers.map((h) => `<td>${h.render ? h.render(row) : escHtml(row[h.key] ?? "-")}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  el.innerHTML = `<div class="tableHeaderMeta">${appCountChips(rows)}</div><table class="miniTable"><thead><tr>${headers.map((h) => `<th>${escHtml(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${headers.map((h) => `<td>${h.render ? h.render(row) : escHtml(row[h.key] ?? "-")}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 function renderGlobalTrend(rows, action = 'ALL') {
   const box = $("globalTrend");
@@ -2396,6 +2482,8 @@ async function refreshGlobalDashboard() {
   const f = globalFilters();
   const data = await api(`/api/dev/global-dashboard${buildQuery({ app: f.app, from: f.from, to: f.to })}`, { method: 'GET' });
   _globalDashboardCache = { ...(data || {}), uiFilters: f };
+  globalRenderSectionCounts(data || {});
+  renderLiveRefreshMeta();
   const ov = data?.overview || {};
   const action = f.action || 'ALL';
   const meta = $('globalMeta');
@@ -2430,6 +2518,7 @@ async function refreshGlobalDashboard() {
           <button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'licenses')">Open History</button>
         </div>
         <div class="kpiSub">Active • Total ${Number(x.total || 0)} • Soon ${Number(x.expiringSoon || 0)}</div>
+        <div class="kpiChipRow">${chip('Active', Number(x.active || 0))}${chip('Total', Number(x.total || 0))}${chip('Soon', Number(x.expiringSoon || 0))}${chip('Blocked', Number(x.blockedToday || 0))}</div>
         <div class="trendNums" style="margin-top:8px;">
           <span>M ${Number(x.monthly || 0)}</span>
           <span>Y ${Number(x.yearly || 0)}</span>
@@ -2500,7 +2589,7 @@ window.addEventListener("load", () => {
   const smSz = $("smPageSize"); if (smSz) smSz.onchange = () => smFetch(1, { force: true });
   const smDel = $("btnSmDelete"); if (smDel) smDel.onclick = smDeleteSelected;
 
-  const gref = $("btnGlobalRefresh"); if (gref) gref.onclick = () => refreshGlobalDashboard().catch((e) => toast(e.message));
+  const gref = $("btnGlobalRefresh"); if (gref) gref.onclick = () => refreshGlobalDashboard().then(() => { _liveRefreshLastAt = Date.now(); _liveRefreshNextAt = Date.now() + autoRefreshEveryMs(); renderLiveRefreshMeta(); }).catch((e) => toast(e.message));
   ["globalAppFilter", "globalActionFilter", "globalFrom", "globalTo"].forEach((id) => { const el = $(id); if (el) el.addEventListener(el.tagName === 'INPUT' ? 'change' : 'change', () => refreshGlobalDashboard().catch((e) => toast(e.message))); });
   const gh = $("btnGlobalOpenHistory"); if (gh) gh.onclick = () => openHistoryForApp(String($("globalAppFilter")?.value || 'ALL'), 'licenses');
   const gcsv = $("btnGlobalExportCsv"); if (gcsv) gcsv.onclick = () => {
@@ -2542,6 +2631,9 @@ window.addEventListener("load", () => {
     printHtmlReport('Global License & Trial Report', html);
   };
 
+  const autoT = $('autoRefreshToggle'); if (autoT) autoT.addEventListener('change', () => scheduleLiveRefresh());
+  const autoE = $('autoRefreshEvery'); if (autoE) autoE.addEventListener('change', () => scheduleLiveRefresh());
+
   // Load shops once key is present (or after user saves)
   histBind();
   if (getKey()) {
@@ -2553,6 +2645,8 @@ window.addEventListener("load", () => {
       refreshCpngTrialDashboard().catch(() => {}),
       refreshCpngLicenseAudit().catch(() => {}),
       histRefresh(true).catch(() => {}),
-    ]);
+    ]).finally(() => { _liveRefreshLastAt = Date.now(); scheduleLiveRefresh(); });
+  } else {
+    renderLiveRefreshMeta();
   }
 });
