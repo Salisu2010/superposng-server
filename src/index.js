@@ -126,6 +126,13 @@ function requestValidation(req, res, next) {
     req.auth?.hospitalId ||
     ''
   ).trim();
+  const publicLicensePath = (
+    req.path.startsWith('/api/license/check') ||
+    req.path.startsWith('/api/license/claim') ||
+    req.path.startsWith('/api/license/status') ||
+    req.path.startsWith('/api/trial/claim') ||
+    req.path.startsWith('/api/trial/status')
+  );
   const clinicPortalPath = (
     req.path.startsWith('/api/portal/') ||
     req.path.startsWith('/api/ai/') ||
@@ -152,7 +159,8 @@ function requestValidation(req, res, next) {
     req.path.startsWith('/api/search/patient')
   );
   const allowClinicScopedWithoutApiKey = clinicPortalPath && !!clinicId;
-  if (requiredKey && !allowClinicScopedWithoutApiKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
+  const allowPublicLicenseWithoutApiKey = publicLicensePath;
+  if (requiredKey && !allowClinicScopedWithoutApiKey && !allowPublicLicenseWithoutApiKey && !req.path.startsWith('/api/auth/login') && !req.path.startsWith('/api/hospital/create')) {
     if (sentKey !== requiredKey) return res.status(401).json({ ok:false, error:'Invalid API key' });
   }
   if ((req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') && req.body && typeof req.body !== 'object') {

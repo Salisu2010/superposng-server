@@ -954,6 +954,29 @@ r.post('/clinic/pair/create', (req, res) => {
     const targetRole = normRole(req.body?.targetRole || req.body?.role || 'Receptionist');
     const branchId = toStr(req.body?.branchId || req.auth?.branchId);
     const expiresInMinutes = Math.max(1, Math.min(60, toNum(req.body?.expiresInMinutes, 10)));
+    const sharedLicense = (() => {
+      const unlockMode = toStr(req.body?.unlockMode).trim();
+      if (!unlockMode) return null;
+      if (String(unlockMode).toLowerCase() === 'token') {
+        const token = toStr(req.body?.licenseToken);
+        const expiryYmd = toNum(req.body?.licenseExpiryYmd, 0);
+        const plan = toStr(req.body?.planType || 'MONTHLY');
+        if (!token || !expiryYmd) return null;
+        return { unlockMode: 'token', token, expiryYmd, plan };
+      }
+      if (String(unlockMode).toLowerCase() === 'trial') {
+        const expiryYmd = toNum(req.body?.trialExpiryYmd, 0);
+        if (!expiryYmd) return null;
+        return {
+          unlockMode: 'trial',
+          startYmd: toNum(req.body?.trialStartYmd, 0),
+          expiryYmd,
+          status: toStr(req.body?.trialStatus || 'ACTIVE')
+        };
+      }
+      return null;
+    })();
+
     const pairCodeRow = {
       pairId: 'cpair_' + nanoid(12),
       pairingCode: ('CPAIR-' + nanoid(6)).toUpperCase(),
@@ -965,7 +988,8 @@ r.post('/clinic/pair/create', (req, res) => {
       used: false,
       createdBy: toStr(req.auth?.email || req.body?.actor || 'admin'),
       createdByDeviceId: toStr(req.auth?.deviceId || req.body?.deviceId),
-      trusted: true
+      trusted: true,
+      sharedLicense
     };
     db.clinicPairCodes.push(pairCodeRow);
     const qrPayload = clinicPairPayload(req.protocol + '://' + req.get('host'), pairCodeRow);
@@ -1050,8 +1074,10 @@ r.post('/clinic/pair/consume', (req, res) => {
         clinic_id: pair.clinicId,
         branch_id: deviceRow.branchId,
         token,
-        device_name: deviceName
+        device_name: deviceName,
+        shared_license: pair.sharedLicense || null
       },
+      shared_license: pair.sharedLicense || null,
       user: { userId: user?.userId, email: user?.email, role, branchId: deviceRow.branchId },
       clinic: clinicPublicRow(clinic)
     });
