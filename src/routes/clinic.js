@@ -59,6 +59,24 @@ function pickDoctorName(x){ return toStr(x?.doctorName || x?.doctor_name || x?.d
 function pickStatus(x, fallback='pending'){ return toStr(x?.status || fallback) || fallback; }
 function cap(v){ const s = toStr(v); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
+function requestProto(req){
+  const xf = toStr(req.headers['x-forwarded-proto']).split(',')[0].trim().toLowerCase();
+  if (xf === 'https' || xf === 'http') return xf;
+  return req.protocol === 'https' ? 'https' : 'http';
+}
+function requestHost(req){
+  const xfHost = toStr(req.headers['x-forwarded-host']).split(',')[0].trim();
+  const host = xfHost || toStr(req.get?.('host'));
+  return host.replace(/\/$/, '');
+}
+function publicBaseUrl(req){
+  const envBase = toStr(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || process.env.APP_BASE_URL);
+  if (envBase) return envBase.replace(/\/$/, '');
+  const host = requestHost(req);
+  if (!host) return '';
+  return `${requestProto(req)}://${host}`;
+}
+
 function cleanExpiredClinicPairCodes(db, clinicId = ''){
   db.clinicPairCodes = arr(db.clinicPairCodes).filter(x => {
     if (!x) return false;
@@ -972,7 +990,7 @@ r.post('/auth/login', (req, res) => {
       trusted: !!trusted,
       hospitalId: clinic.clinicId,
       clinicId: clinic.clinicId,
-      baseUrl: req.protocol + '://' + req.get('host'),
+      baseUrl: publicBaseUrl(req),
       user: { userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) },
       clinic: clinicPublicRow(clinic)
     });
@@ -1033,7 +1051,7 @@ r.post('/clinic/pair/create', (req, res) => {
       sharedLicense
     };
     db.clinicPairCodes.push(pairCodeRow);
-    const qrPayload = clinicPairPayload(req.protocol + '://' + req.get('host'), pairCodeRow);
+    const qrPayload = clinicPairPayload(publicBaseUrl(req), pairCodeRow);
     recordClinicChange(db, clinicId, 'pair_code_created', ['clinic_devices'], { pairId: pairCodeRow.pairId, targetRole, branchId }, { actor: pairCodeRow.createdBy, role: actorRole, deviceId: pairCodeRow.createdByDeviceId, branchId });
     pushEvent(db, clinicId, 'pair_code_created', { pairCode: pairCodeRow.pairingCode, targetRole, branchId, expiresAt: pairCodeRow.expiresAt });
     writeDB(db);
@@ -1095,10 +1113,10 @@ r.post('/clinic/pair/consume', (req, res) => {
       clinicId: pair.clinicId,
       role,
       branchId: deviceRow.branchId,
-      baseUrl: req.protocol + '://' + req.get('host'),
+      baseUrl: publicBaseUrl(req),
       bootstrap: {
         enabled: true,
-        base_url: req.protocol + '://' + req.get('host'),
+        base_url: publicBaseUrl(req),
         hospital_id: pair.clinicId,
         clinic_id: pair.clinicId,
         branch_id: deviceRow.branchId,
@@ -1110,7 +1128,7 @@ r.post('/clinic/pair/consume', (req, res) => {
       },
       cloud_config: {
         enabled: true,
-        base_url: req.protocol + '://' + req.get('host'),
+        base_url: publicBaseUrl(req),
         hospital_id: pair.clinicId,
         clinic_id: pair.clinicId,
         branch_id: deviceRow.branchId,

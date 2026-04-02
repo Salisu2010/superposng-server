@@ -54,6 +54,7 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
+app.set('trust proxy', true);
 
 // Resolve project root for serving local dashboard assets
 const __filename = fileURLToPath(import.meta.url);
