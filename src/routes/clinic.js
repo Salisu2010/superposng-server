@@ -514,7 +514,9 @@ function liveCardsFromSnapshot(snapshot, changes = []){
   return { counts, cards, recentChanges: changes.slice(0,8) };
 }
 
+const buildTimeline = (...args) => buildTimelineSafe(...args);
 const getClinicTimeline = (...args) => buildTimelineSafe(...args);
+// Defensive alias for any legacy internal references.
 function buildPortalCommandCenter(db, clinicId, days = 14){
   const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };
   const timeline = getClinicTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(days, 14))));
@@ -685,7 +687,7 @@ function finalizeWrite(db, clinicId, type, title, message, payload, req){
 function sortRecent(items){ return arr(items).sort((a,b)=>toNum(b.updatedAt || b.createdAt)-toNum(a.updatedAt || a.createdAt)); }
 
 
-function buildTimeline(db, clinicId, days = 14){
+function buildTimelineLegacy(db, clinicId, days = 14){
   const totalDays = Math.max(1, Math.min(60, toNum(days, 14)));
   const dayMs = 24 * 60 * 60 * 1000;
   const end = new Date();
