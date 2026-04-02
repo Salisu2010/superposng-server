@@ -1633,13 +1633,14 @@ r.get('/clinic/delta/pull', (req, res) => {
     const db = readDB(); ensureArrays(db);
     const currentVersion = getClinicVersion(db, clinicId);
     const { rows, tables } = changedTablesSince(db, clinicId, sinceVersion);
-    const snapshot = tables.length ? buildSnapshotForTables(db, clinicId, tables) : { data:{}, exported_at: now(), version: currentVersion };
+    const effectiveTables = tables.length ? tables : (currentVersion > sinceVersion ? Object.keys(clinicRows(db, clinicId)) : []);
+    const snapshot = effectiveTables.length ? buildSnapshotForTables(db, clinicId, effectiveTables) : { data:{}, exported_at: now(), version: currentVersion };
     return res.json({
       ok:true,
       sinceVersion,
       version: currentVersion,
       hasChanges: currentVersion > sinceVersion,
-      changedTables: tables,
+      changedTables: effectiveTables,
       changeCount: rows.length,
       changes: rows.slice(-50),
       snapshot,
