@@ -355,7 +355,7 @@ app.get("/api/stmn/events", authMiddleware, (req, res) => {
  * Clinic Pro NG Realtime Events (SSE)
  * Auth: Bearer token from /api/auth/login
  */
-app.get('/api/events/stream', authMiddleware, (req, res) => {
+app.get('/api/events/stream', (req, res) => {
   try {
     const clinicId = String(req.auth?.clinicId || req.auth?.hospitalId || req.query?.hospitalId || req.query?.clinicId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
     if (!clinicId) return res.status(401).json({ ok:false, error:'Missing clinicId or hospitalId' });
@@ -373,7 +373,7 @@ app.get('/api/events/stream', authMiddleware, (req, res) => {
   }
 });
 
-app.get('/api/clinic/events', authMiddleware, (req, res) => {
+app.get('/api/clinic/events', (req, res) => {
   try {
     const clinicId = String(req.query?.hospitalId || req.query?.clinicId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
     if (!clinicId) return res.status(401).json({ ok:false, error:'Missing clinicId or hospitalId' });

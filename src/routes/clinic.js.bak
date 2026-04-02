@@ -908,12 +908,6 @@ r.post('/auth/login', (req, res) => {
     let clinic = null;
     if (clinicRef) clinic = db.clinics.find(x => String(x.clinicId) === clinicRef || String(x.clinicCode) === clinicRef);
     if (!clinic && email) clinic = db.clinics.find(x => safeEmail(x.ownerEmail) === email);
-    if (!clinic && email) {
-      const matchedUser = db.clinicUsers.find(x => safeEmail(x.email) === email);
-      if (matchedUser) {
-        clinic = db.clinics.find(x => String(x.clinicId) === String(matchedUser.clinicId));
-      }
-    }
     if (!clinic) {
       const phoneLogin = cleanPhone(body.phone || body.ownerPhone);
       if (phoneLogin) clinic = db.clinics.find(x => cleanPhone(x.ownerPhone || x.phone) === phoneLogin);
@@ -940,16 +934,7 @@ r.post('/auth/login', (req, res) => {
     });
     const token = sign({ clinicId: clinic.clinicId, hospitalId: clinic.clinicId, deviceId, userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) });
     writeDB(db);
-    return res.json({
-      ok:true,
-      token,
-      trusted: !!trusted,
-      hospitalId: clinic.clinicId,
-      clinicId: clinic.clinicId,
-      baseUrl: req.protocol + '://' + req.get('host'),
-      user: { userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) },
-      clinic: clinicPublicRow(clinic)
-    });
+    return res.json({ ok:true, token, trusted: !!trusted, user: { userId: user.userId, email: user.email, role: normRole(user.role), branchId: toStr(user.branchId) }, clinic: clinicPublicRow(clinic) });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'login failed' });
   }
