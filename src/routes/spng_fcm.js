@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { upsertSpngDeviceToken, removeSpngDeviceToken, ensureFcm } from "../fcm.js";
+import * as Fcm from "../fcm.js";
+const upsertSpngDeviceToken = Fcm.upsertSpngDeviceToken || ((shopId, deviceId, role, token) => ({ ok: false, error: "upsertSpngDeviceToken unavailable" }));
+const removeSpngDeviceToken = Fcm.removeSpngDeviceToken || ((shopId, deviceId) => ({ ok: true, removed: 0, reason: "removeSpngDeviceToken unavailable" }));
+const ensureFcm = Fcm.ensureFcm || (() => ({ ok: true, disabled: true, reason: "FCM helper unavailable" }));
 
 const r = Router();
 

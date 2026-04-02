@@ -9,6 +9,7 @@ import jwt from "jsonwebtoken";
 import { publish, getSince, sseHeaders, sendSse } from "./tg_events.js";
 import { stmnAddClient, stmnSseHeaders, stmnSendSse } from "./stmn_events.js";
 import { clinicAddClient, clinicSseHeaders, clinicSendSse } from "./clinic_events.js";
+import * as Fcm from "./fcm.js";
 
 import { authMiddleware } from "./middleware/auth.js";
 import { startStmnReminderEngine } from "./stmn_reminder_engine.js";
@@ -34,6 +35,23 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 dotenv.config();
+
+function safeServerLog(level, message, extra) {
+  try {
+    const payload = extra ? ` ${JSON.stringify(extra)}` : '';
+    console[level](`[server:${level}] ${message}${payload}`);
+  } catch {
+    try { console.log(`[server:${level}] ${message}`); } catch {}
+  }
+}
+
+process.on('unhandledRejection', (reason) => {
+  safeServerLog('error', 'Unhandled promise rejection', { reason: String(reason?.stack || reason || '') });
+});
+
+process.on('uncaughtException', (err) => {
+  safeServerLog('error', 'Uncaught exception', { error: String(err?.stack || err || '') });
+});
 
 const app = express();
 
@@ -87,12 +105,27 @@ function lightweightRateLimit(req, res, next) {
   if (row.count > limit) {
     return res.status(429).json({ ok:false, error:'Rate limit exceeded' });
   }
+  if (requestBuckets.size > 5000) {
+    for (const [bucketKey, bucket] of requestBuckets) {
+      if (!bucket || t > (bucket.resetAt || 0) + 60000) requestBuckets.delete(bucketKey);
+    }
+  }
   return next();
 }
 function requestValidation(req, res, next) {
   const requiredKey = String(process.env.API_KEY || '').trim();
   const sentKey = String(req.headers['x-api-key'] || '').trim();
-  const clinicId = String(req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || req.query?.clinicId || req.query?.hospitalId || '').trim();
+  const clinicId = String(
+    req.headers['x-clinic-id'] ||
+    req.headers['x-hospital-id'] ||
+    req.query?.clinicId ||
+    req.query?.hospitalId ||
+    req.body?.clinicId ||
+    req.body?.hospitalId ||
+    req.auth?.clinicId ||
+    req.auth?.hospitalId ||
+    ''
+  ).trim();
   const clinicPortalPath = (
     req.path.startsWith('/api/portal/') ||
     req.path.startsWith('/api/ai/') ||
@@ -134,6 +167,86 @@ function requestValidation(req, res, next) {
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok:true, status:'healthy', uptime: process.uptime(), time: new Date().toISOString() });
+});
+
+app.get('/api/health/deep', (_req, res) => {
+  try {
+    const db = readDB();
+    res.json({
+      ok: true,
+      status: 'healthy',
+      uptime: process.uptime(),
+      time: new Date().toISOString(),
+      db: {
+        shops: Array.isArray(db.shops) ? db.shops.length : 0,
+        stmnShops: Array.isArray(db.stmnShops) ? db.stmnShops.length : 0,
+        clinics: Array.isArray(db.clinics) ? db.clinics.length : 0,
+        clinicPatients: Array.isArray(db.clinicPatients) ? db.clinicPatients.length : 0,
+        clinicBills: Array.isArray(db.clinicBills) ? db.clinicBills.length : 0,
+        clinicVisits: Array.isArray(db.clinicVisits) ? db.clinicVisits.length : 0,
+        trialLogs: Array.isArray(db.trialAuditLogs) ? db.trialAuditLogs.length : 0,
+        trialBlocks: Array.isArray(db.trialBlocks) ? db.trialBlocks.length : 0
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ ok:false, error:'Deep health failed', detail:String(e?.message || e) });
+  }
+});
+
+app.get('/api/health/runtime', (_req, res) => {
+  try {
+    const fcmState = typeof Fcm.ensureFcm === 'function' ? Fcm.ensureFcm() : { ok:false, disabled:true, reason:'ensureFcm export missing' };
+    res.json({
+      ok: true,
+      status: 'healthy',
+      node: process.version,
+      pid: process.pid,
+      uptime: process.uptime(),
+      time: new Date().toISOString(),
+      memory: process.memoryUsage(),
+      rateLimitBuckets: requestBuckets.size,
+      fcm: {
+        ensureFcm: typeof Fcm.ensureFcm === 'function',
+        upsertDeviceToken: typeof Fcm.upsertDeviceToken === 'function',
+        removeDeviceToken: typeof Fcm.removeDeviceToken === 'function',
+        pushShopChange: typeof Fcm.pushShopChange === 'function',
+        upsertSpngDeviceToken: typeof Fcm.upsertSpngDeviceToken === 'function',
+        removeSpngDeviceToken: typeof Fcm.removeSpngDeviceToken === 'function',
+        pushSpngShopChange: typeof Fcm.pushSpngShopChange === 'function',
+        state: fcmState
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ ok:false, error:'Runtime health failed', detail:String(e?.message || e) });
+  }
+});
+
+app.get('/api/health/clinic', (req, res) => {
+  try {
+    const clinicId = String(req.query?.clinicId || req.query?.hospitalId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || '').trim();
+    if (!clinicId) return res.status(400).json({ ok:false, error:'clinicId is required' });
+    const db = readDB();
+    const match = (row) => String(row?.clinicId || row?.hospitalId || row?.shopId || '') === clinicId;
+    res.json({
+      ok: true,
+      clinicId,
+      clinicExists: Array.isArray(db.clinics) ? db.clinics.some(match) : false,
+      counts: {
+        patients: Array.isArray(db.clinicPatients) ? db.clinicPatients.filter(match).length : 0,
+        bills: Array.isArray(db.clinicBills) ? db.clinicBills.filter(match).length : 0,
+        visits: Array.isArray(db.clinicVisits) ? db.clinicVisits.filter(match).length : 0,
+        admissions: Array.isArray(db.clinicAdmissions) ? db.clinicAdmissions.filter(match).length : 0,
+        appointments: Array.isArray(db.clinicAppointments) ? db.clinicAppointments.filter(match).length : 0,
+        pharmacy: Array.isArray(db.clinicPharmacyDispenses) ? db.clinicPharmacyDispenses.filter(match).length : 0,
+        labs: Array.isArray(db.clinicLabOrders) ? db.clinicLabOrders.filter(match).length : 0,
+        prescriptions: Array.isArray(db.clinicPrescriptions) ? db.clinicPrescriptions.filter(match).length : 0,
+        notifications: Array.isArray(db.clinicNotifications) ? db.clinicNotifications.filter(match).length : 0,
+        changes: Array.isArray(db.clinicChangeLog) ? db.clinicChangeLog.filter(match).length : 0,
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ ok:false, error:'Clinic health failed', detail:String(e?.message || e) });
+  }
 });
 
 app.get("/", (_req, res) => {

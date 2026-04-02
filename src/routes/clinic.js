@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import { readDB, writeDB } from '../db.js';
 import { clinicAddClient, clinicPublish, clinicSendSse, clinicSseHeaders } from '../clinic_events.js';
-import { ensureFcm, pushShopChange } from '../fcm.js';
+import * as Fcm from '../fcm.js';
 
 const r = Router();
 
@@ -33,7 +33,7 @@ function normRole(v){
 }
 function clinicCode(){ return ('CLN-' + nanoid(6)).toUpperCase(); }
 function safeEmail(v){ return lower(v).replace(/\s+/g, ''); }
-function authClinicId(req){ return toStr(req.auth?.clinicId || req.auth?.hospitalId || req.headers['x-clinic-id'] || req.headers['x-hospital-id']); }
+function authClinicId(req){ return toStr(req.auth?.clinicId || req.auth?.hospitalId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || req.query?.clinicId || req.query?.hospitalId || req.body?.clinicId || req.body?.hospitalId); }
 function roleAllowed(req, allowed){
   const role = normRole(req.auth?.role);
   return allowed.includes(role) || allowed.includes('*');
@@ -431,6 +431,64 @@ function slimQueueRow(row){
     updatedAt: toNum(row.updatedAt || row.createdAt)
   };
 }
+function buildTimelineSafe(db, clinicId, days = 14){
+  const totalDays = Math.max(1, Math.min(60, toNum(days, 14)));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(end.getTime() - ((totalDays - 1) * dayMs));
+  start.setHours(0, 0, 0, 0);
+  const byDay = new Map();
+
+  for (let i = 0; i < totalDays; i += 1) {
+    const d = new Date(start.getTime() + (i * dayMs));
+    const key = d.toISOString().slice(0, 10);
+    byDay.set(key, {
+      date: key,
+      label: key,
+      patients: 0,
+      visits: 0,
+      bills: 0,
+      revenue: 0,
+      paid: 0,
+      outstanding: 0,
+      queueAdded: 0,
+      appointments: 0,
+      admissions: 0,
+      lab: 0,
+      pharmacy: 0,
+      notifications: 0
+    });
+  }
+
+  const bump = (rows, field, valueMapper = () => 1, timeFields = ['createdAt', 'updatedAt']) => {
+    arr(rows).forEach((row) => {
+      const ts = timeFields.map((key) => toNum(row?.[key])).find((value) => value > 0);
+      if (!ts || ts < start.getTime() || ts > end.getTime()) return;
+      const key = new Date(ts).toISOString().slice(0, 10);
+      const bucket = byDay.get(key);
+      if (!bucket) return;
+      bucket[field] = toNum(bucket[field]) + toNum(valueMapper(row));
+    });
+  };
+
+  bump(db.clinicPatients?.filter(x => String(x.clinicId) === String(clinicId)), 'patients');
+  bump(db.clinicVisits?.filter(x => String(x.clinicId) === String(clinicId)), 'visits');
+  bump(db.clinicBills?.filter(x => String(x.clinicId) === String(clinicId)), 'bills');
+  bump(db.clinicBills?.filter(x => String(x.clinicId) === String(clinicId)), 'revenue', (row) => toNum(row?.total || row?.amount || row?.grandTotal));
+  bump(db.clinicBills?.filter(x => String(x.clinicId) === String(clinicId)), 'paid', (row) => toNum(row?.paid || row?.amount_paid || row?.amountPaid || row?.total));
+  bump(db.clinicDoctorQueue?.filter(x => String(x.clinicId) === String(clinicId)), 'queueAdded');
+  bump(db.clinicAppointments?.filter(x => String(x.clinicId) === String(clinicId)), 'appointments');
+  bump(db.clinicAdmissions?.filter(x => String(x.clinicId) === String(clinicId)), 'admissions');
+  bump(db.clinicLabRequests?.filter(x => String(x.clinicId) === String(clinicId)), 'lab');
+  bump(db.clinicPharmacyDispenses?.filter(x => String(x.clinicId) === String(clinicId)), 'pharmacy', (row) => toNum(row?.total || row?.amount || 1));
+  bump(db.clinicNotifications?.filter(x => String(x.clinicId) === String(clinicId)), 'notifications');
+
+  return Array.from(byDay.values())
+    .map(item => ({ ...item, outstanding: Math.max(0, toNum(item.revenue) - toNum(item.paid)) }))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
 function liveCardsFromSnapshot(snapshot, changes = []){
   const stats = summarizeSnapshot(snapshot);
   const counts = {
@@ -457,7 +515,7 @@ function liveCardsFromSnapshot(snapshot, changes = []){
 }
 function buildPortalCommandCenter(db, clinicId, days = 14){
   const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };
-  const timeline = buildTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(days, 14))));
+  const timeline = buildTimelineSafe(db, clinicId, Math.max(1, Math.min(60, toNum(days, 14))));
   const queue = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimQueueRow);
   const patients = sortRecent(db.clinicPatients.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimPatientRow);
   const bills = sortRecent(db.clinicBills.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimBillRow);
@@ -697,7 +755,7 @@ function portalBundle(db, clinicId, options = {}){
   if (wants('live')) {
     const queue = db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status)));
     const changes = db.clinicChangeLog.filter(x => String(x.clinicId) === clinicId).sort((a,b)=>toNum(b.version)-toNum(a.version)).slice(0, 8);
-    const timeline = buildTimeline(db, clinicId, 1);
+    const timeline = buildTimelineSafe(db, clinicId, 1);
     const today = timeline[0] || {};
     out.live = {
       clinic: clinic ? clinicPublicRow(clinic) : null,
@@ -729,7 +787,7 @@ function portalBundle(db, clinicId, options = {}){
     out.notifications = { notifications: db.clinicNotifications.filter(x => String(x.clinicId) === clinicId).sort((a,b)=>toNum(b.createdAt)-toNum(a.createdAt)).slice(0, 20) };
   }
   if (wants('timeline')) {
-    out.timeline = { timeline: buildTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(options.days, 14)))) };
+    out.timeline = { timeline: buildTimelineSafe(db, clinicId, Math.max(1, Math.min(60, toNum(options.days, 14)))) };
   }
   if (wants('aiOverview')) {
     const risks = {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { readDB, writeDB } from "../db.js";
-import { pushSpngShopChange } from "../fcm.js";
+import * as Fcm from "../fcm.js";
+const pushSpngShopChange = Fcm.pushSpngShopChange || (async () => ({ ok: true, skipped: true, reason: "FCM helper unavailable" }));
 
 const r = Router();
 

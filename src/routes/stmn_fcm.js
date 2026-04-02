@@ -1,5 +1,8 @@
 import { Router } from "express";
-import { upsertDeviceToken, removeDeviceToken, ensureFcm } from "../fcm.js";
+import * as Fcm from "../fcm.js";
+const upsertDeviceToken = Fcm.upsertDeviceToken || ((shopId, deviceId, role, token) => ({ ok: false, error: "upsertDeviceToken unavailable" }));
+const removeDeviceToken = Fcm.removeDeviceToken || ((shopId, deviceId) => ({ ok: true, removed: 0, reason: "removeDeviceToken unavailable" }));
+const ensureFcm = Fcm.ensureFcm || (() => ({ ok: true, disabled: true, reason: "FCM helper unavailable" }));
 
 const r = Router();
 
