@@ -237,34 +237,8 @@ function changedTablesSince(db, clinicId, sinceVersion){
 function mergeReportTables(report){
   return Object.keys(report || {}).filter(key => {
     const v = report?.[key];
-    if (typeof v === 'number') return toNum(v, 0) > 0;
-    return !!(v && (toNum(v.inserted) > 0 || toNum(v.updated) > 0 || toNum(v.merged) > 0 || toNum(v.applied) > 0 || toNum(v.total) > 0 || toNum(v.changed) > 0 || toNum(v.count) > 0));
+    return v && (toNum(v.inserted) > 0 || toNum(v.updated) > 0 || toNum(v.merged) > 0 || toNum(v.applied) > 0 || toNum(v.total) > 0);
   });
-}
-function pickSnapshotPayload(body){
-  const src = body && typeof body === 'object' ? body : {};
-  if (src.snapshot && typeof src.snapshot === 'object') {
-    if (src.snapshot.data && typeof src.snapshot.data === 'object') return src.snapshot;
-    const nestedKeys = Object.keys(src.snapshot || {});
-    if (nestedKeys.length) return { ...src.snapshot, data: src.snapshot.data && typeof src.snapshot.data === 'object' ? src.snapshot.data : src.snapshot };
-  }
-  if (src.data && typeof src.data === 'object') {
-    return { data: src.data, exported_at: toNum(src.exported_at || src.exportedAt, now()), version: toNum(src.version, 0) };
-  }
-  const knownKeys = [
-    'clinic_profile','clinicProfile','branches','audit_logs','staff','staffs','patients','visits','bills','prescriptions',
-    'lab_requests','lab','pharmacy_items','pharmacy_dispenses','pharmacy','admissions','appointments','vitals',
-    'inpatient_treatment','treatment_notes','medication_schedule','medication_logs','lab_samples','pharmacy_receipts',
-    'discharge_summary','nurse_tasks','cashier_shifts','nurse_desk','nurseDesk','doctor_queue','doctorQueue'
-  ];
-  const data = {};
-  for (const key of knownKeys) {
-    if (key in src) data[key] = src[key];
-  }
-  if (Object.keys(data).length) {
-    return { data, exported_at: toNum(src.exported_at || src.exportedAt, now()), version: toNum(src.version, 0) };
-  }
-  return { data:{} };
 }
 function makeNotification(db, clinicId, type, title, message, extra = {}){
   const row = {
@@ -1536,7 +1510,7 @@ function mergeSnapshotIntoCanonical(db, clinicId, snapshot){
 }
 
 function saveSnapshot(db, clinicId, body){
-  const snapshot = pickSnapshotPayload(body);
+  const snapshot = body.snapshot && typeof body.snapshot === 'object' ? body.snapshot : { data:{} };
   const mergeReport = mergeSnapshotIntoCanonical(db, clinicId, snapshot);
   const normalizedSnapshot = buildSnapshotData(db, clinicId);
   const row = {
@@ -1576,7 +1550,7 @@ r.post('/clinic/snapshot/upload', (req, res) => {
     pushEvent(db, clinicId, 'snapshot_uploaded', { deviceId: toStr(req.body?.deviceId), branchId: toStr(req.body?.branchId), stats, version: row.version || getClinicVersion(db, clinicId), changedTables, tables: changedTables });
     writeDB(db);
     const latest = getLatestSnapshot(db, clinicId);
-    return res.json({ ok:true, uploaded:true, snapshotId: row.snapshotId, version: row.version || getClinicVersion(db, clinicId), stats, changedTables, tables: changedTables, pull_snapshot: latest?.snapshot || row.snapshot, server_time: now() });
+    return res.json({ ok:true, uploaded:true, snapshotId: row.snapshotId, version: row.version || getClinicVersion(db, clinicId), stats, pull_snapshot: latest?.snapshot || row.snapshot, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'upload failed' });
   }
@@ -1606,7 +1580,7 @@ r.post('/clinic/sync/push', (req, res) => {
     const changedTables = mergeReportTables(row.mergeReport);
     pushEvent(db, clinicId, 'sync_push', { deviceId: toStr(req.body?.deviceId), branchId: toStr(req.body?.branchId), stats, version: row.version || getClinicVersion(db, clinicId), changedTables, tables: changedTables });
     writeDB(db);
-    return res.json({ ok:true, pushed:true, snapshotId: row.snapshotId, version: row.version || getClinicVersion(db, clinicId), stats, changedTables, tables: changedTables, pull_snapshot: getLatestSnapshot(db, clinicId)?.snapshot || row.snapshot, server_time: now() });
+    return res.json({ ok:true, pushed:true, snapshotId: row.snapshotId, version: row.version || getClinicVersion(db, clinicId), stats, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'push failed' });
   }
