@@ -513,9 +513,11 @@ function liveCardsFromSnapshot(snapshot, changes = []){
   ];
   return { counts, cards, recentChanges: changes.slice(0,8) };
 }
+
+const getClinicTimeline = (...args) => buildTimelineSafe(...args);
 function buildPortalCommandCenter(db, clinicId, days = 14){
   const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };
-  const timeline = buildTimelineSafe(db, clinicId, Math.max(1, Math.min(60, toNum(days, 14))));
+  const timeline = getClinicTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(days, 14))));
   const queue = sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimQueueRow);
   const patients = sortRecent(db.clinicPatients.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimPatientRow);
   const bills = sortRecent(db.clinicBills.filter(x => String(x.clinicId) === String(clinicId))).slice(0, 12).map(slimBillRow);
@@ -755,7 +757,7 @@ function portalBundle(db, clinicId, options = {}){
   if (wants('live')) {
     const queue = db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status)));
     const changes = db.clinicChangeLog.filter(x => String(x.clinicId) === clinicId).sort((a,b)=>toNum(b.version)-toNum(a.version)).slice(0, 8);
-    const timeline = buildTimelineSafe(db, clinicId, 1);
+    const timeline = getClinicTimeline(db, clinicId, 1);
     const today = timeline[0] || {};
     out.live = {
       clinic: clinic ? clinicPublicRow(clinic) : null,
@@ -787,7 +789,7 @@ function portalBundle(db, clinicId, options = {}){
     out.notifications = { notifications: db.clinicNotifications.filter(x => String(x.clinicId) === clinicId).sort((a,b)=>toNum(b.createdAt)-toNum(a.createdAt)).slice(0, 20) };
   }
   if (wants('timeline')) {
-    out.timeline = { timeline: buildTimelineSafe(db, clinicId, Math.max(1, Math.min(60, toNum(options.days, 14)))) };
+    out.timeline = { timeline: getClinicTimeline(db, clinicId, Math.max(1, Math.min(60, toNum(options.days, 14)))) };
   }
   if (wants('aiOverview')) {
     const risks = {
