@@ -405,6 +405,60 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Create Staff</button></div>
           </form>
         </article>
+
+        <article class="glass card stack12">
+          <div class="cardHead"><div><div class="eyebrow">Inpatient + Pharmacy</div><h3>Admission / Ward / Dispensing</h3></div></div>
+          <form id="admissionForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Admission Patient ID" required>
+            <input name="ward" placeholder="Ward / Bed">
+            <input name="doctorName" placeholder="Doctor Name">
+            <input name="reason" placeholder="Admission Reason">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Admit Patient</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="pharmacyDispenseForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Dispense Patient ID" required>
+            <input name="itemName" placeholder="Drug / Item Name" required>
+            <input name="quantity" type="number" step="0.01" placeholder="Qty">
+            <input name="unitPrice" type="number" step="0.01" placeholder="Unit Price">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Dispense Drug</button></div>
+          </form>
+        </article>
+
+        <article class="glass card stack12">
+          <div class="cardHead"><div><div class="eyebrow">Discharge + Refund + Theatre</div><h3>Closing and Procedure Workflow</h3></div></div>
+          <form id="dischargeForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Discharge Patient ID" required>
+            <input name="diagnosis" placeholder="Diagnosis">
+            <input name="outcome" placeholder="Outcome">
+            <input name="followUpDate" placeholder="Follow-up Date">
+            <textarea name="dischargeSummary" class="span2" placeholder="Discharge Summary"></textarea>
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Complete Discharge</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="refundForm" class="formGrid compactGrid">
+            <input name="billId" placeholder="Bill ID" required>
+            <input name="amount" type="number" step="0.01" placeholder="Refund Amount" required>
+            <input name="reason" placeholder="Refund Reason">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Process Refund</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="theatreForm" class="formGrid compactGrid">
+            <input name="patientId" placeholder="Procedure Patient ID" required>
+            <input name="procedureName" placeholder="Procedure Name" required>
+            <input name="surgeonName" placeholder="Surgeon / Doctor">
+            <input name="theatreDate" placeholder="Procedure Date">
+            <input name="theatreTime" placeholder="Procedure Time">
+            <input name="theatreRoom" placeholder="Theatre Room">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Schedule Procedure</button></div>
+          </form>
+        </article>
+
+        <article class="glass card spanWide">
+          <div class="cardHead compact"><div><div class="eyebrow">Full Clinical Operations Module</div><h3>Registration, Visits, Queue, Nursing, Lab, Pharmacy, Billing, Appointment, Theatre and Discharge</h3></div><span class="badge">Enterprise Ops</span></div>
+          <div id="clinicalOpsGrid" class="summaryGrid"></div>
+          <div id="clinicalOpsLists" class="mt16 stack10"></div>
+        </article>
       </div>
     </section>
 

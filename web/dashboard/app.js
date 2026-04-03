@@ -100,6 +100,11 @@ function bindUI() {
   bindForm('#prescriptionForm', '/api/prescription/create', 'Prescription saved', async () => { showToast('Prescription Saved', 'Medication order created'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
   bindForm('#nurseForm', '/api/nurse_desk/create', 'Nurse note saved', async () => { showToast('Nurse Desk', 'Nurse entry saved'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
   bindForm('#staffForm', '/api/staff/create', 'Staff created', async () => { showToast('Staff Created', 'Team member saved'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#admissionForm', '/api/admission/create', 'Admission created', async () => { showToast('Admission Saved', 'Ward admission created'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
+  bindForm('#pharmacyDispenseForm', '/api/pharmacy/dispense', 'Drug dispensed', async () => { showToast('Pharmacy Dispense', 'Medication dispensed successfully'); await targetedRealtimeRefresh(['patients','bills','pharmacy_dispenses','audit_logs']); });
+  bindForm('#dischargeForm', '/api/discharge/create', 'Discharge completed', async () => { showToast('Discharge Workflow', 'Patient discharge completed'); await targetedRealtimeRefresh(['patients','admissions','audit_logs']); });
+  bindForm('#refundForm', '/api/payment/refund', 'Refund processed', async () => { showToast('Refund Processed', 'Billing refund saved'); await targetedRealtimeRefresh(['bills','audit_logs']); });
+  bindForm('#theatreForm', '/api/theatre/schedule', 'Procedure scheduled', async () => { showToast('Theatre Scheduled', 'Procedure schedule saved'); await targetedRealtimeRefresh(['appointments','audit_logs']); });
 }
 
 function bindForm(selector, path, successMsg, onDone) {
@@ -251,6 +256,7 @@ async function refreshAll() {
       loadCommandCenter(),
       loadDoctorWidgets(),
       loadWorkspace(),
+      loadClinicalOps(),
     ]);
     state.lastSync = Date.now();
     $('#lastSyncText').textContent = fmtTime(state.lastSync);
@@ -286,6 +292,7 @@ async function loadCommandCenter() {
 
 async function loadDoctorWidgets() { const r = await api('/api/portal/doctor-widgets'); state.data.doctorWidgets = r.widgets || null; return r; }
 async function loadWorkspace() { const r = await api('/api/portal/workspace'); state.data.workspace = r || null; return r; }
+async function loadClinicalOps() { const r = await api('/api/portal/clinical-ops'); state.data.clinicalOps = r?.modules || null; return r; }
 
 function applyLiteBundle(bundle = {}) {
   if (bundle.live) { state.data.live = bundle.live; state.live = bundle.live; }
@@ -300,6 +307,7 @@ function applyLiteBundle(bundle = {}) {
   if (bundle.commandCenter) state.data.commandCenter = bundle.commandCenter;
   if (bundle.doctorWidgets) state.data.doctorWidgets = bundle.doctorWidgets;
   if (bundle.workspace) state.data.workspace = bundle.workspace;
+  if (bundle.clinicalOps) state.data.clinicalOps = bundle.clinicalOps;
   state.version = Math.max(state.version || 0, num(bundle.version || bundle.live?.version || 0));
 }
 
@@ -393,6 +401,7 @@ function renderAll() {
   renderAnalyticsPanels();
   renderPatients();
   renderWorkspace();
+  renderClinicalOps();
   renderCommandCenter();
   renderLiveTicker();
   renderSideSummary();
@@ -1271,6 +1280,9 @@ async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
   if (needsPatients) include.add('patients');
   if (needsNotifications) include.add('notifications');
   await loadLiteBundle(Array.from(include));
+  if (needsOps) {
+    try { await loadClinicalOps(); } catch {}
+  }
   if (versionHint) state.version = Math.max(state.version || 0, num(versionHint));
   renderAll();
 }
@@ -1366,7 +1378,8 @@ function recomputeCommandCardsFromOverview() {
     admissions: num(o.admissions),
     totalPaid: num(f.totalPaid),
     outstanding: num(f.outstanding),
-    pharmacy: num(f.pharmacySales || o.pharmacy)
+    pharmacy: num(f.pharmacySales || o.pharmacyRevenue || o.pharmacy),
+    pharmacyDispenseCount: num(f.pharmacyDispenseCount || o.pharmacy || 0)
   };
   cc.cards = [
     { key:'patients', label:'Patients', value: cc.counts.patients, sub:'Registered patient base' },
@@ -1376,7 +1389,7 @@ function recomputeCommandCardsFromOverview() {
     { key:'outstanding', label:'Outstanding', value: cc.counts.outstanding, kind:'money', sub:'Awaiting payment' },
     { key:'bills', label:'Bills', value: cc.counts.bills, sub:'Billing records created' },
     { key:'admissions', label:'Admissions', value: cc.counts.admissions, sub:'Current admissions' },
-    { key:'pharmacy', label:'Pharmacy Sales', value: cc.counts.pharmacy, kind:'count', sub:'Pharmacy workflow volume' },
+    { key:'pharmacy', label:'Pharmacy Revenue', value: cc.counts.pharmacy, kind:'money', sub:`${cc.counts.pharmacyDispenseCount || 0} dispense record(s)` },
   ];
 }
 
@@ -1446,6 +1459,41 @@ function renderWorkspace() {
   if (timelineHost) {
     timelineHost.innerHTML = careTimeline.length ? careTimeline.map(item => `<div class="feedItem"><div class="row alignCenter" style="justify-content:space-between"><div class="itemTitle">${escapeHtml(item.lane || 'Care')}</div><span class="feedType">${escapeHtml(item.status || '--')}</span></div><div>${escapeHtml(item.title || '--')}</div><div class="itemMeta"><span>${escapeHtml(item.sub || '--')}</span><span>${fmtDateTime(item.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">Unified care timeline will appear here as queue, lab, prescription and nurse actions come in.</div>`;
   }
+}
+
+
+function renderClinicalOps() {
+  const grid = document.getElementById('clinicalOpsGrid');
+  const lists = document.getElementById('clinicalOpsLists');
+  if (!grid || !lists) return;
+  const mods = state.data.clinicalOps || {};
+  const cards = [
+    { label:'Patient Registration', value:num(mods.registration?.count), sub:'Registered patient base' },
+    { label:'OPD / Visits', value:num(mods.visits?.count), sub:'Active clinical encounters' },
+    { label:'Doctor Queue', value:num(mods.queue?.count), sub:'Patients waiting for doctors' },
+    { label:'Admissions / Ward', value:num(mods.admissions?.count), sub:'Current inpatient load' },
+    { label:'Nursing Desk', value:num(mods.nursing?.count), sub:'Open nursing actions' },
+    { label:'Lab Orders', value:num(mods.labs?.count), sub:'Pending lab requests' },
+    { label:'Pharmacy Revenue', value:money(mods.pharmacy?.revenue || 0), sub:`${num(mods.pharmacy?.count)} dispense(s)` },
+    { label:'Prescription Tracking', value:num(mods.prescriptions?.count), sub:'Active medication orders' },
+    { label:'Billing', value:money(mods.billing?.revenue || 0), sub:`Outstanding ${money(mods.billing?.outstanding || 0)}` },
+    { label:'Appointments', value:num(mods.appointments?.count), sub:'Upcoming booked appointments' },
+    { label:'Theatre / Procedures', value:num(mods.theatre?.count), sub:'Scheduled procedures' },
+    { label:'Discharge Workflow', value:num(mods.discharges?.count), sub:`Refunds ${money(mods.refunds?.amount || 0)}` },
+  ];
+  grid.innerHTML = cards.map(c => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(c.label)}</div><div style="font-size:24px;font-weight:900">${escapeHtml(String(c.value))}</div><div class="itemMeta"><span>${escapeHtml(c.sub)}</span></div></div>`).join('');
+  const sections = [
+    ['Recent Registrations', mods.registration?.recent || [], row => `${escapeHtml(row.fullName || row.patientName || '--')}<span>${escapeHtml(row.patientId || '--')}</span>`],
+    ['Visit Queue', mods.queue?.recent || [], row => `${escapeHtml(row.patientName || row.patientId || '--')}<span>${escapeHtml(row.doctorName || row.doctor || row.status || '--')}</span>`],
+    ['Admissions', mods.admissions?.recent || [], row => `${escapeHtml(row.patientName || row.patientId || '--')}<span>${escapeHtml(row.ward || row.reason || row.status || '--')}</span>`],
+    ['Lab Orders', mods.labs?.recent || [], row => `${escapeHtml(row.testName || row.name || '--')}<span>${escapeHtml(row.patientName || row.patientId || row.status || '--')}</span>`],
+    ['Pharmacy Dispenses', mods.pharmacy?.recent || [], row => `${escapeHtml(row.itemName || row.drugName || '--')}<span>${money(row.total || 0)}</span>`],
+    ['Bills / Payments', mods.billing?.recent || [], row => `${escapeHtml(row.patientName || row.patientId || '--')}<span>${money(row.total || row.amount || 0)}</span>`],
+    ['Appointments', mods.appointments?.recent || [], row => `${escapeHtml(row.patientName || row.patientId || '--')}<span>${escapeHtml(row.appointmentDate || row.date || row.status || '--')}</span>`],
+    ['Theatre Schedule', mods.theatre?.recent || [], row => `${escapeHtml(row.procedureName || '--')}<span>${escapeHtml(row.theatreDate || row.status || '--')}</span>`],
+    ['Discharges / Refunds', [...(mods.discharges?.recent || []).slice(0,4), ...(mods.refunds?.recent || []).slice(0,4)], row => `${escapeHtml(row.patientName || row.billId || row.procedureName || '--')}<span>${escapeHtml(row.dischargeSummary || row.reason || row.amount || row.status || '--')}</span>`],
+  ];
+  lists.innerHTML = sections.map(([title, rows, fmt]) => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(title)}</div>${rows.length ? rows.slice(0,4).map(r => `<div class="feedItem compactFeed"><div style="display:flex;justify-content:space-between;gap:12px"><div>${fmt(r)}</div><div class="itemMeta"><span>${fmtDateTime(r.createdAt || r.updatedAt)}</span></div></div></div>`).join('') : `<div class="emptyState">No records yet.</div>`}</div>`).join('');
 }
 
 function renderCommandCenter() {
