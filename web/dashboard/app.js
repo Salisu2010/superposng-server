@@ -9,6 +9,9 @@ const state = {
   sse: null,
   poller: null,
   refreshTimer: null,
+  searchTimer: null,
+  searchSeq: 0,
+  lastSearchQuery: '',
   timelineDays: Number(localStorage.getItem('clinicPortalTimelineDays') || 14),
   currentTab: 'overview',
   live: null,
@@ -58,11 +61,12 @@ function bindUI() {
     await loadTimeline();
     renderAnalytics();
   });
-  $('#searchBtn').addEventListener('click', runSearch);
+  $('#searchBtn').addEventListener('click', () => runSearch({ immediate: true, source: 'button' }));
+  $('#searchInput').addEventListener('input', () => scheduleInstantSearch());
   $('#searchInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      runSearch();
+      runSearch({ immediate: true, source: 'enter' });
     }
   });
 
@@ -322,20 +326,53 @@ async function loadLiteBundle(include = []) {
 }
 async function loadNotificationsAndRender() { await loadNotifications(); renderFeed(); renderAnalyticsPanels(); }
 
-async function runSearch() {
+function clearSearchResults(message = 'Start typing to search patients instantly.') {
+  const host = $('#searchResults');
+  if (host) host.innerHTML = `<div class="emptyState">${escapeHtml(message)}</div>`;
+}
+
+function scheduleInstantSearch() {
   const q = ($('#searchInput').value || '').trim();
-  if (!q) return showToast('Search Needed', 'Enter patient ID, name, phone, MRN or email');
+  clearTimeout(state.searchTimer);
+  if (!q) {
+    state.lastSearchQuery = '';
+    clearSearchResults('Start typing patient ID, MRN, name, phone or email. Results will appear instantly.');
+    return;
+  }
+  if (q.length < 2) {
+    clearSearchResults('Keep typing... live patient search starts from 2 characters.');
+    return;
+  }
+  state.searchTimer = setTimeout(() => runSearch({ live: true, source: 'typing' }), 180);
+}
+
+async function runSearch(opts = {}) {
+  const { live = false, immediate = false } = opts;
+  const q = ($('#searchInput').value || '').trim();
+  if (!q) {
+    clearSearchResults('Start typing patient ID, MRN, name, phone or email. Results will appear instantly.');
+    return;
+  }
+  if (q.length < 2 && !immediate) {
+    clearSearchResults('Keep typing... live patient search starts from 2 characters.');
+    return;
+  }
+  if (live && q === state.lastSearchQuery) return;
+  const seq = ++state.searchSeq;
+  state.lastSearchQuery = q;
+  const host = $('#searchResults');
+  if (host && live) host.innerHTML = `<div class="emptyState">Searching <strong>${escapeHtml(q)}</strong>...</div>`;
   try {
     const res = await api(`/api/search/patient?q=${encodeURIComponent(q)}`);
+    if (seq !== state.searchSeq) return;
     const items = res.patients || [];
-    const host = $('#searchResults');
     if (!items.length) {
-      host.innerHTML = `<div class="emptyState">No patient matched your search.</div>`;
+      host.innerHTML = `<div class="emptyState">No patient matched <strong>${escapeHtml(q)}</strong>.</div>`;
       $('#patientAiSummary').innerHTML = `<div class="emptyState">Select a patient to see AI summary.</div>`;
       return;
     }
     host.innerHTML = `
-      <div class="searchSummaryBar"><div><strong>${items.length}</strong> patient result(s) found for <strong>${escapeHtml(q)}</strong></div><div class="row gap8"><span class="badge">Live Search</span><span class="badge">Profile Drawer</span></div></div>
+      <div class="searchSummaryBar"><div><strong>${items.length}</strong> patient result(s) found for <strong>${escapeHtml(q)}</strong></div><div class="row gap8"><span class="badge">Instant Search</span><span class="badge">Profile Drawer</span></div></div>
       ${items.map(p => {
         const name = escapeHtml(p.fullName || p.patientName || 'Unnamed Patient');
         const pid = escapeHtml(p.patientId || '--');
@@ -366,7 +403,9 @@ async function runSearch() {
     $$('[data-bill]', host).forEach(btn => btn.addEventListener('click', () => openBillModal(btn.dataset.bill, btn.dataset.name)));
     loadPatientAi(items[0].patientId);
   } catch (err) {
-    showToast('Search Failed', err.message || 'Unable to search patient');
+    if (seq !== state.searchSeq) return;
+    if (!live) showToast('Search Failed', err.message || 'Unable to search patient');
+    host.innerHTML = `<div class="emptyState">Unable to search patients right now.</div>`;
   }
 }
 
@@ -675,13 +714,87 @@ function renderAnalytics() {
   ]);
 }
 
+function formatActivityType(type = '') {
+  const value = String(type || '').trim().toLowerCase();
+  if (!value) return 'Activity';
+  const labels = {
+    patient_registered: 'New patient registered',
+    bill_created: 'Bill created',
+    payment_received: 'Payment received',
+    payment_refund: 'Refund processed',
+    lab_sample_collected: 'Lab sample collected',
+    lab_request_created: 'Lab order created',
+    lab_request_updated: 'Result ready / lab updated',
+    drug_dispensed: 'Drug dispensed',
+    admission_created: 'Admission created',
+    discharge_created: 'Patient discharged',
+    doctor_queue_created: 'Doctor queue updated',
+    doctor_queue_updated: 'Doctor queue changed',
+    prescription_created: 'Prescription tracked',
+    prescription_updated: 'Prescription updated',
+    sync: 'System sync update',
+    restore: 'Backup restore alert',
+    printer_issue: 'Printer issue',
+    failed_sync: 'Failed sync',
+    stock_low: 'Stock low',
+    stock_expired: 'Expired stock'
+  };
+  return labels[value] || value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function activityTone(type = '') {
+  const value = String(type || '').toLowerCase();
+  if (/(failed_sync|printer_issue|system_alert|error|critical|expired|stock_low)/.test(value)) return 'danger';
+  if (/(refund|discharge|lab_request_updated|payment_received)/.test(value)) return 'warn';
+  if (/(patient_registered|bill_created|drug_dispensed|admission_created|doctor_queue|visit_created|prescription|appointment)/.test(value)) return 'success';
+  return 'normal';
+}
+
+function getActivityFeedItems() {
+  const notifications = Array.isArray(state.data.notifications) ? state.data.notifications : [];
+  const liveChanges = Array.isArray(state.data.live?.recentChanges) ? state.data.live.recentChanges : [];
+  const synthesized = liveChanges.map(item => ({
+    id: `live_${item.version || ''}_${item.type || ''}_${item.createdAt || ''}`,
+    type: item.type || 'update',
+    title: formatActivityType(item.type),
+    message: item.message || item.payload?.message || item.payload?.patientName || item.payload?.itemName || 'Realtime dashboard update received.',
+    createdAt: item.createdAt || Date.now(),
+    actor: item.payload?.actor || item.actor || 'system'
+  }));
+  return [...notifications, ...synthesized]
+    .filter(Boolean)
+    .sort((a, b) => num(b.createdAt) - num(a.createdAt))
+    .filter((item, index, arr) => arr.findIndex(x => String(x.id || `${x.type}_${x.createdAt}_${x.message}`) === String(item.id || `${item.type}_${item.createdAt}_${item.message}`)) === index)
+    .slice(0, 20);
+}
+
+function pushRealtimeNotification(event) {
+  if (!event) return;
+  const payload = event.payload || {};
+  const type = String(event.type || event.event || 'update').toLowerCase();
+  const incoming = {
+    id: event.id || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    title: event.title || formatActivityType(type),
+    message: event.message || payload.message || payload.patientName || payload.itemName || 'Realtime activity received.',
+    createdAt: num(event.createdAt || Date.now()),
+    actor: payload.actor || event.actor || payload.by || 'system',
+    payload
+  };
+  const existing = Array.isArray(state.data.notifications) ? state.data.notifications.slice() : [];
+  state.data.notifications = [incoming, ...existing]
+    .filter((item, index, arr) => arr.findIndex(x => String(x.id) === String(item.id)) === index)
+    .sort((a, b) => num(b.createdAt) - num(a.createdAt))
+    .slice(0, 20);
+}
+
 function renderFeed() {
-  const items = state.data.notifications || [];
+  const items = getActivityFeedItems();
   $('#activityFeed').innerHTML = items.length ? items.map(n => `
     <div class="feedItem">
       <div class="row alignCenter" style="justify-content:space-between">
-        <div class="itemTitle">${escapeHtml(n.title || n.type || 'Activity')}</div>
-        <span class="feedType">${escapeHtml(n.type || 'event')}</span>
+        <div class="itemTitle">${escapeHtml(n.title || formatActivityType(n.type) || 'Activity')}</div>
+        <span class="feedType ${activityTone(n.type)}">${escapeHtml(formatActivityType(n.type || 'event'))}</span>
       </div>
       <div>${escapeHtml(n.message || n.body || '--')}</div>
       <div class="itemMeta"><span>${fmtDateTime(n.createdAt)}</span><span>${escapeHtml(n.actor || n.by || 'system')}</span></div>
@@ -1273,7 +1386,7 @@ async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
   const needsFinance = ['bills','pharmacy_dispenses','cashier_shifts'].some(k => keys.has(k));
   const needsTimeline = ['patients','visits','bills','doctor_queue'].some(k => keys.has(k));
   const needsPatients = ['patients','visits','bills','admissions','appointments'].some(k => keys.has(k));
-  const needsNotifications = ['audit_logs'].some(k => keys.has(k)) || !keys.size;
+  const needsNotifications = ['audit_logs','patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff'].some(k => keys.has(k)) || !keys.size;
   if (needsOps) ['queue','overview','aiOverview','risk','doctorWidgets','workspace'].forEach(k => include.add(k));
   if (needsFinance) include.add('finance');
   if (needsTimeline) include.add('timeline');
@@ -1298,8 +1411,11 @@ function handleRealtimeEvent(raw) {
   const versionHint = num(event?.payload?.version || event?.version || 0);
   const tables = Array.from(new Set([...(event?.payload?.tables || []), ...(event?.payload?.changedTables || []), ...inferTablesFromType(type)]));
   state.version = Math.max(state.version || 0, versionHint);
-  if (type) showToast('Realtime Update', event.title || event.message || type);
-  if (event) applyRealtimeMutation(event);
+  if (type) showToast('Realtime Update', event.title || event.message || formatActivityType(type));
+  if (event) {
+    applyRealtimeMutation(event);
+    pushRealtimeNotification(event);
+  }
   if (state.data.live && event && type) {
     const recent = Array.isArray(state.data.live.recentChanges) ? state.data.live.recentChanges.slice() : [];
     recent.unshift({ type, version: state.version, createdAt: Date.now(), payload: event.payload || {}, tables });
