@@ -396,20 +396,245 @@ function renderAll() {
   renderCommandCenter();
   renderLiveTicker();
   renderSideSummary();
+  renderExecutiveOverview();
+  renderEnterpriseInsights();
+}
+
+
+function getExecutiveMetrics() {
+  const o = state.data.overview?.overview || {};
+  const f = state.data.finance?.finance || {};
+  const ws = state.data.workspace?.summary || {};
+  const timeline = Array.isArray(state.data.timeline) ? state.data.timeline : [];
+  const today = timeline.at(-1) || {};
+  const last7 = timeline.slice(-7);
+  const last30 = timeline.slice(-30);
+  const doctors = getDoctorWorkload();
+  const openQueue = num(ws.openQueue || o.queue || state.data.queue?.length || 0);
+  const activeAdmissions = num(ws.activeAdmissions || o.admissions || 0);
+  const emergencyAlerts = getEmergencyAlerts().length;
+  const totalBedsEstimate = Math.max(activeAdmissions, num(state.data.live?.clinic?.branchCount || 1) * 20, 20);
+  const occupiedPct = totalBedsEstimate ? Math.round((activeAdmissions / totalBedsEstimate) * 100) : 0;
+  const queuePerDoctor = doctors.length ? openQueue / doctors.length : openQueue;
+  const pharmacySales = num(f.pharmacySales || 0);
+  return {
+    totalPatients: num(o.patients || state.data.patients?.length || 0),
+    activeVisits: num(ws.activeVisits || o.activeVisits || o.visits || 0),
+    admissionsActive: activeAdmissions,
+    revenueToday: num(today.revenuePaid || today.paid || 0),
+    revenueWeek: last7.reduce((s, x) => s + num(x.revenuePaid || x.paid), 0),
+    revenueMonth: last30.reduce((s, x) => s + num(x.revenuePaid || x.paid), 0),
+    outstanding: num(f.outstanding || o.outstanding || 0),
+    labPending: num(ws.pendingLabs || o.lab || 0),
+    pharmacySales,
+    queuePerDoctor,
+    queuePerDoctorLabel: doctors.length ? `${queuePerDoctor.toFixed(1)} avg` : `${openQueue} open`,
+    bedOccupancyPct: occupiedPct,
+    bedOccupancyLabel: activeAdmissions ? `${occupiedPct}% est.` : '0% est.',
+    emergencyAlerts,
+    totalBedsEstimate,
+    systemStatus: getSystemStatus(),
+    forecastRevenue: estimateForecastRevenue(timeline),
+  };
+}
+
+function getSystemStatus() {
+  const lagMs = state.lastSync ? Math.max(0, Date.now() - state.lastSync) : 0;
+  const lagMin = Math.round(lagMs / 60000);
+  const transport = state.transport === 'SSE' ? 'Cloud Online' : (state.hospitalId ? 'Polling Fallback' : 'Offline');
+  const syncHealth = !state.hospitalId ? 'Disconnected' : !state.lastSync ? 'Connecting' : lagMin <= 1 ? 'Healthy' : lagMin <= 5 ? 'Watch' : 'Needs Attention';
+  return {
+    cloud: transport,
+    syncHealth,
+    lastSyncLabel: state.lastSync ? new Date(state.lastSync).toLocaleString() : '--',
+    backupLabel: state.data.live?.lastSnapshotAt ? fmtDateTime(state.data.live.lastSnapshotAt) : 'Not exposed',
+    transport: state.transport || 'Polling'
+  };
+}
+
+function getEmergencyAlerts() {
+  const alerts = Array.isArray(state.data.aiOverview?.alerts) ? state.data.aiOverview.alerts : [];
+  const critical = alerts.filter(a => ['critical', 'urgent', 'high'].includes(String(a.severity || '').toLowerCase()));
+  const risk = state.data.risk?.risks || {};
+  const queuePressure = num(risk.queue_pressure?.score || 0) >= 70 ? [{ type: 'Queue', severity: 'high', message: `${num(risk.queue_pressure?.openQueue)} open queue items` }] : [];
+  const unpaid = num(risk.unpaid_bill_detection?.score || 0) >= 70 ? [{ type: 'Collections', severity: 'high', message: `Outstanding ${money(risk.unpaid_bill_detection?.outstanding || 0)}` }] : [];
+  return [...critical, ...queuePressure, ...unpaid];
+}
+
+function estimateForecastRevenue(timeline = []) {
+  const paidSeries = timeline.map(x => num(x.revenuePaid || x.paid)).filter(v => v > 0);
+  if (!paidSeries.length) return 0;
+  const recent = paidSeries.slice(-7);
+  const avg = recent.reduce((s, x) => s + x, 0) / recent.length;
+  return Math.round(avg * 30 * 100) / 100;
+}
+
+function buildDepartmentRanking() {
+  const ws = state.data.workspace?.summary || {};
+  const f = state.data.finance?.finance || {};
+  const list = [
+    { label: 'Revenue Desk', score: num(f.totalPaid), sub: `${money(f.totalPaid)} collected` },
+    { label: 'Pharmacy', score: num(f.pharmacySales || 0) || num(ws.activePrescriptions || 0), sub: `${num(ws.activePrescriptions || 0)} active prescriptions` },
+    { label: 'Lab', score: Math.max(0, 100 - (num(ws.pendingLabs || 0) * 8)), sub: `${num(ws.pendingLabs || 0)} pending labs` },
+    { label: 'Admissions', score: num(ws.activeAdmissions || 0) * 10, sub: `${num(ws.activeAdmissions || 0)} active admissions` },
+    { label: 'Front Desk', score: num(state.data.overview?.overview?.patients || 0), sub: `${num(state.data.overview?.overview?.patients || 0)} patient records` },
+  ];
+  return list.sort((a, b) => num(b.score) - num(a.score));
+}
+
+function buildStaffProductivity() {
+  const ws = state.data.workspace?.summary || {};
+  const doctors = getDoctorWorkload();
+  const activeStaff = Math.max(1, num(ws.staffOnlineReady || 0));
+  const activeVisits = num(ws.activeVisits || state.data.overview?.overview?.visits || 0);
+  const queueServed = doctors.reduce((s, d) => s + num(d.servedCount || 0), 0);
+  return {
+    activeStaff,
+    visitsPerStaff: activeVisits / activeStaff,
+    servedPerDoctor: doctors.length ? queueServed / doctors.length : 0,
+    staffReady: activeStaff,
+    queueServed,
+  };
+}
+
+function buildPeakHoursInsight() {
+  const rows = [
+    ...(state.data.queue || []).map(x => x.createdAt || x.updatedAt),
+    ...(state.data.notifications || []).map(x => x.createdAt),
+    ...((state.data.workspace?.careTimeline || []).map(x => x.createdAt))
+  ].map(v => Number(v)).filter(Boolean);
+  if (!rows.length) return { peak: '--', bottleneck: 'Waiting for more activity data', byHour: [] };
+  const hours = new Map();
+  rows.forEach(ts => {
+    const h = new Date(ts).getHours();
+    hours.set(h, (hours.get(h) || 0) + 1);
+  });
+  const sorted = Array.from(hours.entries()).sort((a,b)=>b[1]-a[1]);
+  const [hour,count] = sorted[0];
+  const queueOpen = num(state.data.workspace?.summary?.openQueue || state.data.overview?.overview?.queue || 0);
+  return {
+    peak: `${String(hour).padStart(2, '0')}:00`,
+    bottleneck: queueOpen >= 8 ? 'Doctor queue congestion' : num(state.data.workspace?.summary?.pendingLabs || 0) >= 5 ? 'Laboratory backlog' : 'No major bottleneck',
+    byHour: sorted.slice(0,4)
+  };
+}
+
+function buildRiskTrendInsight() {
+  const risk = state.data.risk?.risks || {};
+  const aiAlerts = Array.isArray(state.data.aiOverview?.alerts) ? state.data.aiOverview.alerts : [];
+  const readmissionProxy = state.data.patients?.filter?.(p => num(p.visitCount || 0) > 1).length || 0;
+  const score = Math.max(num(risk.queue_pressure?.score || 0), num(risk.unpaid_bill_detection?.score || 0), num(risk.pharmacy_stock_warning?.score || 0));
+  return {
+    riskScore: score,
+    readmissionProxy,
+    trend: score >= 70 || aiAlerts.some(a => ['critical','urgent','high'].includes(String(a.severity || '').toLowerCase())) ? 'High Watch' : score >= 40 ? 'Moderate Watch' : 'Stable',
+  };
+}
+
+function buildBranchComparison() {
+  const patients = Array.isArray(state.data.patients) ? state.data.patients : [];
+  const groups = new Map();
+  patients.forEach(p => {
+    const key = p.branchName || p.branch || p.branchId || 'Main Branch';
+    if (!groups.has(key)) groups.set(key, { label: key, patients: 0, activity: 0 });
+    const row = groups.get(key);
+    row.patients += 1;
+    row.activity += num(p.createdAt || p.updatedAt ? 1 : 0);
+  });
+  const out = Array.from(groups.values()).sort((a,b)=>b.patients-a.patients);
+  return out.length > 1 ? out : [];
+}
+
+function renderExecutiveOverview() {
+  const host = $('#executiveOverviewGrid');
+  if (!host) return;
+  const m = getExecutiveMetrics();
+  const sys = m.systemStatus;
+  const dept = buildDepartmentRanking();
+  const alerts = getEmergencyAlerts();
+  host.innerHTML = `
+    <div class="glassInnerCard">
+      <div class="itemTitle">System Status</div>
+      ${metricRow('Cloud', sys.cloud, `${sys.transport} transport`)}
+      ${metricRow('Sync Health', sys.syncHealth, `Last sync ${sys.lastSyncLabel}`)}
+      ${metricRow('Last Backup', sys.backupLabel, 'Using last snapshot timestamp exposed by server')}
+    </div>
+    <div class="glassInnerCard">
+      <div class="itemTitle">Revenue Windows</div>
+      ${metricRow('Today', money(m.revenueToday), 'Collections captured today')}
+      ${metricRow('This Week', money(m.revenueWeek), '7-day aggregate')}
+      ${metricRow('This Month', money(m.revenueMonth), '30-day aggregate')}
+      ${metricRow('Forecast Revenue', money(m.forecastRevenue), 'Projected next 30 days from recent trend')}
+    </div>
+    <div class="glassInnerCard">
+      <div class="itemTitle">Capacity and Alerts</div>
+      ${metricRow('Admissions Active', num(m.admissionsActive), 'Beds currently occupied by active admissions')}
+      ${metricRow('Bed Occupancy', m.bedOccupancyLabel, `${num(m.admissionsActive)} active beds out of est. ${num(m.totalBedsEstimate)}`)}
+      ${metricRow('Emergency Alerts', num(m.emergencyAlerts), alerts.length ? alerts.slice(0,2).map(a => a.type).join(' • ') : 'No urgent signal detected')}
+      ${metricRow('Lab Pending', num(m.labPending), 'Pending laboratory operations')}
+    </div>
+    <div class="glassInnerCard">
+      <div class="itemTitle">Department Performance Ranking</div>
+      <div class="stack10">
+        ${dept.slice(0,5).map((d, i) => `<div class="metricRow"><div class="row alignCenter" style="justify-content:space-between"><div class="itemTitle">#${i+1} ${escapeHtml(d.label)}</div><strong>${escapeHtml(String(Math.round(num(d.score))))}</strong></div><div class="itemMeta"><span>${escapeHtml(d.sub)}</span></div></div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderEnterpriseInsights() {
+  const host = $('#enterpriseInsightsGrid');
+  if (!host) return;
+  const m = getExecutiveMetrics();
+  const prod = buildStaffProductivity();
+  const peak = buildPeakHoursInsight();
+  const risk = buildRiskTrendInsight();
+  const branches = buildBranchComparison();
+  host.innerHTML = `
+    <div class="glassInnerCard">
+      <div class="itemTitle">Forecast Revenue</div>
+      ${metricRow('Next 30 Days', money(m.forecastRevenue), 'Trend based on recent paid revenue performance')}
+      ${metricRow('Queue per Doctor', m.queuePerDoctorLabel, 'Used to anticipate doctor-side congestion')}
+      ${metricRow('Outstanding Exposure', money(m.outstanding), 'Collections risk still in the pipeline')}
+    </div>
+    <div class="glassInnerCard">
+      <div class="itemTitle">Staff Productivity</div>
+      ${metricRow('Staff Ready', num(prod.staffReady), 'Currently active team members')}
+      ${metricRow('Visits per Staff', prod.visitsPerStaff.toFixed(1), 'Active visits divided by ready staff')}
+      ${metricRow('Served per Doctor', prod.servedPerDoctor.toFixed(1), 'Average served queue load by doctor')}
+    </div>
+    <div class="glassInnerCard">
+      <div class="itemTitle">Peak Hours / Bottlenecks</div>
+      ${metricRow('Peak Hour', peak.peak, 'Busiest observed hour from recent activity')}
+      ${metricRow('Bottleneck', peak.bottleneck, 'Primary operational pressure now')}
+      ${metricRow('Top Activity Slots', peak.byHour.map(([h,c]) => `${String(h).padStart(2,'0')}:00(${c})`).join(' • ') || '--', 'Recent event concentration')}
+    </div>
+    <div class="glassInnerCard">
+      <div class="itemTitle">Readmission / Risk Trend</div>
+      ${metricRow('Risk Trend', risk.trend, `Composite risk score ${num(risk.riskScore)}`)}
+      ${metricRow('Readmission Proxy', num(risk.readmissionProxy), 'Patients showing repeated-touch proxy from loaded records')}
+      ${metricRow('AI Watch', num(getEmergencyAlerts().length), 'Urgent AI or workflow warnings')}
+    </div>
+    <div class="glassInnerCard spanWide">
+      <div class="itemTitle">Branch Comparison</div>
+      ${branches.length ? `<div class="summaryGrid">${branches.slice(0,6).map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.label)}</div><div style="font-size:24px;font-weight:900">${num(b.patients)}</div><div class="itemMeta"><span>${num(b.activity)} observed activities</span></div></div>`).join('')}</div>` : `<div class="emptyState">Branch comparison will appear automatically when multiple branches are exposed in portal patient records.</div>`}
+    </div>`;
 }
 
 function renderKpis() {
-  const o = state.data.overview?.overview || {};
-  const f = state.data.finance?.finance || {};
+  const metrics = getExecutiveMetrics();
   const kpis = [
-    ['Patients', num(o.patients), 'Registered patient base'],
-    ['Active Visits', num(o.activeVisits || o.visits || 0), 'Clinical load in motion'],
-    ['Queue', num(o.queue), 'Live doctor waiting queue'],
-    ['Paid Revenue', money(f.totalPaid), 'Collected billing revenue'],
-    ['Outstanding', money(f.outstanding), 'Exposure awaiting payment'],
-    ['Bills', num(f.billCount || o.bills), 'Billing records created'],
-    ['Admissions', num(o.admissions), 'Current admission operations'],
-    ['Pharmacy Sales', money(f.pharmacySales || o.pharmacy), 'Pharmacy revenue engine'],
+    ['Total Patients', num(metrics.totalPatients), 'Registered patient base'],
+    ['Active Visits', num(metrics.activeVisits), 'Clinical load in motion'],
+    ['Admissions Active', num(metrics.admissionsActive), 'Current inpatient operations'],
+    ['Revenue Today', money(metrics.revenueToday), 'Collections captured today'],
+    ['Revenue This Week', money(metrics.revenueWeek), '7-day cashflow pulse'],
+    ['Revenue This Month', money(metrics.revenueMonth), '30-day billing momentum'],
+    ['Outstanding Payments', money(metrics.outstanding), 'Pending settlement exposure'],
+    ['Lab Pending', num(metrics.labPending), 'Pending laboratory workload'],
+    ['Pharmacy Sales', money(metrics.pharmacySales), 'Pharmacy contribution'],
+    ['Queue / Doctor', metrics.queuePerDoctorLabel, 'Average open queue pressure'],
+    ['Bed Occupancy', metrics.bedOccupancyLabel, 'Estimated from active admissions'],
+    ['Emergency Alerts', num(metrics.emergencyAlerts), 'Urgent or critical signals'],
   ];
   $('#kpiGrid').innerHTML = kpis.map(([label, value, sub], index) => `
     <div class="kpiCard" data-kpi-index="${index}">
