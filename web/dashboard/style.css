@@ -407,3 +407,12 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 @media (max-width: 1180px){
   .executiveOverviewGrid,.enterpriseInsightsGrid{grid-template-columns:1fr}
 }
+
+
+.permissionCard,.auditCard{border:1px solid rgba(148,163,184,.14);border-radius:18px;padding:16px;background:rgba(8,15,30,.55)}
+.permissionMeta,.auditMeta{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.permissionChip,.auditChip{padding:6px 10px;border-radius:999px;background:rgba(148,163,184,.12);font-size:12px}
+.permissionMatrix{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.auditTrailList{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.permissionActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.permissionActions .btn{padding:8px 12px}

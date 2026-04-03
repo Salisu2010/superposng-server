@@ -29,6 +29,8 @@ const state = {
     commandCenter: null,
     doctorWidgets: null,
     workspace: null,
+    rbac: null,
+    auditTrail: null,
   }
 };
 
@@ -238,7 +240,7 @@ function renderDisconnected() {
       <div class="kpiSub">Connect portal to load live analytics</div>
     </div>`).join('');
   ['revenueChart', 'mixChart', 'operationsChart'].forEach(id => renderEmptyChart(id, 'Connect the portal to load analytics'));
-  ['activityFeed','alerts','queue','finance','doctors','realtimeBoard','doctorBars','financeBreakdown','workflowBenchmarks','analyticsSignals','boardSummary','patientsList','searchResults','patientAiSummary','queueBoard'].forEach(id => {
+  ['activityFeed','alerts','queue','finance','doctors','realtimeBoard','doctorBars','financeBreakdown','workflowBenchmarks','analyticsSignals','boardSummary','patientsList','searchResults','patientAiSummary','queueBoard','accessControlGrid','auditTrailGrid'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = `<div class="emptyState">Connect Base URL and Hospital ID to start live dashboard.</div>`;
   });
@@ -297,6 +299,8 @@ async function loadCommandCenter() {
 async function loadDoctorWidgets() { const r = await api('/api/portal/doctor-widgets'); state.data.doctorWidgets = r.widgets || null; return r; }
 async function loadWorkspace() { const r = await api('/api/portal/workspace'); state.data.workspace = r || null; return r; }
 async function loadClinicalOps() { const r = await api('/api/portal/clinical-ops'); state.data.clinicalOps = r?.modules || null; return r; }
+async function loadRbac() { const r = await api('/api/rbac/overview'); state.data.rbac = r || null; return r; }
+async function loadAuditTrail() { const r = await api('/api/audit/trail?limit=80'); state.data.auditTrail = r || null; return r; }
 
 function applyLiteBundle(bundle = {}) {
   if (bundle.live) { state.data.live = bundle.live; state.live = bundle.live; }
@@ -446,6 +450,7 @@ function renderAll() {
   renderSideSummary();
   renderExecutiveOverview();
   renderEnterpriseInsights();
+  renderAccessControlAudit();
 }
 
 
@@ -1003,6 +1008,112 @@ function renderAnalyticsPanels() {
   ].join('');
 }
 
+
+function renderAccessControlAudit() {
+  const accessHost = $('#accessControlGrid');
+  const auditHost = $('#auditTrailGrid');
+  if (accessHost) {
+    const rbac = state.data.rbac || {};
+    const totals = rbac.totals || {};
+    const staff = Array.isArray(rbac.staff) ? rbac.staff : [];
+    const templates = Array.isArray(rbac.templates) ? rbac.templates : [];
+    accessHost.innerHTML = `
+      <div class="permissionCard">
+        <div class="itemTitle">Access Posture</div>
+        <div class="permissionMeta">
+          <span class="permissionChip">Users ${num(totals.users || staff.length)}</span>
+          <span class="permissionChip">Active ${num(totals.activeUsers || 0)}</span>
+          <span class="permissionChip">Sensitive View ${num(totals.sensitiveUsers || 0)}</span>
+          <span class="permissionChip">Discount Approvers ${num(totals.discountApprovers || 0)}</span>
+          <span class="permissionChip">Lab Approvers ${num(totals.labApprovers || 0)}</span>
+        </div>
+        <div class="itemMeta" style="margin-top:10px"><span>Per-user permissions now support view/create/edit/delete/approve with sensitive record control.</span></div>
+      </div>
+      <div class="permissionCard">
+        <div class="itemTitle">Role Templates</div>
+        <div class="permissionMeta">${templates.slice(0,7).map(t => `<span class="permissionChip">${escapeHtml(t.role)} • ${num(t.summary?.grants || 0)} grants</span>`).join('') || '<span class="permissionChip">No templates</span>'}</div>
+      </div>
+      <div class="permissionCard" style="grid-column:1/-1">
+        <div class="itemTitle">Per-User Permission Matrix</div>
+        <div class="permissionMatrix">
+          ${staff.length ? staff.slice(0,16).map(u => `
+            <div class="permissionCard">
+              <div class="row alignCenter" style="justify-content:space-between"><strong>${escapeHtml(u.fullName || u.email || 'User')}</strong><span class="badge">${escapeHtml(u.role || '--')}</span></div>
+              <div class="itemMeta"><span>${escapeHtml(u.email || '--')}</span><span>${escapeHtml(u.branchId || 'Main')}</span><span>${u.active === false ? 'Inactive' : 'Active'}</span></div>
+              <div class="permissionMeta">
+                <span class="permissionChip">Grants ${num(u.grants || 0)}</span>
+                <span class="permissionChip">Sensitive ${u.sensitiveView ? 'Allowed' : 'Blocked'}</span>
+                <span class="permissionChip">Discount ${u.discountApproval ? 'Approve' : 'No Approval'}</span>
+                <span class="permissionChip">Lab ${u.labApproval ? 'Approve' : 'No Approval'}</span>
+              </div>
+              <div class="permissionActions">
+                <button type="button" class="btn btnGhost small" data-perm-template="least" data-user-id="${escapeHtml(u.userId || '')}">Least Privilege</button>
+                <button type="button" class="btn btnGhost small" data-perm-template="role" data-user-id="${escapeHtml(u.userId || '')}">Reset to Role</button>
+              </div>
+            </div>`).join('') : '<div class="emptyState">No staff records yet.</div>'}
+        </div>
+      </div>`;
+    $$('[data-perm-template]', accessHost).forEach(btn => btn.addEventListener('click', async () => {
+      const userId = btn.dataset.userId;
+      const mode = btn.dataset.permTemplate;
+      const user = staff.find(x => String(x.userId) === String(userId));
+      if (!user) return;
+      const roleTemplate = templates.find(t => String(t.role) === String(user.role));
+      let permissions = roleTemplate?.permissions || user.permissions || {};
+      if (mode === 'least') {
+        permissions = JSON.parse(JSON.stringify(permissions || {}));
+        Object.keys(permissions).forEach(moduleName => {
+          if (moduleName !== 'patients' && moduleName !== 'audit_logs') permissions[moduleName].delete = false;
+          if (moduleName === 'sensitive_records') { permissions[moduleName].view = false; permissions[moduleName].approve = false; }
+          if (moduleName === 'billing') permissions[moduleName].approve = false;
+        });
+      }
+      try {
+        await api(`/api/staff/${encodeURIComponent(userId)}/permissions`, { method:'POST', body:{ permissions } });
+        showToast('Permissions Updated', `${user.fullName || user.email} access profile saved`);
+        await Promise.allSettled([loadRbac(), loadAuditTrail()]);
+        renderAccessControlAudit();
+      } catch (err) {
+        showToast('Permission Update Failed', err.message || 'Unable to save permissions');
+      }
+    }));
+  }
+  if (auditHost) {
+    const audit = state.data.auditTrail || {};
+    const rows = Array.isArray(audit.audit) ? audit.audit : [];
+    const stats = audit.stats || {};
+    auditHost.innerHTML = `
+      <div class="auditCard">
+        <div class="itemTitle">Audit Coverage</div>
+        <div class="auditMeta">
+          <span class="auditChip">Events ${num(stats.total || rows.length)}</span>
+          <span class="auditChip">Sensitive ${num(stats.sensitive || 0)}</span>
+          <span class="auditChip">Patient Views ${num(stats.patientViews || 0)}</span>
+          <span class="auditChip">Refunds ${num(stats.refunds || 0)}</span>
+          <span class="auditChip">Approvals ${num(stats.approvals || 0)}</span>
+        </div>
+      </div>
+      <div class="auditCard" style="grid-column:1/-1">
+        <div class="itemTitle">Latest Trace</div>
+        <div class="auditTrailList">
+          ${rows.length ? rows.slice(0,18).map(r => `
+            <div class="auditCard">
+              <div class="row alignCenter" style="justify-content:space-between"><strong>${escapeHtml(formatActivityType(r.action || 'activity'))}</strong><span class="badge">${escapeHtml(r.role || '--')}</span></div>
+              <div>${escapeHtml(r.details || r.entityType || '--')}</div>
+              <div class="auditMeta">
+                <span class="auditChip">Actor ${escapeHtml(r.actor || 'system')}</span>
+                <span class="auditChip">IP ${escapeHtml(r.ipAddress || '--')}</span>
+                <span class="auditChip">Device ${escapeHtml(r.deviceId || '--')}</span>
+                <span class="auditChip">Branch ${escapeHtml(r.branchId || '--')}</span>
+                <span class="auditChip">Entity ${escapeHtml(r.entityType || '--')}</span>
+                <span class="auditChip">${fmtDateTime(r.createdAt)}</span>
+              </div>
+            </div>`).join('') : '<div class="emptyState">Audit logs will appear here as users open, edit, approve and refund records.</div>'}
+        </div>
+      </div>`;
+  }
+}
+
 function renderPatients() {
   const items = state.data.patients || [];
   const overview = state.data.overview?.overview || {};
@@ -1396,6 +1507,8 @@ async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
   if (needsOps) {
     try { await loadClinicalOps(); } catch {}
   }
+  if (keys.has('staff')) { try { await loadRbac(); } catch {} }
+  if (keys.has('audit_logs')) { try { await loadAuditTrail(); } catch {} }
   if (versionHint) state.version = Math.max(state.version || 0, num(versionHint));
   renderAll();
 }

@@ -59,6 +59,99 @@ function pickDoctorName(x){ return toStr(x?.doctorName || x?.doctor_name || x?.d
 function pickStatus(x, fallback='pending'){ return toStr(x?.status || fallback) || fallback; }
 function cap(v){ const s = toStr(v); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
+const CLINIC_MODULES = ['patients','visits','doctor_queue','admissions','nurse_desk','lab_requests','pharmacy_dispenses','prescriptions','billing','payments','refunds','appointments','theatre','discharge','reports','audit_logs','sensitive_records','staff'];
+const CLINIC_ACTIONS = ['view','create','edit','delete','approve'];
+function defaultPermissionMatrix(role=''){
+  const r = normRole(role);
+  const denyAll = () => ({ view:false, create:false, edit:false, delete:false, approve:false });
+  const all = () => ({ view:true, create:true, edit:true, delete:true, approve:true });
+  const base = Object.fromEntries(CLINIC_MODULES.map(m => [m, denyAll()]));
+  if (r === 'Admin') return Object.fromEntries(CLINIC_MODULES.map(m => [m, all()]));
+  if (r === 'Doctor') {
+    ['patients','visits','doctor_queue','admissions','lab_requests','prescriptions','appointments','discharge','sensitive_records'].forEach(m => base[m] = { view:true, create:true, edit:true, delete:false, approve:m === 'lab_requests' });
+    base.billing = { view:true, create:false, edit:false, delete:false, approve:false };
+    base.audit_logs = { view:true, create:false, edit:false, delete:false, approve:false };
+    return base;
+  }
+  if (r === 'Nurse') {
+    ['patients','visits','doctor_queue','admissions','nurse_desk','lab_requests','prescriptions','appointments','discharge'].forEach(m => base[m] = { view:true, create:true, edit:true, delete:false, approve:false });
+    return base;
+  }
+  if (r === 'Lab') {
+    base.patients = { view:true, create:false, edit:false, delete:false, approve:false };
+    base.lab_requests = { view:true, create:true, edit:true, delete:false, approve:true };
+    base.audit_logs = { view:true, create:false, edit:false, delete:false, approve:false };
+    return base;
+  }
+  if (r === 'Pharmacy') {
+    base.patients = { view:true, create:false, edit:false, delete:false, approve:false };
+    base.prescriptions = { view:true, create:false, edit:false, delete:false, approve:false };
+    base.pharmacy_dispenses = { view:true, create:true, edit:true, delete:false, approve:true };
+    base.billing = { view:true, create:false, edit:false, delete:false, approve:false };
+    return base;
+  }
+  if (r === 'Receptionist') {
+    ['patients','visits','doctor_queue','appointments','billing','payments'].forEach(m => base[m] = { view:true, create:true, edit:true, delete:false, approve:false });
+    return base;
+  }
+  if (r === 'Cashier') {
+    ['billing','payments','refunds'].forEach(m => base[m] = { view:true, create:true, edit:true, delete:false, approve:m !== 'billing' });
+    base.patients = { view:true, create:false, edit:false, delete:false, approve:false };
+    return base;
+  }
+  return base;
+}
+function normalizePermissionMatrix(input, role=''){
+  const base = defaultPermissionMatrix(role);
+  const src = input && typeof input === 'object' ? input : {};
+  for (const moduleName of CLINIC_MODULES) {
+    const row = src[moduleName] && typeof src[moduleName] === 'object' ? src[moduleName] : {};
+    for (const action of CLINIC_ACTIONS) base[moduleName][action] = bool(row[action]);
+  }
+  return base;
+}
+function summarizePermissionMatrix(matrix={}){
+  const rows = CLINIC_MODULES.map(moduleName => {
+    const rec = matrix[moduleName] || {};
+    const enabled = CLINIC_ACTIONS.filter(a => rec[a]).length;
+    return { module: moduleName, enabled, access: CLINIC_ACTIONS.filter(a => rec[a]) };
+  });
+  const totals = { modules: CLINIC_MODULES.length, grants: rows.reduce((s,x)=>s+x.enabled,0), sensitiveView: !!matrix?.sensitive_records?.view, discountApprove: !!matrix?.billing?.approve, labApprove: !!matrix?.lab_requests?.approve };
+  return { rows, totals };
+}
+function clientIp(req){
+  const xf = toStr(req.headers['x-forwarded-for']).split(',')[0].trim();
+  return xf || toStr(req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress);
+}
+function writeClinicAuditLog(db, clinicId, action, payload={}, req=null){
+  ensureArrays(db);
+  const actor = req ? actorInfo(req) : { actor: toStr(payload.actor || 'system'), role: normRole(payload.role || 'Admin'), deviceId: toStr(payload.deviceId), branchId: toStr(payload.branchId), ipAddress: toStr(payload.ipAddress) };
+  const row = {
+    auditId: createId('audit'),
+    clinicId: String(clinicId),
+    action: toStr(action || payload.action || 'activity') || 'activity',
+    entityType: toStr(payload.entityType || payload.module || payload.table || 'general') || 'general',
+    entityId: toStr(payload.entityId || payload.patientId || payload.billId || payload.visitId || payload.userId || payload.labRequestId || payload.prescriptionId || payload.admissionId || payload.queueId || payload.theatreId || payload.refundId),
+    patientId: toStr(payload.patientId),
+    billId: toStr(payload.billId),
+    visitId: toStr(payload.visitId),
+    before: payload.before && typeof payload.before === 'object' ? payload.before : null,
+    after: payload.after && typeof payload.after === 'object' ? payload.after : null,
+    details: toStr(payload.details || payload.message || payload.title || ''),
+    sensitive: bool(payload.sensitive),
+    actor: actor.actor,
+    role: actor.role,
+    deviceId: actor.deviceId,
+    branchId: actor.branchId,
+    ipAddress: actor.ipAddress || clientIp(req || {headers:{}}),
+    createdAt: now(),
+    updatedAt: now()
+  };
+  db.clinicAuditLogs.unshift(row);
+  if (db.clinicAuditLogs.length > 8000) db.clinicAuditLogs.length = 8000;
+  return row;
+}
+
 function requestProto(req){
   const xf = toStr(req.headers['x-forwarded-proto']).split(',')[0].trim().toLowerCase();
   if (xf === 'https' || xf === 'http') return xf;
@@ -674,7 +767,8 @@ function ensureClinicUser(db, clinic, email, password, role = 'Admin', branchId 
       fullName: cap(role) + ' User',
       createdAt: now(),
       updatedAt: now(),
-      active: true
+      active: true,
+      permissions: normalizePermissionMatrix(null, role)
     };
     db.clinicUsers.push(user);
   }
@@ -706,7 +800,8 @@ function actorInfo(req){
     actor: toStr(req.auth?.email || req.body?.actor || req.auth?.deviceId || 'system'),
     role: normRole(req.auth?.role || req.body?.role || 'Admin'),
     deviceId: toStr(req.auth?.deviceId || req.body?.deviceId),
-    branchId: toStr(req.auth?.branchId || req.body?.branchId)
+    branchId: toStr(req.auth?.branchId || req.body?.branchId),
+    ipAddress: clientIp(req)
   };
 }
 function finalizeWrite(db, clinicId, type, title, message, payload, req){
@@ -727,9 +822,15 @@ function finalizeWrite(db, clinicId, type, title, message, payload, req){
     pharmacy: stats.pharmacyRevenue,
     pharmacyDispenseCount: stats.pharmacy
   };
-  const livePayload = { ...payload, version: change.version, changedTables, tables: changedTables, snapshotId: snapshotRow.snapshotId, liveCounters, actor: info.actor, role: info.role };
+  const livePayload = { ...payload, version: change.version, changedTables, tables: changedTables, snapshotId: snapshotRow.snapshotId, liveCounters, actor: info.actor, role: info.role, deviceId: info.deviceId, branchId: info.branchId, ipAddress: info.ipAddress };
   const event = pushEvent(db, clinicId, type, livePayload);
   makeNotification(db, clinicId, type, title, message, { payload: livePayload });
+  writeClinicAuditLog(db, clinicId, type, {
+    entityType: changedTables[0] || 'general',
+    details: message,
+    sensitive: changedTables.includes('sensitive_records'),
+    ...livePayload
+  }, req);
   writeDB(db);
   return { event, snapshotId: snapshotRow.snapshotId, stats, version: change.version, changedTables, liveCounters };
 }
@@ -1780,6 +1881,8 @@ r.get('/patient/:patientId', (req, res) => {
   const bills = db.clinicBills.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId);
   const admissions = db.clinicAdmissions.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId);
   const prescriptions = db.clinicPrescriptions.filter(x => String(x.clinicId) === clinicId && String(x.patientId) === patientId);
+  writeClinicAuditLog(db, clinicId, 'patient_record_viewed', { entityType:'patients', entityId: patientId, patientId, details:`Patient record opened for ${patient.fullName}.`, sensitive:true }, req);
+  writeDB(db);
   return res.json({ ok:true, patient, visits, bills, admissions, prescriptions });
 });
 
@@ -2266,6 +2369,7 @@ r.post('/staff/create', (req, res) => {
       fullName: toStr(b.fullName || b.name),
       phone: cleanPhone(b.phone),
       active: b.active !== false,
+      permissions: normalizePermissionMatrix(b.permissions, b.role),
       createdAt: now(),
       updatedAt: now()
     };
@@ -2740,6 +2844,88 @@ r.get('/portal/command-center', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
   const db = readDB(); ensureArrays(db);
   return res.json({ ok:true, commandCenter: buildPortalCommandCenter(db, clinicId, toNum(req.query?.days, 14)) });
+});
+
+
+r.get('/rbac/overview', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const staff = sortRecent(db.clinicUsers.filter(x => String(x.clinicId) === clinicId)).map(user => {
+      const matrix = normalizePermissionMatrix(user.permissions, user.role);
+      const summary = summarizePermissionMatrix(matrix);
+      return {
+        userId: toStr(user.userId),
+        email: toStr(user.email),
+        fullName: toStr(user.fullName || user.email),
+        role: normRole(user.role),
+        branchId: toStr(user.branchId),
+        active: user.active !== false,
+        permissions: matrix,
+        grants: summary.totals.grants,
+        discountApproval: summary.totals.discountApprove,
+        labApproval: summary.totals.labApprove,
+        sensitiveView: summary.totals.sensitiveView,
+        updatedAt: toNum(user.updatedAt || user.createdAt)
+      };
+    });
+    const roleTemplates = ['Admin','Doctor','Nurse','Lab','Pharmacy','Receptionist','Cashier'].map(role => ({ role, permissions: defaultPermissionMatrix(role), summary: summarizePermissionMatrix(defaultPermissionMatrix(role)).totals }));
+    const totals = {
+      users: staff.length,
+      activeUsers: staff.filter(x => x.active).length,
+      sensitiveUsers: staff.filter(x => x.sensitiveView).length,
+      discountApprovers: staff.filter(x => x.discountApproval).length,
+      labApprovers: staff.filter(x => x.labApproval).length,
+    };
+    return res.json({ ok:true, totals, staff, templates: roleTemplates, modules: CLINIC_MODULES, actions: CLINIC_ACTIONS });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'rbac overview failed' });
+  }
+});
+
+r.post('/staff/:userId/permissions', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const userId = toStr(req.params?.userId || req.body?.userId);
+    const db = readDB(); ensureArrays(db);
+    const user = db.clinicUsers.find(x => String(x.clinicId) === clinicId && String(x.userId) === userId);
+    if (!user) return res.status(404).json({ ok:false, error:'Staff not found' });
+    const before = normalizePermissionMatrix(user.permissions, user.role);
+    user.permissions = normalizePermissionMatrix(req.body?.permissions, user.role);
+    user.updatedAt = now();
+    const summary = summarizePermissionMatrix(user.permissions);
+    writeClinicAuditLog(db, clinicId, 'permissions_updated', { entityType:'staff', entityId:user.userId, userId:user.userId, details:`Permissions updated for ${user.fullName || user.email}.`, before, after:user.permissions }, req);
+    recordClinicChange(db, clinicId, 'permissions_updated', ['staff','audit_logs'], { userId:user.userId, role:user.role, grants:summary.totals.grants }, actorInfo(req));
+    writeDB(db);
+    return res.json({ ok:true, userId:user.userId, permissions:user.permissions, summary:summary.totals });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'permission update failed' });
+  }
+});
+
+r.get('/audit/trail', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const q = lower(req.query?.q || '');
+    const limit = Math.max(1, Math.min(500, toNum(req.query?.limit, 120)));
+    let rows = db.clinicAuditLogs.filter(x => String(x.clinicId) === clinicId);
+    if (req.query?.role) rows = rows.filter(x => normRole(x.role) === normRole(req.query.role));
+    if (req.query?.entityType) rows = rows.filter(x => lower(x.entityType) === lower(req.query.entityType));
+    if (q) rows = rows.filter(x => [x.action,x.entityType,x.entityId,x.patientId,x.billId,x.actor,x.role,x.deviceId,x.ipAddress,x.branchId,x.details].some(v => lower(v).includes(q)));
+    rows = rows.sort((a,b) => toNum(b.createdAt)-toNum(a.createdAt)).slice(0, limit);
+    const stats = {
+      total: rows.length,
+      sensitive: rows.filter(x => x.sensitive).length,
+      discounts: rows.filter(x => /discount/i.test(x.action) || /discount/i.test(x.details)).length,
+      refunds: rows.filter(x => /refund/i.test(x.action) || /refund/i.test(x.details)).length,
+      approvals: rows.filter(x => /approve/i.test(x.action) || /approve/i.test(x.details)).length,
+      patientViews: rows.filter(x => x.action === 'patient_record_viewed').length,
+    };
+    return res.json({ ok:true, stats, audit: rows });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'audit trail failed' });
+  }
 });
 
 r.get('/portal/workspace', (req, res) => {
