@@ -250,6 +250,44 @@ function ensureArrays(db){
   db.clinicCashierShifts = arr(db.clinicCashierShifts);
   db.clinicPaymentRefunds = arr(db.clinicPaymentRefunds);
   db.clinicTheatreSchedules = arr(db.clinicTheatreSchedules);
+  db.clinicCloudPrintJobs = arr(db.clinicCloudPrintJobs);
+  db.clinicCloudPrintHosts = arr(db.clinicCloudPrintHosts);
+}
+function cloudPrintQueueFor(db, clinicId){
+  ensureArrays(db);
+  return db.clinicCloudPrintJobs.filter(x => String(x.clinicId) === String(clinicId));
+}
+function upsertCloudPrintHost(db, clinicId, payload = {}){
+  ensureArrays(db);
+  const deviceId = toStr(payload.deviceId);
+  if (!deviceId) return null;
+  const row = {
+    clinicId: String(clinicId),
+    deviceId,
+    deviceName: toStr(payload.deviceName || deviceId),
+    role: normRole(payload.role || 'Admin'),
+    branchId: toStr(payload.branchId),
+    printerName: toStr(payload.printerName),
+    status: toStr(payload.status || 'online') || 'online',
+    updatedAt: now(),
+    lastSeenAt: now()
+  };
+  const i = db.clinicCloudPrintHosts.findIndex(x => String(x.clinicId) === String(clinicId) && String(x.deviceId) === deviceId);
+  if (i >= 0) db.clinicCloudPrintHosts[i] = { ...db.clinicCloudPrintHosts[i], ...row };
+  else db.clinicCloudPrintHosts.push(row);
+  return i >= 0 ? db.clinicCloudPrintHosts[i] : row;
+}
+function resolveCloudPrintHost(db, clinicId, branchId=''){
+  ensureArrays(db);
+  const wantedBranch = toStr(branchId);
+  const hosts = db.clinicCloudPrintHosts
+    .filter(x => String(x.clinicId) === String(clinicId) && lower(x.status || 'online') !== 'offline')
+    .sort((a,b) => toNum(b.lastSeenAt || b.updatedAt) - toNum(a.lastSeenAt || a.updatedAt));
+  if (!hosts.length) return null;
+  const sameBranch = wantedBranch ? hosts.find(x => !toStr(x.branchId) || String(x.branchId) === wantedBranch) : null;
+  if (sameBranch) return sameBranch;
+  const adminHost = hosts.find(x => ['admin','doctor','manager'].includes(lower(x.role)));
+  return adminHost || hosts[0];
 }
 function clinicPublicRow(c){
   return {
