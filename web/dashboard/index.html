@@ -245,15 +245,15 @@
       </div>
       <div class="analyticsSuite">
         <article class="glass card">
-          <div class="cardHead compact"><div><div class="eyebrow">Financial Engine</div><h3>Revenue vs Outstanding</h3></div></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Financial Engine</div><h3>Financial Intelligence</h3></div></div>
           <div id="financeBreakdown" class="stack10"></div>
         </article>
         <article class="glass card">
-          <div class="cardHead compact"><div><div class="eyebrow">Productivity</div><h3>Workflow Benchmarks</h3></div></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Productivity</div><h3>Inventory + Consumables Intelligence</h3></div></div>
           <div id="workflowBenchmarks" class="stack10"></div>
         </article>
         <article class="glass card">
-          <div class="cardHead compact"><div><div class="eyebrow">Realtime Signals</div><h3>Signals and Alerts</h3></div></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Realtime Signals</div><h3>Leakage, Discount & Stock Signals</h3></div></div>
           <div id="analyticsSignals" class="stack10"></div>
         </article>
         <article class="glass card spanFull analyticsExecutiveCard">
@@ -424,12 +424,55 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Admit Patient</button></div>
           </form>
           <div class="divider"></div>
+          <form id="stockItemForm" class="formGrid compactGrid">
+            <input name="itemName" placeholder="Stock Item Name" required>
+            <input name="sku" placeholder="SKU / Code">
+            <input name="category" placeholder="Category">
+            <input name="reorder_level" type="number" step="0.01" placeholder="Reorder Level">
+            <input name="unitCost" type="number" step="0.01" placeholder="Unit Cost">
+            <input name="unitPrice" type="number" step="0.01" placeholder="Selling Price">
+            <input name="batchNo" placeholder="Batch No">
+            <input name="expiryDate" placeholder="Expiry Date">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Stock Item</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="supplierForm" class="formGrid compactGrid">
+            <input name="name" placeholder="Supplier Name" required>
+            <input name="contactName" placeholder="Contact Name">
+            <input name="phone" placeholder="Phone">
+            <input name="email" placeholder="Email">
+            <textarea name="address" class="span2" placeholder="Supplier Address"></textarea>
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Supplier</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="purchaseReceiptForm" class="formGrid compactGrid">
+            <input name="itemName" placeholder="Purchase Item Name" required>
+            <input name="supplierName" placeholder="Supplier Name" required>
+            <input name="quantity" type="number" step="0.01" placeholder="Qty Received">
+            <input name="unitCost" type="number" step="0.01" placeholder="Unit Cost">
+            <input name="unitPrice" type="number" step="0.01" placeholder="Selling Price">
+            <input name="batchNo" placeholder="Batch No">
+            <input name="expiryDate" placeholder="Expiry Date">
+            <input name="invoiceNo" placeholder="Invoice / Receipt No">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Post Purchase Receipt</button></div>
+          </form>
+          <div class="divider"></div>
           <form id="pharmacyDispenseForm" class="formGrid compactGrid">
             <input name="patientId" placeholder="Dispense Patient ID" required>
             <input name="itemName" placeholder="Drug / Item Name" required>
             <input name="quantity" type="number" step="0.01" placeholder="Qty">
             <input name="unitPrice" type="number" step="0.01" placeholder="Unit Price">
+            <input name="batchNo" placeholder="Batch No optional">
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Dispense Drug</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="stockMovementForm" class="formGrid compactGrid">
+            <input name="itemName" placeholder="Movement Item Name" required>
+            <select name="type"><option value="issue">Issue</option><option value="adjustment_in">Adjustment In</option><option value="adjustment_out">Adjustment Out</option><option value="expired">Expired</option><option value="damage">Damage</option><option value="transfer_out">Transfer Out</option></select>
+            <input name="quantity" type="number" step="0.01" placeholder="Movement Qty">
+            <input name="batchNo" placeholder="Batch No">
+            <textarea name="note" class="span2" placeholder="Movement Note / Reason"></textarea>
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Log Stock Movement</button></div>
           </form>
         </article>
 

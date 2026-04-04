@@ -31,6 +31,8 @@ const state = {
     workspace: null,
     rbac: null,
     auditTrail: null,
+    financialIntelligence: null,
+    inventoryIntelligence: null,
   }
 };
 
@@ -108,6 +110,10 @@ function bindUI() {
   bindForm('#staffForm', '/api/staff/create', 'Staff created', async () => { showToast('Staff Created', 'Team member saved'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
   bindForm('#admissionForm', '/api/admission/create', 'Admission created', async () => { showToast('Admission Saved', 'Ward admission created'); await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']); });
   bindForm('#pharmacyDispenseForm', '/api/pharmacy/dispense', 'Drug dispensed', async () => { showToast('Pharmacy Dispense', 'Medication dispensed successfully'); await targetedRealtimeRefresh(['patients','bills','pharmacy_dispenses','audit_logs']); });
+  bindForm('#stockItemForm', '/api/pharmacy/items/upsert', 'Stock item saved', async () => { showToast('Stock Item', 'Pharmacy item master saved'); await targetedRealtimeRefresh(['pharmacy_items','pharmacy_receipts','audit_logs']); await loadInventoryIntelligence(); renderAnalytics(); });
+  bindForm('#supplierForm', '/api/pharmacy/suppliers/upsert', 'Supplier saved', async () => { showToast('Supplier Saved', 'Supplier record updated'); await targetedRealtimeRefresh(['pharmacy_receipts','audit_logs']); await loadInventoryIntelligence(); renderAnalytics(); });
+  bindForm('#purchaseReceiptForm', '/api/pharmacy/purchases/receive', 'Purchase receipt posted', async () => { showToast('Purchase Receipt', 'Stock received successfully'); await targetedRealtimeRefresh(['pharmacy_items','pharmacy_receipts','audit_logs']); await Promise.all([loadFinancialIntelligence(), loadInventoryIntelligence()]); renderAnalytics(); });
+  bindForm('#stockMovementForm', '/api/pharmacy/movements/create', 'Stock movement logged', async () => { showToast('Stock Movement', 'Inventory movement recorded'); await targetedRealtimeRefresh(['pharmacy_items','pharmacy_receipts','audit_logs']); await loadInventoryIntelligence(); renderAnalytics(); });
   bindForm('#dischargeForm', '/api/discharge/create', 'Discharge completed', async () => { showToast('Discharge Workflow', 'Patient discharge completed'); await targetedRealtimeRefresh(['patients','admissions','audit_logs']); });
   bindForm('#refundForm', '/api/payment/refund', 'Refund processed', async () => { showToast('Refund Processed', 'Billing refund saved'); await targetedRealtimeRefresh(['bills','audit_logs']); });
   bindForm('#theatreForm', '/api/theatre/schedule', 'Procedure scheduled', async () => { showToast('Theatre Scheduled', 'Procedure schedule saved'); await targetedRealtimeRefresh(['appointments','audit_logs']); });
@@ -263,6 +269,8 @@ async function refreshAll() {
       loadDoctorWidgets(),
       loadWorkspace(),
       loadClinicalOps(),
+      loadFinancialIntelligence(),
+      loadInventoryIntelligence(),
     ]);
     state.lastSync = Date.now();
     $('#lastSyncText').textContent = fmtTime(state.lastSync);
@@ -299,6 +307,8 @@ async function loadCommandCenter() {
 async function loadDoctorWidgets() { const r = await api('/api/portal/doctor-widgets'); state.data.doctorWidgets = r.widgets || null; return r; }
 async function loadWorkspace() { const r = await api('/api/portal/workspace'); state.data.workspace = r || null; return r; }
 async function loadClinicalOps() { const r = await api('/api/portal/clinical-ops'); state.data.clinicalOps = r?.modules || null; return r; }
+async function loadFinancialIntelligence() { const r = await api('/api/portal/financial-intelligence'); state.data.financialIntelligence = r?.intelligence || null; return r; }
+async function loadInventoryIntelligence() { const r = await api('/api/portal/inventory-intelligence'); state.data.inventoryIntelligence = r?.intelligence || null; return r; }
 async function loadRbac() { const r = await api('/api/rbac/overview'); state.data.rbac = r || null; return r; }
 async function loadAuditTrail() { const r = await api('/api/audit/trail?limit=80'); state.data.auditTrail = r || null; return r; }
 
@@ -974,40 +984,152 @@ function renderAnalyticsPanels() {
   const o = state.data.overview?.overview || {};
   const notifications = state.data.notifications || [];
   const ws = state.data.workspace?.summary || {};
-  const collectionRate = num(f.totalBill) ? Math.round((num(f.totalPaid) / Math.max(num(f.totalBill), 1)) * 100) : 0;
-  const exposureRate = num(f.totalBill) ? Math.round((num(f.outstanding) / Math.max(num(f.totalBill), 1)) * 100) : 0;
+  const fin = state.data.financialIntelligence || {};
+  const inv = state.data.inventoryIntelligence || {};
+  const collectionRate = num(fin.totals?.totalRevenue || f.totalBill) ? Math.round((num(fin.totals?.totalPaid || f.totalPaid) / Math.max(num(fin.totals?.totalRevenue || f.totalBill), 1)) * 100) : 0;
+  const exposureRate = num(fin.totals?.totalRevenue || f.totalBill) ? Math.round((num(fin.totals?.totalOutstanding || f.outstanding) / Math.max(num(fin.totals?.totalRevenue || f.totalBill), 1)) * 100) : 0;
   document.getElementById('analyticsRibbonFinance') && (document.getElementById('analyticsRibbonFinance').textContent = `${collectionRate}% Collected`);
-  document.getElementById('analyticsRibbonWorkflow') && (document.getElementById('analyticsRibbonWorkflow').textContent = ws.pendingLabs + ws.pendingAppointments + ws.activePrescriptions > 0 ? 'Workflow Under Watch' : 'Workflow Stable');
+  document.getElementById('analyticsRibbonWorkflow') && (document.getElementById('analyticsRibbonWorkflow').textContent = (inv.counts?.lowStock || 0) + (inv.counts?.expired || 0) > 0 ? 'Inventory Under Watch' : (ws.pendingLabs + ws.pendingAppointments + ws.activePrescriptions > 0 ? 'Workflow Under Watch' : 'Workflow Stable'));
+
+  const dept = Array.isArray(fin.revenueByDepartment) ? fin.revenueByDepartment : [];
+  const doctors = Array.isArray(fin.revenueByDoctor) ? fin.revenueByDoctor : [];
+  const payMix = Array.isArray(fin.paymentMix) ? fin.paymentMix : [];
+  const topServices = Array.isArray(fin.topServices) ? fin.topServices : [];
+  const refunds = fin.refundAnalytics || {};
+  const leakages = Array.isArray(fin.leakageAlerts) ? fin.leakageAlerts : [];
+  const discountAbuse = Array.isArray(fin.discountAbuseAlerts) ? fin.discountAbuseAlerts : [];
+  const profitability = Array.isArray(fin.departmentProfitability) ? fin.departmentProfitability : [];
+  const branchComparison = Array.isArray(fin.branchComparison) ? fin.branchComparison : [];
+  const outstandingPatient = Array.isArray(fin.outstanding?.patient) ? fin.outstanding.patient : [];
+  const outstandingCompany = Array.isArray(fin.outstanding?.company) ? fin.outstanding.company : [];
+  const outstandingHmo = Array.isArray(fin.outstanding?.hmo) ? fin.outstanding.hmo : [];
+  const lowStock = Array.isArray(inv.lowStock) ? inv.lowStock : [];
+  const outOfStock = Array.isArray(inv.outOfStock) ? inv.outOfStock : [];
+  const expired = Array.isArray(inv.expired) ? inv.expired : [];
+  const expiringSoon = Array.isArray(inv.expiringSoon) ? inv.expiringSoon : [];
+  const movements = Array.isArray(inv.drugMovementHistory) ? inv.drugMovementHistory : [];
+  const wardConsumption = Array.isArray(inv.wardConsumption) ? inv.wardConsumption : [];
+  const labUse = Array.isArray(inv.labConsumablesUsage) ? inv.labConsumablesUsage : [];
+  const suppliers = Array.isArray(inv.suppliers) ? inv.suppliers : [];
+  const reorderAlerts = Array.isArray(inv.automaticReorderAlerts) ? inv.automaticReorderAlerts : [];
+  const batchTracking = Array.isArray(inv.batchTracking) ? inv.batchTracking : [];
+  const productProfit = Array.isArray(inv.pharmacyProfitability?.items) ? inv.pharmacyProfitability.items : [];
+  const dailyTrend = Array.isArray(fin.trends?.daily) ? fin.trends.daily : [];
+  const monthlyTrend = Array.isArray(fin.trends?.monthly) ? fin.trends.monthly : [];
+
   $('#financeBreakdown').innerHTML = `
     <div class="analyticsSummaryGrid">
       <div class="execMiniCard"><span>Collection Rate</span><strong>${collectionRate}%</strong></div>
       <div class="execMiniCard"><span>Exposure Rate</span><strong>${exposureRate}%</strong></div>
+      <div class="execMiniCard"><span>Refunds</span><strong>${money(refunds.totalRefundAmount || 0)}</strong></div>
+      <div class="execMiniCard"><span>Discounts</span><strong>${money(fin.totals?.totalDiscounts || 0)}</strong></div>
+      <div class="execMiniCard"><span>Data Mode</span><strong>${escapeHtml(fin.dataQuality?.sourceMode || 'connected')}</strong></div>
+      <div class="execMiniCard"><span>Branch Rows</span><strong>${num(fin.dataQuality?.branchRows || 0)}</strong></div>
     </div>
-    ${metricBar('Total Revenue Engine', num(f.totalBill), Math.max(num(f.totalBill), 1), 'Overall billed revenue moving through the portal')}
-    ${metricBar('Collected Cashflow', num(f.totalPaid), Math.max(num(f.totalBill), 1), 'Cash already secured into collections')}
-    ${metricBar('Exposure Outstanding', num(f.outstanding), Math.max(num(f.totalBill), 1), 'Unsettled balance that still needs action')}
-    ${metricBar('Pharmacy Share', num(f.pharmacySales), Math.max(num(f.totalBill), 1), 'Medication revenue contribution to total billing')}
+    <div class="metricRow"><div class="itemTitle">Exact Revenue Trend</div><div class="itemMeta"><span>Paid cashflow from actual bills, dispenses and refunds</span></div></div>
+    <div id="fiTrendChart" class="chartHost smallTall"></div>
+    <div class="dualAnalyticsRow">
+      <div>
+        <div class="metricRow"><div class="itemTitle">Revenue by Department</div><div class="itemMeta"><span>Real posted value</span></div></div>
+        <div id="fiDeptChart"></div>
+      </div>
+      <div>
+        <div class="metricRow"><div class="itemTitle">Payment Mix</div><div class="itemMeta"><span>Cash vs transfer vs insurance</span></div></div>
+        <div id="fiPaymentChart"></div>
+      </div>
+    </div>
+    <div class="dualAnalyticsRow">
+      <div>
+        <div class="metricRow"><div class="itemTitle">Revenue by Doctor</div><div class="itemMeta"><span>Doctor-linked collections</span></div></div>
+        <div id="fiDoctorChart"></div>
+      </div>
+      <div>
+        <div class="metricRow"><div class="itemTitle">Branch Comparison</div><div class="itemMeta"><span>Cross-branch posted revenue</span></div></div>
+        <div id="fiBranchChart"></div>
+      </div>
+    </div>
+    ${metricBar('Total Revenue Engine', num(fin.totals?.totalRevenue || f.totalBill), Math.max(num(fin.totals?.totalRevenue || f.totalBill), 1))}
+    ${metricBar('Collected Cashflow', num(fin.totals?.totalPaid || f.totalPaid), Math.max(num(fin.totals?.totalRevenue || f.totalBill), 1))}
+    ${metricBar('Exposure Outstanding', num(fin.totals?.totalOutstanding || f.outstanding), Math.max(num(fin.totals?.totalRevenue || f.totalBill), 1))}
+    ${metricBar('Pharmacy Share', num(inv.pharmacyProfitability?.totalRevenue || f.pharmacySales), Math.max(num(fin.totals?.totalRevenue || f.totalBill), 1))}
+    <div class="metricRow"><div class="itemTitle">Most Profitable Departments</div><div class="itemMeta"><span>Margin view based on recorded cost fields</span></div></div>
+    ${(profitability.length ? profitability.slice(0,6).map(x => metricRow(x.label, money(x.value), `${num(x.services)} service row(s)`)).join('') : '<div class="emptyState">Department profitability appears when cost fields exist.</div>')}
+    <div class="metricRow"><div class="itemTitle">Top Services</div><div class="itemMeta"><span>Most valuable posted services</span></div></div>
+    ${(topServices.length ? topServices.slice(0,6).map(x => metricRow(x.label, money(x.value), 'Captured from bill and dispense lines')).join('') : '<div class="emptyState">Service ranking appears when billing lines exist.</div>')}
   `;
-  $('#workflowBenchmarks').innerHTML = [
-    metricRow('Patient registry strength', num(o.patients), 'Registered patient footprint'),
-    metricRow('Clinical throughput', num(ws.activeVisits || o.visits), 'Visits handled in the current dataset'),
-    metricRow('Queue intensity', num(ws.openQueue || o.queue), 'Open doctor queue count'),
-    metricRow('Pending labs', num(ws.pendingLabs), 'Laboratory desk workload'),
-    metricRow('Active prescriptions', num(ws.activePrescriptions), 'Medication flow still active'),
-    metricRow('Admissions active', num(ws.activeAdmissions || o.admissions), 'Bed-side and inpatient activity'),
-  ].join('');
-  $('#analyticsSignals').innerHTML = notifications.slice(0, 6).map(n => `<div class="analyticsSignalCard"><strong>${escapeHtml(n.title || n.type || 'Signal')}</strong><div>${escapeHtml(n.message || '--')}</div><div class="itemMeta"><span>${fmtDateTime(n.createdAt)}</span><span>${escapeHtml(n.actor || n.by || 'system')}</span></div></div>`).join('') || `<div class="emptyState">Realtime signals will show after events start flowing.</div>`;
-  const ws2 = state.data.workspace?.summary || {};
+
+  $('#workflowBenchmarks').innerHTML = `
+    <div class="analyticsSummaryGrid">
+      <div class="execMiniCard"><span>Low Stock</span><strong>${num(inv.counts?.lowStock || 0)}</strong></div>
+      <div class="execMiniCard"><span>Out of Stock</span><strong>${num(inv.counts?.outOfStock || 0)}</strong></div>
+      <div class="execMiniCard"><span>Expired</span><strong>${num(inv.counts?.expired || 0)}</strong></div>
+      <div class="execMiniCard"><span>Expiring Soon</span><strong>${num(inv.counts?.expiringSoon || 0)}</strong></div>
+      <div class="execMiniCard"><span>Purchase Rows</span><strong>${num(inv.dataQuality?.purchaseRows || 0)}</strong></div>
+      <div class="execMiniCard"><span>Batch Rows</span><strong>${num(inv.dataQuality?.batchRows || 0)}</strong></div>
+    </div>
+    <div class="metricRow"><div class="itemTitle">Inventory Risk View</div><div class="itemMeta"><span>Exact stock intelligence from items, receipts and dispenses</span></div></div>
+    <div id="invRiskChart"></div>
+    <div class="dualAnalyticsRow">
+      <div>
+        <div class="metricRow"><div class="itemTitle">Supplier Spend</div><div class="itemMeta"><span>Purchase value by supplier</span></div></div>
+        <div id="invSupplierChart"></div>
+      </div>
+      <div>
+        <div class="metricRow"><div class="itemTitle">Pharmacy Profitability</div><div class="itemMeta"><span>Recorded revenue minus mapped item cost</span></div></div>
+        <div id="invProfitChart"></div>
+      </div>
+    </div>
+    ${metricRow('Patient registry strength', num(o.patients), 'Registered patient footprint')}
+    ${metricRow('Clinical throughput', num(ws.activeVisits || o.visits), 'Visits handled in the current dataset')}
+    ${metricRow('Queue intensity', num(ws.openQueue || o.queue), 'Open doctor queue count')}
+    ${metricRow('Pending labs', num(ws.pendingLabs), 'Laboratory desk workload')}
+    ${metricRow('Active prescriptions', num(ws.activePrescriptions), 'Medication flow still active')}
+    ${metricRow('Admissions active', num(ws.activeAdmissions || o.admissions), 'Bed-side and inpatient activity')}
+    <div class="metricRow"><div class="itemTitle">Batch Tracking</div><div class="itemMeta"><span>Received vs dispensed vs on-hand</span></div></div>
+    ${(batchTracking.length ? batchTracking.slice(0,5).map(x => metricRow(`${x.label} • ${x.batch}`, `${num(x.value)} on hand`, `Received ${num(x.receivedQty)} • Dispensed ${num(x.dispensedQty)} • ${x.supplier || '--'}`)).join('') : '<div class="emptyState">Batch tracking will appear when purchase receipts include batch data.</div>')}
+    <div class="metricRow"><div class="itemTitle">Ward Consumption</div><div class="itemMeta"><span>Consumables and medication usage</span></div></div>
+    ${(wardConsumption.length ? wardConsumption.slice(0,4).map(x => metricRow(x.label, num(x.value), 'Ward-side usage count')).join('') : '<div class="emptyState">Ward consumption appears from nurse desk logs.</div>')}
+    <div class="metricRow"><div class="itemTitle">Lab Consumables Usage</div><div class="itemMeta"><span>Sample and test-driven usage</span></div></div>
+    ${(labUse.length ? labUse.slice(0,4).map(x => metricRow(x.label, num(x.value), 'Lab-driven usage count')).join('') : '<div class="emptyState">Lab consumable usage appears from lab requests.</div>')}
+  `;
+
+  const combinedSignals = [
+    ...leakages.map(x => ({ title:'Leakage Detection', message:`${x.label} • ${x.detail}`, createdAt:x.createdAt, actor:'system' })),
+    ...discountAbuse.map(x => ({ title:'Discount Abuse Alert', message:`${x.label} • ${x.detail}`, createdAt:x.createdAt, actor:'system' })),
+    ...reorderAlerts.map(x => ({ title:'Automatic Reorder Alert', message:`${x.label} • ${x.detail}`, createdAt:Date.now(), actor:x.supplier })),
+    ...outOfStock.slice(0,4).map(x => ({ title:'Out of Stock', message:`${x.label} • Batch ${x.batch || '--'}`, createdAt:Date.now(), actor:x.supplier || 'inventory' })),
+    ...notifications.slice(0, 6).map(n => ({ title:n.title || n.type || 'Signal', message:n.message || '--', createdAt:n.createdAt, actor:n.actor || n.by || 'system' }))
+  ].sort((a,b) => num(b.createdAt) - num(a.createdAt));
+
+  $('#analyticsSignals').innerHTML = combinedSignals.length ? combinedSignals.slice(0,10).map(n => `<div class="analyticsSignalCard"><strong>${escapeHtml(n.title || 'Signal')}</strong><div>${escapeHtml(n.message || '--')}</div><div class="itemMeta"><span>${fmtDateTime(n.createdAt)}</span><span>${escapeHtml(n.actor || 'system')}</span></div></div>`).join('') : `<div class="emptyState">Realtime signals will show after events start flowing.</div>`;
+
   $('#boardSummary').innerHTML = [
     miniPanel('Executive summary', escapeHtml(state.data.aiOverview?.summary || 'Analytics summary will appear here.')),
-    miniPanel('Billing insight', `${money(f.totalPaid)} collected out of ${money(f.totalBill)} total billed.`),
-    miniPanel('Queue insight', num(ws2.openQueue || o.queue) > 5 ? 'Doctor queue is under pressure. Consider load balancing.' : 'Queue pressure is under control.'),
-    miniPanel('Workflow command', `${num(ws2.pendingAppointments)} appointments • ${num(ws2.pendingLabs)} labs • ${num(ws2.activePrescriptions)} active prescriptions.`),
-    miniPanel('Operations pulse', `${num(o.patients)} patients • ${num(ws2.activeVisits || o.visits)} visits • ${num(o.bills)} bills.`),
-    miniPanel('Nurse desk', `${num(ws2.nurseDeskOpen)} open care entries • ${num(ws2.staffOnlineReady)} active staff ready.`),
+    miniPanel('Most profitable department', fin.mostProfitableDepartment ? `${fin.mostProfitableDepartment.label} • ${money(fin.mostProfitableDepartment.value)}` : 'Waiting for profitability data'),
+    miniPanel('Top services', topServices.length ? `${topServices[0].label} • ${money(topServices[0].value)}` : 'No service ranking yet'),
+    miniPanel('Outstanding by patient', outstandingPatient.length ? `${outstandingPatient[0].label} • ${money(outstandingPatient[0].value)}` : 'No patient-level outstanding exposure'),
+    miniPanel('Outstanding by company/HMO', (outstandingCompany[0] || outstandingHmo[0]) ? `${(outstandingCompany[0] || outstandingHmo[0]).label} • ${money((outstandingCompany[0] || outstandingHmo[0]).value)}` : 'No company/HMO exposure yet'),
+    miniPanel('Refund analytics', `${num(refunds.refundCount || 0)} refund(s) • ${money(refunds.totalRefundAmount || 0)}`),
+    miniPanel('Inventory risk', `${num(inv.counts?.lowStock || 0)} low • ${num(inv.counts?.expired || 0)} expired • ${num(inv.counts?.expiringSoon || 0)} expiring soon`),
+    miniPanel('Supplier watch', suppliers.length ? `${suppliers[0].label} • ${money(suppliers[0].value)}` : 'Supplier data will appear when supplier fields are available'),
+    miniPanel('Movement history', movements.length ? `${movements[0].type} • ${movements[0].label} • ${fmtDateTime(movements[0].createdAt)}` : 'Movement history will appear after purchases/dispenses'),
+    miniPanel('BI mode', `${fin.dataQuality?.sourceMode || 'connected'} / ${inv.dataQuality?.sourceMode || 'connected'}`)
   ].join('');
-}
 
+  renderAreaChart('fiTrendChart', (monthlyTrend.length ? monthlyTrend : dailyTrend).map(x => ({ label: String(x.label).slice(-5), value: num(x.value) })), 'NGN');
+  renderHorizontalBars('fiDeptChart', dept, v => money(v));
+  renderHorizontalBars('fiPaymentChart', payMix, v => money(v));
+  renderHorizontalBars('fiDoctorChart', doctors.map(x => ({ label: `${x.label} (${num(x.visits)}v)`, value: x.value })), v => money(v));
+  renderHorizontalBars('fiBranchChart', branchComparison, v => money(v));
+  renderHorizontalBars('invRiskChart', [
+    { label:'Low Stock', value: inv.counts?.lowStock || 0 },
+    { label:'Out of Stock', value: inv.counts?.outOfStock || 0 },
+    { label:'Expired', value: inv.counts?.expired || 0 },
+    { label:'Expiring Soon', value: inv.counts?.expiringSoon || 0 }
+  ], v => `${num(v)} item(s)`);
+  renderHorizontalBars('invSupplierChart', suppliers, v => money(v));
+  renderHorizontalBars('invProfitChart', productProfit.map(x => ({ label:`${x.label} (${num(x.qty)})`, value:x.profit })), v => money(v));
+}
 
 function renderAccessControlAudit() {
   const accessHost = $('#accessControlGrid');
@@ -1507,6 +1629,10 @@ async function targetedRealtimeRefresh(tables = [], versionHint = 0) {
   if (needsOps) {
     try { await loadClinicalOps(); } catch {}
   }
+  if (needsFinance) {
+    try { await loadFinancialIntelligence(); } catch {}
+    try { await loadInventoryIntelligence(); } catch {}
+  }
   if (keys.has('staff')) { try { await loadRbac(); } catch {} }
   if (keys.has('audit_logs')) { try { await loadAuditTrail(); } catch {} }
   if (versionHint) state.version = Math.max(state.version || 0, num(versionHint));
@@ -1772,6 +1898,21 @@ function metricBar(title, value, max) {
   const pct = Math.max(4, Math.min(100, (num(value) / Math.max(1, num(max))) * 100));
   const showMoney = ['revenue', 'sales', 'billed', 'collected', 'outstanding'].some(w => title.toLowerCase().includes(w));
   return `<div class="metricRow"><div class="dualBar"><div class="dualBarRow"><strong>${escapeHtml(title)}</strong><span>${showMoney ? money(value) : escapeHtml(String(value))}</span></div><div class="progress"><span style="width:${pct}%"></span></div></div></div>`;
+}
+
+function renderHorizontalBars(id, rows, formatter = v => money(v)) {
+  const host = document.getElementById(id);
+  if (!host) return;
+  const data = Array.isArray(rows) ? rows.filter(Boolean).slice(0, 8) : [];
+  if (!data.length) return renderEmptyChart(id, 'No chart data');
+  const max = Math.max(...data.map(x => num(x.value)), 1);
+  host.innerHTML = `<div class="stack10">${data.map(x => `
+    <div class="metricRow">
+      <div class="dualBar">
+        <div class="dualBarRow"><strong>${escapeHtml(x.label || '--')}</strong><span>${escapeHtml(String(formatter(num(x.value), x)))}</span></div>
+        <div class="progress"><span style="width:${Math.max(4, Math.min(100, (num(x.value) / max) * 100))}%"></span></div>
+      </div>
+    </div>`).join('')}</div>`;
 }
 
 function renderEmptyChart(id, message) {

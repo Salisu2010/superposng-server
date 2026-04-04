@@ -62,6 +62,10 @@ function initDB() {
       clinicAdmissions: [],
       clinicAppointments: [],
       clinicPharmacyDispenses: [],
+      clinicPharmacyItems: [],
+      clinicPharmacyReceipts: [],
+      clinicStockMovements: [],
+      clinicSuppliers: [],
       clinicLabRequests: [],
       clinicPrescriptions: [],
       clinicNurseDesk: [],
@@ -151,6 +155,10 @@ function readDB() {
     if (!Array.isArray(db.clinicAdmissions)) db.clinicAdmissions = []
     if (!Array.isArray(db.clinicAppointments)) db.clinicAppointments = []
     if (!Array.isArray(db.clinicPharmacyDispenses)) db.clinicPharmacyDispenses = []
+    if (!Array.isArray(db.clinicPharmacyItems)) db.clinicPharmacyItems = []
+    if (!Array.isArray(db.clinicPharmacyReceipts)) db.clinicPharmacyReceipts = []
+    if (!Array.isArray(db.clinicStockMovements)) db.clinicStockMovements = []
+    if (!Array.isArray(db.clinicSuppliers)) db.clinicSuppliers = []
     if (!Array.isArray(db.clinicLabRequests)) db.clinicLabRequests = []
     if (!Array.isArray(db.clinicPrescriptions)) db.clinicPrescriptions = []
     if (!Array.isArray(db.clinicNurseDesk)) db.clinicNurseDesk = []
@@ -214,6 +222,10 @@ function readDB() {
       clinicAdmissions: [],
       clinicAppointments: [],
       clinicPharmacyDispenses: [],
+      clinicPharmacyItems: [],
+      clinicPharmacyReceipts: [],
+      clinicStockMovements: [],
+      clinicSuppliers: [],
       clinicLabRequests: [],
       clinicPrescriptions: [],
       clinicNurseDesk: [],

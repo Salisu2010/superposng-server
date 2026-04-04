@@ -243,6 +243,8 @@ function ensureArrays(db){
   db.clinicMedicationLogs = arr(db.clinicMedicationLogs);
   db.clinicLabSamples = arr(db.clinicLabSamples);
   db.clinicPharmacyReceipts = arr(db.clinicPharmacyReceipts);
+  db.clinicStockMovements = arr(db.clinicStockMovements);
+  db.clinicSuppliers = arr(db.clinicSuppliers);
   db.clinicDischargeSummary = arr(db.clinicDischargeSummary);
   db.clinicNurseTasks = arr(db.clinicNurseTasks);
   db.clinicCashierShifts = arr(db.clinicCashierShifts);
@@ -367,7 +369,7 @@ function pickSnapshotPayload(body){
   const knownKeys = [
     'clinic_profile','clinicProfile','branches','audit_logs','staff','staffs','patients','visits','bills','prescriptions',
     'lab_requests','lab','pharmacy_items','pharmacy_dispenses','pharmacy','admissions','appointments','vitals',
-    'inpatient_treatment','treatment_notes','medication_schedule','medication_logs','lab_samples','pharmacy_receipts',
+    'inpatient_treatment','treatment_notes','medication_schedule','medication_logs','lab_samples','pharmacy_receipts','stock_movements','suppliers',
     'discharge_summary','nurse_tasks','cashier_shifts','nurse_desk','nurseDesk','doctor_queue','doctorQueue'
   ];
   const data = {};
@@ -447,6 +449,8 @@ function clinicRows(db, clinicId, opts = {}){
     medication_logs: generic(db.clinicMedicationLogs.filter(match), 'mlog'),
     lab_samples: generic(db.clinicLabSamples.filter(match), 'sample'),
     pharmacy_receipts: generic(db.clinicPharmacyReceipts.filter(match), 'prx'),
+    stock_movements: generic(db.clinicStockMovements.filter(match), 'mov'),
+    suppliers: generic(db.clinicSuppliers.filter(match), 'sup'),
     discharge_summary: generic(db.clinicDischargeSummary.filter(match), 'disc'),
     nurse_tasks: generic(db.clinicNurseTasks.filter(match), 'ntask'),
     cashier_shifts: generic(db.clinicCashierShifts.filter(match), 'shift'),
@@ -464,7 +468,9 @@ function buildSnapshotData(db, clinicId){
       staffs: rows.staff,
       clinicProfile: rows.clinic_profile,
       doctorQueue: rows.doctor_queue,
-      nurseDesk: rows.nurse_desk
+      nurseDesk: rows.nurse_desk,
+      stockMovements: rows.stock_movements,
+      supplierRows: rows.suppliers
     }
   };
 }
@@ -516,6 +522,451 @@ function summarizeSnapshot(snapshot){
   const lowStock = pharmacyRows.filter(x => toNum(x.remaining_qty || x.quantity || x.qty || x.stock, 0) <= Math.max(5, toNum(x.reorder_level || x.min_stock, 5)));
   return { patients, visits, bills, admissions, pharmacy, pharmacyRevenue, lab, totalBill, totalPaid, outstanding, queue, doctorWorkload, lowStock };
 }
+
+function round2(v){ return Math.round((toNum(v) + Number.EPSILON) * 100) / 100; }
+function toTs(v, d=0){
+  if (v == null || v === "") return d;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 0) return n;
+  const t = Date.parse(String(v));
+  return Number.isFinite(t) ? t : d;
+}
+function sumNums(rows, pick){ return arr(rows).reduce((s, row) => s + toNum(pick(row)), 0); }
+function avg(nums){ const clean = arr(nums).map(toNum).filter(n => Number.isFinite(n)); return clean.length ? round2(clean.reduce((a,b)=>a+b,0) / clean.length) : 0; }
+function normalizeNameKey(v){ return lower(v).replace(/[^a-z0-9]+/g, " ").trim(); }
+function pickBranch(row){ return safeLabel(row?.branchId || row?.branch || row?.clinicBranch || row?.location, "Main"); }
+function pickDepartment(row){ return safeLabel(row?.department || row?.module || row?.category || row?.serviceType || row?.unit || row?.serviceUnit, "General Services"); }
+function pickService(row){ return safeLabel(row?.serviceName || row?.description || row?.category || row?.itemName || row?.drugName || row?.testName || row?.test_name, "General Service"); }
+function trendPoints(map, limit=12){
+  return Array.from(map.entries()).map(([label, value]) => ({ label, value: round2(value) }))
+    .sort((a,b) => String(a.label).localeCompare(String(b.label)))
+    .slice(-limit);
+}
+function addMap(map, key, value){
+  const k = safeLabel(key, "Unspecified");
+  map.set(k, round2((map.get(k) || 0) + toNum(value)));
+}
+function buildItemCostCatalog(items, receipts){
+  const catalog = new Map();
+  const batchCatalog = new Map();
+  const register = (name, batch, unitCost, qty=0) => {
+    const key = normalizeNameKey(name);
+    if (!key) return;
+    const current = catalog.get(key) || { qty:0, cost:0 };
+    current.qty += Math.max(0, toNum(qty));
+    current.cost += Math.max(0, toNum(unitCost)) * Math.max(0, toNum(qty) || 1);
+    catalog.set(key, current);
+    const batchKey = `${key}::${normalizeNameKey(batch)}`;
+    if (batch) batchCatalog.set(batchKey, { unitCost: toNum(unitCost), qty: toNum(qty) });
+  };
+  for (const row of arr(receipts)) {
+    const name = row.itemName || row.drugName || row.name;
+    const qty = toNum(row.quantity || row.qty || row.units || 1, 1);
+    const totalCost = toNum(row.total || row.amount || row.cost || row.costTotal || 0);
+    const unitCost = toNum(row.unitCost || row.costPrice || row.purchasePrice, qty ? (totalCost / Math.max(1, qty)) : 0);
+    register(name, row.batchNo || row.batch || row.batchNumber, unitCost, qty);
+  }
+  for (const row of arr(items)) {
+    const name = row.name || row.itemName || row.drugName;
+    const qty = toNum(row.received_qty || row.opening_qty || row.quantity || row.qty || row.stock || row.remaining_qty, 0);
+    const unitCost = toNum(row.costPrice || row.unitCost || row.purchasePrice || row.avgCost || 0);
+    register(name, row.batchNo || row.batch || row.batchNumber, unitCost, qty);
+  }
+  return {
+    resolve(name, batch=''){
+      const key = normalizeNameKey(name);
+      if (!key) return 0;
+      const batchKey = `${key}::${normalizeNameKey(batch)}`;
+      if (batch && batchCatalog.has(batchKey)) return round2(batchCatalog.get(batchKey).unitCost);
+      const current = catalog.get(key);
+      if (!current) return 0;
+      return current.qty > 0 ? round2(current.cost / current.qty) : 0;
+    }
+  };
+}
+
+function groupTopEntries(map, limit = 8){
+  return Array.from(map.entries())
+    .map(([label, value]) => ({ label, value: round2(value) }))
+    .sort((a,b) => toNum(b.value) - toNum(a.value))
+    .slice(0, limit);
+}
+function safeLabel(value, fallback='Unspecified'){
+  const v = toStr(value).trim();
+  return v || fallback;
+}
+function amountLabel(v){
+  return `NGN ${round2(v).toLocaleString()}`;
+}
+function periodKey(ts, mode='day'){
+  const d = new Date(toNum(ts, now()));
+  if (mode === 'month') return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  if (mode === 'week'){
+    const tmp = new Date(d);
+    const day = (tmp.getDay() + 6) % 7;
+    tmp.setDate(tmp.getDate() - day);
+    tmp.setHours(0,0,0,0);
+    const startOfYear = new Date(tmp.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((tmp - startOfYear) / 86400000) + 1) / 7);
+    return `${tmp.getFullYear()}-W${String(weekNo).padStart(2,'0')}`;
+  }
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function computeFinancialIntelligence(db, clinicId){
+  ensureArrays(db);
+  const bills = db.clinicBills.filter(x => String(x.clinicId) === clinicId);
+  const refunds = db.clinicPaymentRefunds.filter(x => String(x.clinicId) === clinicId);
+  const dispenses = db.clinicPharmacyDispenses.filter(x => String(x.clinicId) === clinicId);
+  const items = db.clinicPharmacyItems.filter(x => String(x.clinicId) === clinicId);
+  const receipts = db.clinicPharmacyReceipts.filter(x => String(x.clinicId) === clinicId);
+  const visits = db.clinicVisits.filter(x => String(x.clinicId) === clinicId);
+  const admissions = db.clinicAdmissions.filter(x => String(x.clinicId) === clinicId);
+  const labs = db.clinicLabRequests.filter(x => String(x.clinicId) === clinicId);
+  const costCatalog = buildItemCostCatalog(items, receipts);
+
+  const byDepartment = new Map();
+  const byDoctor = new Map();
+  const paymentMix = new Map();
+  const outstandingByPatient = new Map();
+  const outstandingByCompany = new Map();
+  const outstandingByHmo = new Map();
+  const topServices = new Map();
+  const departmentMargin = new Map();
+  const departmentServiceCount = new Map();
+  const dailyRevenue = new Map();
+  const dailyPaid = new Map();
+  const weeklyPaid = new Map();
+  const monthlyPaid = new Map();
+  const branchRevenue = new Map();
+  const doctorVisits = new Map();
+  const discountAbuseAlerts = [];
+  const leakageAlerts = [];
+  let totalRevenue = 0;
+  let totalPaid = 0;
+  let totalOutstanding = 0;
+  let totalRefunds = 0;
+  let totalDiscounts = 0;
+
+  for (const bill of bills){
+    const total = round2(toNum(bill.total || bill.amount || 0));
+    const paid = round2(toNum(bill.paid || bill.amount_paid || bill.amountPaid || 0));
+    const discount = round2(toNum(bill.discount || bill.discountAmount || 0));
+    const refundsOnBill = round2(toNum(bill.refundAmount || 0));
+    const outstanding = round2(Math.max(0, toNum(bill.balance, total - paid)));
+    const createdAt = toTs(bill.createdAt || bill.updatedAt, now());
+    const department = pickDepartment(bill);
+    const doctor = safeLabel(bill.doctorName || bill.doctor || bill.consultant || bill.createdBy, 'Shared Billing');
+    const method = safeLabel(bill.paymentMethod || bill.payment_method || bill.paymentType || (paid > 0 ? 'Cash' : 'Pending'), 'Unknown');
+    const patient = safeLabel(bill.patientName || bill.patientId, 'Unknown Patient');
+    const company = safeLabel(bill.companyName || bill.company || bill.corporateName, '');
+    const hmo = safeLabel(bill.hmoName || bill.hmo || bill.insuranceName || bill.insurance, '');
+    const service = pickService(bill);
+    const branch = pickBranch(bill);
+    const estimatedCost = round2(toNum(bill.cost || bill.costPrice || bill.serviceCost || 0));
+    const margin = round2(total - discount - refundsOnBill - estimatedCost);
+
+    addMap(byDepartment, department, total);
+    addMap(byDoctor, doctor, total);
+    addMap(paymentMix, method, paid || total);
+    addMap(topServices, service, total);
+    addMap(departmentMargin, department, Math.max(0, margin));
+    addMap(branchRevenue, branch, paid || total);
+    departmentServiceCount.set(department, (departmentServiceCount.get(department) || 0) + 1);
+
+    if (outstanding > 0){
+      addMap(outstandingByPatient, patient, outstanding);
+      if (company) addMap(outstandingByCompany, company, outstanding);
+      if (hmo) addMap(outstandingByHmo, hmo, outstanding);
+    }
+
+    addMap(dailyRevenue, periodKey(createdAt, 'day'), total);
+    addMap(dailyPaid, periodKey(createdAt, 'day'), paid || total);
+    addMap(weeklyPaid, periodKey(createdAt, 'week'), paid || total);
+    addMap(monthlyPaid, periodKey(createdAt, 'month'), paid || total);
+
+    totalRevenue += total;
+    totalPaid += paid;
+    totalOutstanding += outstanding;
+    totalDiscounts += discount;
+
+    if (discount > 0 && total > 0 && discount >= total * 0.2){
+      discountAbuseAlerts.push({
+        severity: discount >= total * 0.35 ? 'high' : 'medium',
+        label: `${patient} • ${service}`,
+        detail: `Discount ${amountLabel(discount)} on bill ${toStr(bill.billNo || bill.billId || '').trim() || 'record'}`,
+        createdAt
+      });
+    }
+    if (outstanding > 0 && createdAt < now() - (7 * 86400000)){
+      leakageAlerts.push({
+        severity: outstanding >= Math.max(50000, total * 0.6) ? 'high' : 'medium',
+        label: `${patient} exposure`,
+        detail: `${amountLabel(outstanding)} remains uncollected in ${department}`,
+        createdAt
+      });
+    }
+  }
+
+  for (const refund of refunds){
+    totalRefunds += toNum(refund.amount || refund.refundAmount || 0);
+  }
+
+  for (const visit of visits){
+    const doctor = safeLabel(visit.doctorName || visit.doctor, 'Unassigned');
+    doctorVisits.set(doctor, (doctorVisits.get(doctor) || 0) + 1);
+  }
+
+  for (const row of dispenses){
+    const total = round2(toNum(row.total || row.amount || (toNum(row.quantity || row.qty || 0) * toNum(row.unitPrice || row.price || 0))));
+    const qty = Math.max(1, toNum(row.quantity || row.qty || row.units || 1, 1));
+    const batch = toStr(row.batchNo || row.batch || row.batchNumber);
+    const unitCost = round2(toNum(row.costPrice || row.unitCost || row.cost, 0) || costCatalog.resolve(row.drugName || row.itemName, batch));
+    const totalCost = round2(toNum(row.costTotal || row.totalCost || 0, unitCost * qty));
+    const margin = round2(Math.max(0, total - totalCost));
+    const service = pickService(row);
+    const branch = pickBranch(row);
+    const createdAt = toTs(row.createdAt || row.updatedAt, now());
+    addMap(byDepartment, 'Pharmacy', total);
+    addMap(topServices, service, total);
+    addMap(departmentMargin, 'Pharmacy', margin);
+    addMap(branchRevenue, branch, total);
+    departmentServiceCount.set('Pharmacy', (departmentServiceCount.get('Pharmacy') || 0) + qty);
+    addMap(dailyRevenue, periodKey(createdAt, 'day'), total);
+    addMap(dailyPaid, periodKey(createdAt, 'day'), total);
+    addMap(weeklyPaid, periodKey(createdAt, 'week'), total);
+    addMap(monthlyPaid, periodKey(createdAt, 'month'), total);
+    totalRevenue += total;
+    totalPaid += total;
+  }
+
+  const doctorRanking = Array.from(byDoctor.entries()).map(([label, value]) => ({
+    label,
+    visits: doctorVisits.get(label) || 0,
+    value: round2(value)
+  })).sort((a,b) => toNum(b.value) - toNum(a.value)).slice(0, 10);
+
+  const profitable = Array.from(departmentMargin.entries()).map(([label, value]) => ({
+    label,
+    value: round2(value),
+    services: departmentServiceCount.get(label) || 0
+  })).sort((a,b) => toNum(b.value) - toNum(a.value));
+
+  const branchComparison = Array.from(branchRevenue.entries()).map(([label, value]) => ({ label, value: round2(value) }))
+    .sort((a,b) => toNum(b.value) - toNum(a.value));
+
+  const refundReasons = new Map();
+  for (const refund of refunds){
+    addMap(refundReasons, refund.reason || refund.note || refund.billId || 'General Refund', toNum(refund.amount || refund.refundAmount || 0));
+  }
+
+  return {
+    totals: {
+      totalRevenue: round2(totalRevenue),
+      totalPaid: round2(totalPaid),
+      totalOutstanding: round2(totalOutstanding),
+      totalRefunds: round2(totalRefunds),
+      totalDiscounts: round2(totalDiscounts)
+    },
+    revenueByDepartment: groupTopEntries(byDepartment, 10),
+    revenueByDoctor: doctorRanking,
+    paymentMix: groupTopEntries(paymentMix, 8),
+    outstanding: {
+      patient: groupTopEntries(outstandingByPatient, 8),
+      company: groupTopEntries(outstandingByCompany, 8),
+      hmo: groupTopEntries(outstandingByHmo, 8)
+    },
+    trends: {
+      daily: trendPoints(dailyPaid, 21),
+      weekly: trendPoints(weeklyPaid, 12),
+      monthly: trendPoints(monthlyPaid, 12),
+      billedDaily: trendPoints(dailyRevenue, 21)
+    },
+    topServices: groupTopEntries(topServices, 10),
+    mostProfitableDepartment: profitable[0] || null,
+    departmentProfitability: profitable.slice(0, 8),
+    branchComparison,
+    leakageAlerts: leakageAlerts.sort((a,b) => toNum(b.createdAt) - toNum(a.createdAt)).slice(0, 10),
+    discountAbuseAlerts: discountAbuseAlerts.sort((a,b) => toNum(b.createdAt) - toNum(a.createdAt)).slice(0, 10),
+    refundAnalytics: {
+      refundCount: refunds.length,
+      totalRefundAmount: round2(totalRefunds),
+      byReason: groupTopEntries(refundReasons, 8)
+    },
+    operationalContext: {
+      activeVisits: visits.filter(x => !['closed','completed','done','cancelled'].includes(lower(x.status || 'open'))).length,
+      activeAdmissions: admissions.filter(x => ['active','admitted','open'].includes(lower(x.status || 'active'))).length,
+      pendingLabs: labs.filter(x => !['ready','completed','cancelled'].includes(lower(x.status || 'pending'))).length
+    },
+    dataQuality: {
+      exactBillingRows: bills.length,
+      exactDispenseRows: dispenses.length,
+      refundRows: refunds.length,
+      branchRows: bills.filter(x => toStr(x.branchId)).length + dispenses.filter(x => toStr(x.branchId)).length,
+      doctorLinkedRows: bills.filter(x => toStr(x.doctorName || x.doctor || x.consultant)).length,
+      sourceMode: 'exact_business_intelligence'
+    }
+  };
+}
+
+function computeInventoryIntelligence(db, clinicId){
+  ensureArrays(db);
+  const items = db.clinicPharmacyItems.filter(x => String(x.clinicId) === clinicId);
+  const dispenses = db.clinicPharmacyDispenses.filter(x => String(x.clinicId) === clinicId);
+  const receipts = db.clinicPharmacyReceipts.filter(x => String(x.clinicId) === clinicId);
+  const nurseDesk = db.clinicNurseDesk.filter(x => String(x.clinicId) === clinicId);
+  const labs = db.clinicLabRequests.filter(x => String(x.clinicId) === clinicId);
+  const medLogs = db.clinicMedicationLogs.filter(x => String(x.clinicId) === clinicId);
+  const nowTs = now();
+  const costCatalog = buildItemCostCatalog(items, receipts);
+
+  const itemAgg = new Map();
+  const batchAgg = new Map();
+  const movementHistory = [];
+  const wardConsumptionMap = new Map();
+  const labConsumablesMap = new Map();
+  const supplierMeta = new Map();
+
+  const ensureItem = (name) => {
+    const key = normalizeNameKey(name);
+    if (!key) return null;
+    if (!itemAgg.has(key)) itemAgg.set(key, { label: safeLabel(name, 'Unnamed Item'), receivedQty:0, dispensedQty:0, itemStock:0, reorder:5, suppliers:new Set(), expiryAt:0, batch:'' });
+    return itemAgg.get(key);
+  };
+  const ensureBatch = (name, batch) => {
+    const key = `${normalizeNameKey(name)}::${normalizeNameKey(batch || 'no-batch')}`;
+    if (!batchAgg.has(key)) batchAgg.set(key, { label: safeLabel(name, 'Unnamed Item'), batch: toStr(batch), receivedQty:0, dispensedQty:0, onHand:0, expiryAt:0, supplier:'', unitCost:0, totalSpend:0 });
+    return batchAgg.get(key);
+  };
+
+  for (const item of items){
+    const name = item.name || item.drugName || item.itemName;
+    const agg = ensureItem(name); if (!agg) continue;
+    agg.itemStock = Math.max(agg.itemStock, toNum(item.remaining_qty || item.quantity || item.qty || item.stock, 0));
+    agg.reorder = Math.max(1, toNum(item.reorder_level || item.min_stock, agg.reorder || 5));
+    agg.expiryAt = Math.max(agg.expiryAt, toTs(item.expiryAt || item.expiryDate || item.expireAt, 0));
+    agg.batch = agg.batch || toStr(item.batchNo || item.batch || item.batchNumber);
+    const supplier = toStr(item.supplierName || item.supplier || item.vendorName);
+    if (supplier) agg.suppliers.add(supplier);
+  }
+
+  for (const row of receipts){
+    const name = row.itemName || row.drugName || row.name;
+    const qty = Math.max(1, toNum(row.quantity || row.qty || row.units || 1, 1));
+    const amount = round2(toNum(row.total || row.amount || row.cost || row.costTotal || 0));
+    const supplier = safeLabel(row.supplierName || row.supplier || row.vendorName, 'Unassigned Supplier');
+    const batch = toStr(row.batchNo || row.batch || row.batchNumber);
+    const expiryAt = toTs(row.expiryAt || row.expiryDate || row.expireAt, 0);
+    const unitCost = round2(toNum(row.unitCost || row.costPrice || row.purchasePrice, qty ? amount / Math.max(1, qty) : 0));
+    const agg = ensureItem(name); if (!agg) continue;
+    agg.receivedQty += qty;
+    agg.expiryAt = Math.max(agg.expiryAt, expiryAt);
+    if (supplier) agg.suppliers.add(supplier);
+    const b = ensureBatch(name, batch);
+    b.receivedQty += qty;
+    b.onHand += qty;
+    b.expiryAt = Math.max(b.expiryAt, expiryAt);
+    b.supplier = b.supplier || supplier;
+    b.unitCost = unitCost || b.unitCost;
+    b.totalSpend += amount;
+    const prev = supplierMeta.get(supplier) || { supplier, spend:0, receipts:0, lastReceiptAt:0 };
+    supplierMeta.set(supplier, { supplier, spend: round2(prev.spend + amount), receipts: prev.receipts + 1, lastReceiptAt: Math.max(toTs(row.createdAt || row.updatedAt, 0), prev.lastReceiptAt || 0) });
+    movementHistory.push({ type:'purchase', label:safeLabel(name,'Receipt'), qty, amount, createdAt:toTs(row.createdAt || row.updatedAt, nowTs), branchId:pickBranch(row), supplierName:supplier, batch });
+  }
+
+  for (const row of dispenses){
+    const name = row.itemName || row.drugName;
+    const qty = Math.max(1, toNum(row.quantity || row.qty || row.units || 1, 1));
+    const amount = round2(toNum(row.total || row.amount || 0));
+    const batch = toStr(row.batchNo || row.batch || row.batchNumber);
+    const agg = ensureItem(name); if (!agg) continue;
+    agg.dispensedQty += qty;
+    const b = ensureBatch(name, batch);
+    b.dispensedQty += qty;
+    b.onHand -= qty;
+    movementHistory.push({ type:'dispense', label:safeLabel(name,'Drug Dispense'), qty, amount, createdAt:toTs(row.createdAt || row.updatedAt, nowTs), branchId:pickBranch(row), patientName:safeLabel(row.patientName || row.patientId, ''), batch });
+  }
+
+  const lowStock = [];
+  const outOfStock = [];
+  const expired = [];
+  const expiringSoon = [];
+  for (const [, rec] of itemAgg.entries()){
+    const computedOnHand = rec.itemStock > 0 ? rec.itemStock : Math.max(0, rec.receivedQty - rec.dispensedQty);
+    rec.onHand = computedOnHand;
+    const supplier = Array.from(rec.suppliers)[0] || '';
+    const row = { label: rec.label, qty: round2(computedOnHand), reorder: rec.reorder, batch: rec.batch, supplier };
+    if (computedOnHand <= rec.reorder) lowStock.push(row);
+    if (computedOnHand <= 0) outOfStock.push(row);
+    if (rec.expiryAt && rec.expiryAt < nowTs) expired.push({ label: rec.label, expiryAt: rec.expiryAt, qty: round2(computedOnHand), batch: rec.batch });
+    else if (rec.expiryAt && rec.expiryAt <= nowTs + (45 * 86400000)) expiringSoon.push({ label: rec.label, expiryAt: rec.expiryAt, qty: round2(computedOnHand), batch: rec.batch });
+  }
+
+  const profitability = Array.from(itemAgg.values()).map(rec => {
+    const unitCost = costCatalog.resolve(rec.label, rec.batch);
+    const revenue = arr(dispenses).filter(x => normalizeNameKey(x.itemName || x.drugName) === normalizeNameKey(rec.label)).reduce((s,x)=> s + toNum(x.total || x.amount || 0), 0);
+    const qty = arr(dispenses).filter(x => normalizeNameKey(x.itemName || x.drugName) === normalizeNameKey(rec.label)).reduce((s,x)=> s + toNum(x.quantity || x.qty || x.units || 1), 0);
+    const cost = round2(unitCost * qty);
+    return { label: rec.label, revenue: round2(revenue), cost, profit: round2(revenue - cost), qty: round2(qty) };
+  }).filter(x => x.revenue > 0 || x.qty > 0).sort((a,b) => toNum(b.profit) - toNum(a.profit));
+
+  for (const row of nurseDesk){
+    const item = row.consumableName || row.itemName || row.medication || row.note;
+    if (item) addMap(wardConsumptionMap, item, toNum(row.quantity || row.qty || 1, 1));
+  }
+  for (const row of medLogs){
+    const item = row.drugName || row.itemName || row.medication || row.note;
+    if (item) addMap(wardConsumptionMap, item, toNum(row.quantity || row.qty || 1, 1));
+  }
+  for (const row of labs){
+    const item = row.consumableName || row.sampleType || row.testName || row.test_name;
+    if (item) addMap(labConsumablesMap, item, toNum(row.quantity || 1, 1));
+  }
+
+  const supplierRows = Array.from(supplierMeta.values()).sort((a,b) => toNum(b.spend) - toNum(a.spend)).map(x => ({ label:x.supplier, value:round2(x.spend), receipts:x.receipts, lastReceiptAt:x.lastReceiptAt }));
+  const batchRows = Array.from(batchAgg.values()).map(x => ({ label:x.label, batch:x.batch || '--', value:round2(Math.max(0, x.onHand)), receivedQty:round2(x.receivedQty), dispensedQty:round2(x.dispensedQty), expiryAt:x.expiryAt, supplier:x.supplier || '--', unitCost:round2(x.unitCost), totalSpend:round2(x.totalSpend) })).sort((a,b) => toNum(b.value) - toNum(a.value));
+
+  return {
+    counts: {
+      lowStock: lowStock.length,
+      outOfStock: outOfStock.length,
+      expired: expired.length,
+      expiringSoon: expiringSoon.length
+    },
+    lowStock: lowStock.sort((a,b) => toNum(a.qty) - toNum(b.qty)).slice(0, 12),
+    outOfStock: outOfStock.slice(0, 12),
+    expired: expired.sort((a,b) => toNum(a.expiryAt) - toNum(b.expiryAt)).slice(0, 12),
+    expiringSoon: expiringSoon.sort((a,b) => toNum(a.expiryAt) - toNum(b.expiryAt)).slice(0, 12),
+    batchTracking: batchRows.slice(0, 12),
+    drugMovementHistory: movementHistory.sort((a,b) => toNum(b.createdAt) - toNum(a.createdAt)).slice(0, 18),
+    pharmacyProfitability: {
+      totalProfit: round2(profitability.reduce((s,x) => s + toNum(x.profit), 0)),
+      totalRevenue: round2(profitability.reduce((s,x) => s + toNum(x.revenue), 0)),
+      items: profitability.slice(0, 10)
+    },
+    wardConsumption: groupTopEntries(wardConsumptionMap, 10),
+    labConsumablesUsage: groupTopEntries(labConsumablesMap, 10),
+    automaticReorderAlerts: lowStock.slice(0, 10).map(x => ({
+      label: x.label,
+      detail: `${x.qty} left • reorder at ${x.reorder}`,
+      supplier: x.supplier || 'Unassigned Supplier'
+    })),
+    suppliers: supplierRows.slice(0, 10),
+    purchases: {
+      recentCount: receipts.length,
+      totalSpend: round2(receipts.reduce((s,x) => s + toNum(x.total || x.amount || x.cost || 0), 0)),
+      bySupplier: supplierRows.slice(0, 8)
+    },
+    dataQuality: {
+      stockItems: items.length,
+      purchaseRows: receipts.length,
+      dispenseRows: dispenses.length,
+      batchRows: batchRows.length,
+      sourceMode: 'exact_inventory_intelligence'
+    }
+  };
+}
+
 function slimPatientRow(row){
   if (!row) return null;
   return {
@@ -789,6 +1240,7 @@ function inferTablesForEvent(type, payload = {}){
   if (value.includes('prescription')) tables.add('prescriptions');
   if (value.includes('lab')) tables.add('lab_requests');
   if (value.includes('drug') || value.includes('pharmacy')) tables.add('pharmacy_dispenses');
+  if (value.includes('stock') || value.includes('purchase') || value.includes('receipt') || value.includes('supplier') || value.includes('batch')) { tables.add('pharmacy_items'); tables.add('pharmacy_receipts'); }
   if (value.includes('nurse')) tables.add('nurse_desk');
   if (value.includes('staff')) tables.add('staff');
   if (!tables.size) tables.add('audit_logs');
@@ -1641,6 +2093,13 @@ function mergeSnapshotIntoCanonical(db, clinicId, snapshot){
   report.pharmacy_receipts = upsertRows(db.clinicPharmacyReceipts, arr(data.pharmacy_receipts).map(x => normalizeGenericSyncRow(clinicId, x, 'prec')), [
     (a,b) => String(a.clinicId)===String(clinicId) && String(a.id)===String(b.id)
   ]);
+  report.stock_movements = upsertRows(db.clinicStockMovements, arr(data.stock_movements || data.stockMovements).map(x => normalizeGenericSyncRow(clinicId, x, 'mov')), [
+    (a,b) => String(a.clinicId)===String(clinicId) && String(a.id)===String(b.id)
+  ]);
+  report.suppliers = upsertRows(db.clinicSuppliers, arr(data.suppliers || data.supplierRows).map(x => normalizeGenericSyncRow(clinicId, x, 'sup')), [
+    (a,b) => String(a.clinicId)===String(clinicId) && String(a.id)===String(b.id),
+    (a,b) => String(a.clinicId)===String(clinicId) && lower(a.name||a.supplierName) && lower(a.name||a.supplierName)===lower(b.name||b.supplierName)
+  ]);
   report.discharge_summary = upsertRows(db.clinicDischargeSummary, arr(data.discharge_summary).map(x => normalizeGenericSyncRow(clinicId, x, 'dsch')), [
     (a,b) => String(a.clinicId)===String(clinicId) && String(a.id)===String(b.id)
   ]);
@@ -2061,6 +2520,124 @@ r.get('/appointments', (req, res) => {
   return res.json({ ok:true, appointments: sortRecent(appointments).slice(0, 500) });
 });
 
+
+function ensureSupplierRow(db, clinicId, raw = {}){
+  ensureArrays(db);
+  const name = safeLabel(raw.name || raw.supplierName || raw.supplier || raw.vendorName, 'Unassigned Supplier');
+  const email = safeEmail(raw.email || raw.contactEmail);
+  const phone = cleanPhone(raw.phone || raw.contactPhone || raw.whatsapp);
+  let row = db.clinicSuppliers.find(x => String(x.clinicId) === String(clinicId) && (String(x.id) === String(raw.id || raw.supplierId) || lower(x.name || x.supplierName) === lower(name)));
+  const payload = {
+    id: toStr(raw.id || raw.supplierId || (row?.id || ('sup_' + nanoid(10)))),
+    clinicId,
+    name,
+    supplierName: name,
+    code: toStr(raw.code || row?.code || ('SUP-' + nanoid(6).toUpperCase())),
+    contactName: safeLabel(raw.contactName || row?.contactName, ''),
+    phone,
+    email,
+    address: safeLabel(raw.address || row?.address, ''),
+    paymentTerms: safeLabel(raw.paymentTerms || row?.paymentTerms, ''),
+    active: raw.active !== false,
+    createdAt: toNum(row?.createdAt, now()),
+    updatedAt: now()
+  };
+  if (row) Object.assign(row, payload); else { row = payload; db.clinicSuppliers.push(row); }
+  return row;
+}
+function ensurePharmacyItemRow(db, clinicId, raw = {}){
+  ensureArrays(db);
+  const name = safeLabel(raw.itemName || raw.drugName || raw.name, 'Unnamed Item');
+  const sku = toStr(raw.sku || raw.code || raw.itemCode || raw.barcode);
+  const batch = toStr(raw.batchNo || raw.batch || raw.batchNumber);
+  let row = db.clinicPharmacyItems.find(x => String(x.clinicId) === String(clinicId) && (
+    String(x.id) === String(raw.id || raw.itemId) ||
+    (sku && sku === toStr(x.sku || x.code || x.itemCode || x.barcode)) ||
+    (lower(name) === lower(x.itemName || x.drugName || x.name) && (!batch || batch === toStr(x.batchNo || x.batch || x.batchNumber)))
+  ));
+  const payload = {
+    id: toStr(raw.id || raw.itemId || row?.id || ('item_' + nanoid(10))),
+    clinicId,
+    itemId: toStr(raw.itemId || row?.itemId || raw.id || row?.id || ('itm_' + nanoid(8))),
+    itemName: name,
+    drugName: name,
+    name,
+    category: safeLabel(raw.category || row?.category, ''),
+    unit: safeLabel(raw.unit || row?.unit || 'pcs', 'pcs'),
+    strength: safeLabel(raw.strength || row?.strength, ''),
+    form: safeLabel(raw.form || row?.form, ''),
+    sku: sku || toStr(row?.sku),
+    barcode: toStr(raw.barcode || row?.barcode),
+    supplier: safeLabel(raw.supplier || raw.supplierName || row?.supplier || row?.supplierName, ''),
+    supplierName: safeLabel(raw.supplierName || raw.supplier || row?.supplierName || row?.supplier, ''),
+    reorder_level: toNum(raw.reorder_level ?? raw.reorderLevel ?? raw.min_stock ?? row?.reorder_level ?? row?.reorderLevel ?? row?.min_stock, 5),
+    quantity: toNum(raw.quantity ?? raw.qty ?? raw.stock ?? raw.onHand ?? row?.quantity ?? row?.qty ?? row?.stock ?? row?.onHand, 0),
+    stock: toNum(raw.stock ?? raw.quantity ?? raw.qty ?? raw.onHand ?? row?.stock ?? row?.quantity ?? row?.qty ?? row?.onHand, 0),
+    onHand: toNum(raw.onHand ?? raw.stock ?? raw.quantity ?? raw.qty ?? row?.onHand ?? row?.stock ?? row?.quantity ?? row?.qty, 0),
+    costPrice: round2(toNum(raw.costPrice ?? raw.unitCost ?? raw.purchasePrice ?? row?.costPrice ?? row?.unitCost ?? row?.purchasePrice, 0)),
+    unitCost: round2(toNum(raw.unitCost ?? raw.costPrice ?? raw.purchasePrice ?? row?.unitCost ?? row?.costPrice ?? row?.purchasePrice, 0)),
+    sellingPrice: round2(toNum(raw.sellingPrice ?? raw.unitPrice ?? raw.price ?? row?.sellingPrice ?? row?.unitPrice ?? row?.price, 0)),
+    unitPrice: round2(toNum(raw.unitPrice ?? raw.sellingPrice ?? raw.price ?? row?.unitPrice ?? row?.sellingPrice ?? row?.price, 0)),
+    expiryAt: toTs(raw.expiryAt || raw.expiryDate || raw.expiry_date || row?.expiryAt || row?.expiryDate, 0),
+    expiryDate: toStr(raw.expiryDate || raw.expiry_date || row?.expiryDate),
+    batchNo: batch || toStr(row?.batchNo),
+    batch: batch || toStr(row?.batch),
+    batchNumber: batch || toStr(row?.batchNumber),
+    branchId: toStr(raw.branchId || raw.branch_id || row?.branchId),
+    active: raw.active !== false,
+    createdAt: toNum(row?.createdAt, now()),
+    updatedAt: now()
+  };
+  if (row) Object.assign(row, payload); else { row = payload; db.clinicPharmacyItems.push(row); }
+  row.stock = round2(toNum(row.stock ?? row.quantity ?? row.onHand, 0));
+  row.quantity = row.stock; row.qty = row.stock; row.onHand = row.stock;
+  return row;
+}
+function createStockMovement(db, clinicId, raw = {}){
+  ensureArrays(db);
+  const row = {
+    id: toStr(raw.id || raw.movementId || ('mov_' + nanoid(10))),
+    movementId: toStr(raw.movementId || raw.id || ('mov_' + nanoid(10))),
+    clinicId,
+    type: lower(raw.type || 'adjustment') || 'adjustment',
+    itemId: toStr(raw.itemId),
+    itemName: safeLabel(raw.itemName || raw.drugName || raw.name, 'Unnamed Item'),
+    batchNo: toStr(raw.batchNo || raw.batch || raw.batchNumber),
+    batch: toStr(raw.batch || raw.batchNo || raw.batchNumber),
+    quantity: round2(toNum(raw.quantity ?? raw.qty, 0)),
+    qty: round2(toNum(raw.qty ?? raw.quantity, 0)),
+    beforeQty: round2(toNum(raw.beforeQty, 0)),
+    afterQty: round2(toNum(raw.afterQty, 0)),
+    amount: round2(toNum(raw.amount || raw.total || 0)),
+    unitCost: round2(toNum(raw.unitCost || raw.costPrice || 0)),
+    unitPrice: round2(toNum(raw.unitPrice || raw.sellingPrice || 0)),
+    supplierName: safeLabel(raw.supplierName || raw.supplier, ''),
+    supplier: safeLabel(raw.supplier || raw.supplierName, ''),
+    patientId: toStr(raw.patientId),
+    patientName: safeLabel(raw.patientName, ''),
+    referenceId: toStr(raw.referenceId || raw.receiptId || raw.dispenseId),
+    referenceType: toStr(raw.referenceType || raw.type),
+    note: safeLabel(raw.note || raw.reason, ''),
+    branchId: toStr(raw.branchId || raw.branch_id),
+    actor: toStr(raw.actor),
+    role: toStr(raw.role),
+    createdAt: toNum(raw.createdAt, now()),
+    updatedAt: toNum(raw.updatedAt, now())
+  };
+  db.clinicStockMovements.push(row);
+  return row;
+}
+function itemStockSnapshot(item){
+  const qty = round2(toNum(item?.stock ?? item?.quantity ?? item?.qty ?? item?.onHand, 0));
+  return { qty, reorderLevel: toNum(item?.reorder_level ?? item?.reorderLevel ?? item?.min_stock, 5) };
+}
+function touchItemStock(item, delta){
+  const current = round2(toNum(item?.stock ?? item?.quantity ?? item?.qty ?? item?.onHand, 0));
+  const next = round2(current + toNum(delta, 0));
+  item.stock = next; item.quantity = next; item.qty = next; item.onHand = next; item.updatedAt = now();
+  return { beforeQty: current, afterQty: next };
+}
+
 r.post('/pharmacy/dispense', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
   try {
@@ -2070,24 +2647,50 @@ r.post('/pharmacy/dispense', (req, res) => {
     const db = readDB(); ensureArrays(db);
     const patient = ensurePatientExists(db, clinicId, patientId);
     if (!patient) return res.status(404).json({ ok:false, error:'Patient not found' });
+    const item = ensurePharmacyItemRow(db, clinicId, b);
+    const qty = round2(toNum(b.quantity || b.qty, 0));
+    if (qty <= 0) return res.status(400).json({ ok:false, error:'quantity must be greater than 0' });
+    const price = round2(toNum(b.unitPrice || b.sellingPrice || item.unitPrice || item.sellingPrice, 0));
+    const unitCost = round2(toNum(b.unitCost || b.costPrice || item.unitCost || item.costPrice, 0));
+    const stock = itemStockSnapshot(item);
+    if (stock.qty < qty) return res.status(400).json({ ok:false, error:`Insufficient stock. Available ${stock.qty}` });
+    const delta = touchItemStock(item, -qty);
     const row = {
       dispenseId: createId('phm'),
+      id: createId('phm'),
       clinicId,
       patientId,
       patientName: patient.fullName,
-      itemName: toStr(b.itemName || b.drugName || b.drug),
+      itemId: item.itemId || item.id,
+      itemName: item.itemName || item.name,
+      drugName: item.itemName || item.name,
       dosage: toStr(b.dosage),
-      quantity: toNum(b.quantity, 0),
-      unitPrice: toNum(b.unitPrice, 0),
-      total: toNum(b.total, toNum(b.quantity, 0) * toNum(b.unitPrice, 0)),
+      frequency: toStr(b.frequency),
+      quantity: qty,
+      qty,
+      batchNo: toStr(b.batchNo || b.batch || item.batchNo || item.batch),
+      batch: toStr(b.batch || b.batchNo || item.batch || item.batchNo),
+      unitPrice: price,
+      sellingPrice: price,
+      unitCost,
+      total: round2(toNum(b.total, qty * price)),
+      costTotal: round2(qty * unitCost),
       status: pickStatus(b, 'dispensed'),
       dispensedBy: toStr(b.dispensedBy || req.auth?.email),
+      branchId: toStr(b.branchId || b.branch_id || req.auth?.branchId || item.branchId),
       createdAt: now(),
       updatedAt: now()
     };
     db.clinicPharmacyDispenses.push(row);
-    const summary = finalizeWrite(db, clinicId, 'drug_dispensed', 'Drug Dispensed', `${row.itemName || 'Drug'} dispensed to ${patient.fullName}.`, { dispenseId: row.dispenseId, patientId, itemName: row.itemName }, req);
-    return res.json({ ok:true, dispense: row, ...summary });
+    const movement = createStockMovement(db, clinicId, {
+      type: 'dispense', itemId: item.itemId || item.id, itemName: row.itemName, batchNo: row.batchNo, quantity: qty,
+      beforeQty: delta.beforeQty, afterQty: delta.afterQty, amount: row.total, unitCost, unitPrice: price,
+      patientId, patientName: patient.fullName, referenceId: row.dispenseId, referenceType: 'dispense',
+      branchId: row.branchId, actor: req.auth?.email || b.actor, role: req.auth?.role || b.role, note: b.note
+    });
+    const title = stock.reorderLevel >= delta.afterQty ? 'Drug Dispensed - Reorder Attention' : 'Drug Dispensed';
+    const summary = finalizeWrite(db, clinicId, 'drug_dispensed', title, `${row.itemName || 'Drug'} dispensed to ${patient.fullName}.`, { dispenseId: row.dispenseId, patientId, itemName: row.itemName, movementId: movement.id, itemId: row.itemId }, req);
+    return res.json({ ok:true, dispense: row, item, movement, ...summary });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'pharmacy dispense failed' });
   }
@@ -2100,6 +2703,164 @@ r.get('/pharmacy/dispenses', (req, res) => {
   if (req.query?.patientId) rows = rows.filter(x => String(x.patientId) === String(req.query.patientId));
   return res.json({ ok:true, dispenses: sortRecent(rows).slice(0, 500) });
 });
+
+
+r.post('/pharmacy/suppliers/upsert', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const supplier = ensureSupplierRow(db, clinicId, req.body || {});
+    const summary = finalizeWrite(db, clinicId, 'supplier_upserted', 'Supplier Saved', `${supplier.name} supplier record saved.`, { supplierId: supplier.id, supplierName: supplier.name }, req);
+    return res.json({ ok:true, supplier, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'supplier save failed' });
+  }
+});
+
+r.get('/pharmacy/suppliers', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  const q = lower(req.query?.q || '');
+  let rows = db.clinicSuppliers.filter(x => String(x.clinicId) === clinicId);
+  if (q) rows = rows.filter(x => lower(x.name || x.supplierName).includes(q) || lower(x.code).includes(q) || lower(x.phone).includes(q));
+  return res.json({ ok:true, suppliers: sortRecent(rows).slice(0, 500) });
+});
+
+r.post('/pharmacy/items/upsert', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const body = req.body || {};
+    if (!toStr(body.itemName || body.drugName || body.name)) return res.status(400).json({ ok:false, error:'itemName is required' });
+    if (body.supplierName || body.supplier) ensureSupplierRow(db, clinicId, { name: body.supplierName || body.supplier, phone: body.supplierPhone, email: body.supplierEmail, address: body.supplierAddress });
+    const item = ensurePharmacyItemRow(db, clinicId, body);
+    const summary = finalizeWrite(db, clinicId, 'stock_item_upserted', 'Stock Item Saved', `${item.itemName} master record saved.`, { itemId: item.itemId || item.id, itemName: item.itemName }, req);
+    return res.json({ ok:true, item, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'item save failed' });
+  }
+});
+
+r.get('/pharmacy/items', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  const q = lower(req.query?.q || '');
+  let rows = db.clinicPharmacyItems.filter(x => String(x.clinicId) === clinicId);
+  if (q) rows = rows.filter(x => lower(x.itemName || x.drugName || x.name).includes(q) || lower(x.sku || x.code || '').includes(q) || lower(x.batchNo || x.batch || '').includes(q));
+  if (req.query?.lowStock === '1') rows = rows.filter(x => toNum(x.stock ?? x.quantity ?? x.qty ?? x.onHand, 0) <= Math.max(1, toNum(x.reorder_level ?? x.reorderLevel ?? x.min_stock, 5)));
+  if (req.query?.expired === '1') rows = rows.filter(x => toTs(x.expiryAt || x.expiryDate, 0) > 0 && toTs(x.expiryAt || x.expiryDate, 0) < now());
+  return res.json({ ok:true, items: sortRecent(rows).slice(0, 500) });
+});
+
+r.post('/pharmacy/purchases/receive', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const b = req.body || {};
+    if (!toStr(b.itemName || b.drugName || b.name)) return res.status(400).json({ ok:false, error:'itemName is required' });
+    const qty = round2(toNum(b.quantity || b.qty || b.receivedQty, 0));
+    if (qty <= 0) return res.status(400).json({ ok:false, error:'quantity must be greater than 0' });
+    const supplier = ensureSupplierRow(db, clinicId, { name: b.supplierName || b.supplier, phone: b.supplierPhone, email: b.supplierEmail, address: b.supplierAddress, contactName: b.contactName, paymentTerms: b.paymentTerms });
+    const item = ensurePharmacyItemRow(db, clinicId, { ...b, supplierName: supplier.name, supplier: supplier.name, quantity: 0, stock: 0, onHand: 0 });
+    const unitCost = round2(toNum(b.unitCost || b.costPrice || b.purchasePrice, item.unitCost || item.costPrice || 0));
+    const sellingPrice = round2(toNum(b.unitPrice || b.sellingPrice || item.unitPrice || item.sellingPrice, 0));
+    const total = round2(toNum(b.total || b.amount, qty * unitCost));
+    const receipt = {
+      id: createId('prx'),
+      receiptId: createId('prx'),
+      clinicId,
+      itemId: item.itemId || item.id,
+      itemName: item.itemName,
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      supplier: supplier.name,
+      quantity: qty,
+      qty,
+      receivedQty: qty,
+      batchNo: toStr(b.batchNo || b.batch || b.batchNumber || item.batchNo),
+      batch: toStr(b.batch || b.batchNo || b.batchNumber || item.batch),
+      expiryAt: toTs(b.expiryAt || b.expiryDate || b.expiry_date || item.expiryAt, 0),
+      expiryDate: toStr(b.expiryDate || b.expiry_date || item.expiryDate),
+      unitCost,
+      costPrice: unitCost,
+      unitPrice: sellingPrice,
+      sellingPrice,
+      total,
+      invoiceNo: toStr(b.invoiceNo || b.invoice || b.referenceNo),
+      branchId: toStr(b.branchId || b.branch_id || req.auth?.branchId || item.branchId),
+      receivedBy: toStr(b.receivedBy || req.auth?.email),
+      note: toStr(b.note),
+      createdAt: now(),
+      updatedAt: now()
+    };
+    db.clinicPharmacyReceipts.push(receipt);
+    Object.assign(item, { supplierName: supplier.name, supplier: supplier.name, unitCost, costPrice: unitCost, unitPrice: sellingPrice, sellingPrice, batchNo: receipt.batchNo || item.batchNo, batch: receipt.batch || item.batch, expiryAt: receipt.expiryAt || item.expiryAt, expiryDate: receipt.expiryDate || item.expiryDate });
+    const delta = touchItemStock(item, qty);
+    const movement = createStockMovement(db, clinicId, {
+      type: 'purchase', itemId: item.itemId || item.id, itemName: item.itemName, batchNo: receipt.batchNo, quantity: qty,
+      beforeQty: delta.beforeQty, afterQty: delta.afterQty, amount: total, unitCost, unitPrice: sellingPrice,
+      supplierName: supplier.name, supplier: supplier.name, referenceId: receipt.receiptId, referenceType: 'purchase_receipt',
+      branchId: receipt.branchId, actor: req.auth?.email || b.actor, role: req.auth?.role || b.role, note: b.note
+    });
+    const summary = finalizeWrite(db, clinicId, 'stock_purchase_received', 'Purchase Receipt Posted', `${qty} unit(s) of ${item.itemName} received into stock.`, { receiptId: receipt.receiptId, itemId: item.itemId || item.id, supplierId: supplier.id, movementId: movement.id }, req);
+    return res.json({ ok:true, receipt, item, supplier, movement, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'purchase receive failed' });
+  }
+});
+
+r.get('/pharmacy/purchases', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  const q = lower(req.query?.q || '');
+  let rows = db.clinicPharmacyReceipts.filter(x => String(x.clinicId) === clinicId);
+  if (q) rows = rows.filter(x => lower(x.itemName).includes(q) || lower(x.supplierName || x.supplier).includes(q) || lower(x.invoiceNo).includes(q) || lower(x.batchNo || x.batch).includes(q));
+  return res.json({ ok:true, purchases: sortRecent(rows).slice(0, 500) });
+});
+
+r.post('/pharmacy/movements/create', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const b = req.body || {};
+    const movementType = lower(b.type || b.movementType || 'adjustment');
+    const qty = round2(toNum(b.quantity || b.qty, 0));
+    if (!toStr(b.itemName || b.drugName || b.name || b.itemId)) return res.status(400).json({ ok:false, error:'itemName or itemId is required' });
+    if (qty <= 0) return res.status(400).json({ ok:false, error:'quantity must be greater than 0' });
+    const item = ensurePharmacyItemRow(db, clinicId, b);
+    const sign = ['issue','dispense','loss','damage','expired','transfer_out','adjustment_out'].includes(movementType) ? -1 : 1;
+    const delta = touchItemStock(item, sign * qty);
+    const movement = createStockMovement(db, clinicId, {
+      type: movementType, itemId: item.itemId || item.id, itemName: item.itemName, batchNo: toStr(b.batchNo || b.batch || item.batchNo || item.batch), quantity: qty,
+      beforeQty: delta.beforeQty, afterQty: delta.afterQty, amount: toNum(b.amount || 0), unitCost: toNum(b.unitCost || item.unitCost || item.costPrice, 0), unitPrice: toNum(b.unitPrice || item.unitPrice || item.sellingPrice, 0),
+      supplierName: b.supplierName || item.supplierName, supplier: b.supplier || item.supplier,
+      patientId: b.patientId, patientName: b.patientName, referenceId: b.referenceId, referenceType: b.referenceType || movementType,
+      branchId: b.branchId || req.auth?.branchId || item.branchId, actor: req.auth?.email || b.actor, role: req.auth?.role || b.role, note: b.note || b.reason
+    });
+    const eventType = ['expired','loss','damage'].includes(movementType) ? 'stock_alert_logged' : 'stock_movement_created';
+    const summary = finalizeWrite(db, clinicId, eventType, 'Stock Movement Saved', `${movement.type} movement recorded for ${item.itemName}.`, { movementId: movement.id, itemId: item.itemId || item.id, movementType }, req);
+    return res.json({ ok:true, movement, item, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'stock movement failed' });
+  }
+});
+
+r.get('/pharmacy/movements', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  let rows = db.clinicStockMovements.filter(x => String(x.clinicId) === clinicId);
+  if (req.query?.type) rows = rows.filter(x => lower(x.type) === lower(req.query.type));
+  if (req.query?.itemId) rows = rows.filter(x => String(x.itemId) === String(req.query.itemId));
+  return res.json({ ok:true, movements: sortRecent(rows).slice(0, 500) });
+});
+
+r.get('/pharmacy/batches', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  const intelligence = deriveInventoryIntelligence(db, clinicId);
+  return res.json({ ok:true, batches: intelligence.batchTracking || [], expired: intelligence.expired || [], expiringSoon: intelligence.expiringSoon || [] });
+});
+
 
 r.post('/discharge/create', (req, res) => {
   const clinicId = requireClinic(req, res); if (!clinicId) return;
@@ -2266,6 +3027,105 @@ r.get('/lab/requests', (req, res) => {
   let rows = db.clinicLabRequests.filter(x => String(x.clinicId) === clinicId);
   if (req.query?.status) rows = rows.filter(x => lower(x.status) === lower(req.query.status));
   return res.json({ ok:true, labRequests: sortRecent(rows).slice(0, 500) });
+});
+
+r.post('/cloud/print/submit', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const b = req.body || {};
+    const db = readDB(); ensureArrays(db);
+    const branchId = toStr(b.branchId || req.auth?.branchId || '');
+    const job = {
+      jobId: createId('cpj'),
+      clinicId,
+      branchId,
+      title: toStr(b.title || 'Cloud Print'),
+      text: toStr(b.text),
+      category: toStr(b.category || 'general') || 'general',
+      patientId: toStr(b.patientId),
+      requestedBy: toStr(b.requestedBy || req.auth?.email || 'system'),
+      requestedRole: normRole(b.requestedRole || req.auth?.role || 'Admin'),
+      requestedDeviceId: toStr(b.requestedDeviceId || b.deviceId),
+      requestedDeviceName: toStr(b.requestedDeviceName || b.deviceName),
+      status: 'pending',
+      assignedHostDeviceId: '',
+      assignedHostName: '',
+      assignedAt: 0,
+      attemptCount: 0,
+      lastError: '',
+      printedAt: 0,
+      createdAt: now(),
+      updatedAt: now()
+    };
+    const host = resolveCloudPrintHost(db, clinicId, branchId);
+    if (host) {
+      job.assignedHostDeviceId = toStr(host.deviceId);
+      job.assignedHostName = toStr(host.deviceName);
+    }
+    db.clinicCloudPrintJobs.unshift(job);
+    if (db.clinicCloudPrintJobs.length > 4000) db.clinicCloudPrintJobs.length = 4000;
+    const summary = finalizeWrite(db, clinicId, 'cloud_print_submitted', 'Cloud Print Queued', `${job.title} queued for cloud printing.`, { entityType:'cloud_print', entityId: job.jobId, patientId: job.patientId, category: job.category }, req);
+    return res.json({ ok:true, job, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'cloud print submit failed' });
+  }
+});
+
+r.get('/cloud/print/jobs/pull', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const deviceId = toStr(req.query?.deviceId || req.auth?.deviceId);
+    if (!deviceId) return res.status(400).json({ ok:false, error:'deviceId is required' });
+    const role = normRole(req.query?.role || req.auth?.role || 'Admin');
+    const branchId = toStr(req.query?.branchId || req.auth?.branchId || '');
+    const printerName = toStr(req.query?.printerName || '');
+    upsertCloudPrintHost(db, clinicId, { deviceId, deviceName: req.query?.deviceName, role, branchId, printerName, status:'online' });
+    const jobs = cloudPrintQueueFor(db, clinicId)
+      .filter(x => toStr(x.status) === 'pending' && (!x.assignedHostDeviceId || String(x.assignedHostDeviceId) === String(deviceId)) && (!branchId || !x.branchId || String(x.branchId) === String(branchId)))
+      .sort((a,b) => toNum(a.createdAt) - toNum(b.createdAt))
+      .slice(0, 10);
+    for (const job of jobs) {
+      job.assignedHostDeviceId = deviceId;
+      job.assignedHostName = toStr(req.query?.deviceName || deviceId);
+      job.assignedAt = now();
+      job.updatedAt = now();
+      job.attemptCount = toNum(job.attemptCount) + 1;
+    }
+    writeDB(db);
+    return res.json({ ok:true, jobs, host: { deviceId, role, branchId } });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'cloud print pull failed' });
+  }
+});
+
+r.post('/cloud/print/jobs/:jobId/ack', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const row = db.clinicCloudPrintJobs.find(x => String(x.clinicId) === String(clinicId) && String(x.jobId) === String(req.params.jobId));
+    if (!row) return res.status(404).json({ ok:false, error:'Cloud print job not found' });
+    const b = req.body || {};
+    const status = lower(b.status) === 'printed' ? 'printed' : 'failed';
+    row.status = status;
+    row.ackDeviceId = toStr(b.deviceId);
+    row.ackDeviceName = toStr(b.deviceName);
+    row.lastError = status === 'failed' ? toStr(b.message || 'Cloud print failed') : '';
+    row.printedAt = status === 'printed' ? now() : 0;
+    row.updatedAt = now();
+    const summary = finalizeWrite(db, clinicId, status === 'printed' ? 'cloud_print_completed' : 'cloud_print_failed', status === 'printed' ? 'Cloud Print Completed' : 'Cloud Print Failed', `${row.title} ${status}.`, { entityType:'cloud_print', entityId: row.jobId, patientId: row.patientId, category: row.category }, req);
+    return res.json({ ok:true, job: row, ...summary });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'cloud print ack failed' });
+  }
+});
+
+r.get('/cloud/print/jobs', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  const db = readDB(); ensureArrays(db);
+  let rows = cloudPrintQueueFor(db, clinicId);
+  if (req.query?.status) rows = rows.filter(x => lower(x.status) === lower(req.query.status));
+  return res.json({ ok:true, jobs: rows.sort((a,b)=>toNum(b.createdAt)-toNum(a.createdAt)).slice(0, 200) });
 });
 
 r.post('/prescription/create', (req, res) => {
@@ -2606,6 +3466,29 @@ r.get('/portal/finance', (req, res) => {
   const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId) };
   const stats = summarizeSnapshot(latest?.snapshot || { data:{} });
   return res.json({ ok:true, finance: { totalBill: stats.totalBill, totalPaid: stats.totalPaid, outstanding: stats.outstanding, billCount: stats.bills, pharmacySales: stats.pharmacyRevenue, pharmacyDispenseCount: stats.pharmacy } });
+});
+
+
+r.get('/portal/financial-intelligence', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const intel = computeFinancialIntelligence(db, clinicId);
+    return res.json({ ok:true, intelligence: intel });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'financial intelligence failed' });
+  }
+});
+
+r.get('/portal/inventory-intelligence', (req, res) => {
+  const clinicId = requireClinic(req, res); if (!clinicId) return;
+  try {
+    const db = readDB(); ensureArrays(db);
+    const intelligence = computeInventoryIntelligence(db, clinicId);
+    return res.json({ ok:true, intelligence });
+  } catch (e) {
+    return res.status(500).json({ ok:false, error:e?.message || 'inventory intelligence failed' });
+  }
 });
 
 r.get('/portal/queue', (req, res) => {
