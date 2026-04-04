@@ -34,7 +34,8 @@ const state = {
     financialIntelligence: null,
     inventoryIntelligence: null,
   },
-  selectedPatient: null
+  selectedPatient: null,
+  selectedPatientProfile: null
 };
 
 window.addEventListener('DOMContentLoaded', init);
@@ -44,6 +45,7 @@ function init() {
   $('#hospitalId').value = state.hospitalId;
   $('#timelineDays').value = String(state.timelineDays);
   bindUI();
+  bindKeyboardShortcuts();
   applySidebarState();
   applyRouteState();
   tickClock();
@@ -124,6 +126,39 @@ function bindUI() {
   bindForm('#dischargeForm', '/api/discharge/create', 'Discharge completed', async () => { showToast('Discharge Workflow', 'Patient discharge completed'); await targetedRealtimeRefresh(['patients','admissions','audit_logs']); });
   bindForm('#refundForm', '/api/payment/refund', 'Refund processed', async () => { showToast('Refund Processed', 'Billing refund saved'); await targetedRealtimeRefresh(['bills','audit_logs']); });
   bindForm('#theatreForm', '/api/theatre/schedule', 'Procedure scheduled', async () => { showToast('Theatre Scheduled', 'Procedure schedule saved'); await targetedRealtimeRefresh(['appointments','audit_logs']); });
+}
+
+
+function bindKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target?.tagName || '').toLowerCase();
+    const editing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target?.isContentEditable;
+    if ((e.key === '/' || ((e.key || '').toLowerCase() === 'k' && (e.ctrlKey || e.metaKey))) && !editing) {
+      e.preventDefault();
+      switchTab('search', true);
+      $('#searchInput')?.focus();
+      return;
+    }
+    if (editing || e.altKey || e.ctrlKey || e.metaKey) return;
+    const key = (e.key || '').toLowerCase();
+    if (key === 'n') {
+      e.preventDefault();
+      openPatientWizard();
+    } else if (key === 'b') {
+      e.preventDefault();
+      if (state.selectedPatient?.patientId) openBillModal(state.selectedPatient.patientId, state.selectedPatient.fullName || state.selectedPatient.patientName || '');
+      else switchTab('workflow', true);
+    } else if (key === 'v') {
+      e.preventDefault();
+      goToPatientAction('visit');
+    } else if (key === 'l') {
+      e.preventDefault();
+      goToPatientAction('lab');
+    } else if (key === 'r') {
+      e.preventDefault();
+      refreshAll();
+    }
+  });
 }
 
 function bindForm(selector, path, successMsg, onDone) {
@@ -1268,9 +1303,11 @@ function setSelectedPatient(patient = {}, opts = {}) {
   const normalized = normalizePatientRecord(patient);
   if (!normalized.patientId && !normalized.fullName) return;
   state.selectedPatient = normalized;
+  state.selectedPatientProfile = null;
   renderSelectedPatientHub();
   renderWorkflowPatientBanner();
   fillWorkflowPatient(normalized);
+  if (normalized.patientId) loadSelectedPatientProfile(normalized.patientId);
   if (opts.switchToPatients) switchTab('patients', true);
   if (opts.openDrawer && normalized.patientId) openPatientDrawer(normalized.patientId);
 }
@@ -1353,10 +1390,42 @@ function bindPatientActionButtons(root = document) {
   });
 }
 
+
+async function loadSelectedPatientProfile(patientId, opts = {}) {
+  if (!patientId) {
+    state.selectedPatientProfile = null;
+    if (!opts.silent) renderSelectedPatientHub();
+    return;
+  }
+  try {
+    const res = await api(`/api/portal/patient-profile?patientId=${encodeURIComponent(patientId)}`);
+    if (String(state.selectedPatient?.patientId || '') !== String(patientId)) return;
+    state.selectedPatientProfile = res;
+    if (!opts.silent) renderSelectedPatientHub();
+  } catch (_err) {
+    state.selectedPatientProfile = null;
+    if (!opts.silent) renderSelectedPatientHub();
+  }
+}
+
 function renderSelectedPatientHub() {
   const host = $('#selectedPatientHub');
   if (!host) return;
   const p = normalizePatientRecord(state.selectedPatient || {});
+  const profile = state.selectedPatientProfile || {};
+  const summary = profile.summary || {};
+  const encounters = Array.isArray(profile.encounters) ? profile.encounters.slice(0, 6) : [];
+  const latestVisit = Array.isArray(profile.visits) && profile.visits.length ? profile.visits[0] : null;
+  const latestBill = Array.isArray(profile.bills) && profile.bills.length ? profile.bills[0] : null;
+  const smartNext = (() => {
+    if (!p.patientId) return 'Select or register a patient to unlock the full workflow.';
+    if (num(summary.outstanding || 0) > 0) return 'Outstanding balance detected. Billing or payment follow-up is recommended.';
+    if ((summary.visitCount || 0) === 0) return 'This patient has no visit yet. Start with New Visit for doctor consultation.';
+    if ((summary.labCount || 0) > 0 && (!profile.labs || !profile.labs.some(x => String(x.status || '').toLowerCase().includes('result')))) return 'There are pending lab requests. Review the Lab desk next.';
+    if ((summary.prescriptionCount || 0) === 0) return 'No prescription recorded yet. Open Prescription after consultation if medication is needed.';
+    return 'Patient workflow is active. Continue from billing, nurse desk, pharmacy or admission as needed.';
+  })();
+
   if (!p.patientId && !p.fullName) {
     host.classList.add('empty');
     host.innerHTML = `<div class="emptyState">Select or register a patient to open the direct action hub.</div>`;
@@ -1364,7 +1433,7 @@ function renderSelectedPatientHub() {
   }
   host.classList.remove('empty');
   host.innerHTML = `
-    <div class="patientHubGrid">
+    <div class="patientHubGrid advanced">
       <div class="hubSideStack">
         <div class="patientHubHero">
           <div>
@@ -1383,11 +1452,19 @@ function renderSelectedPatientHub() {
             <button class="btn btnGhost small" type="button" data-patient-action="search" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">Search Desk</button>
           </div>
         </div>
+
+        <div class="patientBriefGrid">
+          <div class="briefStat"><span>Visits</span><strong>${num(summary.visitCount || 0)}</strong><small>${latestVisit ? escapeHtml(latestVisit.reason || latestVisit.diagnosis || 'Latest visit available') : 'No visit yet'}</small></div>
+          <div class="briefStat"><span>Bills</span><strong>${num(summary.billCount || 0)}</strong><small>${latestBill ? money(latestBill.total || latestBill.amount || 0) : 'No bill yet'}</small></div>
+          <div class="briefStat"><span>Outstanding</span><strong>${money(summary.outstanding || 0)}</strong><small>${num(summary.queueCount || 0)} queue item(s)</small></div>
+          <div class="briefStat"><span>Clinical</span><strong>${num(summary.labCount || 0) + num(summary.prescriptionCount || 0)}</strong><small>${num(summary.labCount || 0)} lab • ${num(summary.prescriptionCount || 0)} rx</small></div>
+        </div>
+
         <div class="patientHubActions">
           ${[
+            ['visit','New Visit','Open consultation workflow'],
             ['bill','New Bill','Create receipt and payment flow'],
             ['appointment','Appointment','Book a clinic time quickly'],
-            ['visit','New Visit','Open consultation workflow'],
             ['prescription','Prescription','Medication order'],
             ['lab','Lab','Send to lab desk'],
             ['pharmacy','Pharmacy','Dispense medication'],
@@ -1402,7 +1479,21 @@ function renderSelectedPatientHub() {
           <div class="infoStat"><span>Blood</span><strong>${escapeHtml(p.bloodGroup || '--')}</strong></div>
           <div class="infoStat"><span>Genotype</span><strong>${escapeHtml(p.genotype || '--')}</strong></div>
         </div>
-        <div class="quickNote"><strong>Professional flow:</strong> registration → visit → lab / prescription → pharmacy → billing → payment / admission. The selected patient will now auto-fill the main workflow forms to reduce repeated typing for doctors and hospital staff.</div>
+        <div class="quickNote smartNextNote"><strong>Smart next step:</strong> ${escapeHtml(smartNext)}</div>
+        <div class="patientTimelineMini">
+          <div class="miniTimelineHead">
+            <strong>Recent Care Timeline</strong>
+            <span class="badge">${encounters.length ? 'Live history' : 'Awaiting activity'}</span>
+          </div>
+          ${encounters.length ? encounters.map(row => `
+            <div class="timelineMiniRow">
+              <div>
+                <div class="itemTitle">${escapeHtml(row.kind || 'Activity')}</div>
+                <div class="itemMeta">${escapeHtml(row.title || row.reason || row.doctorName || '--')}</div>
+              </div>
+              <div class="itemMeta right">${fmtDateTime(row.createdAt || row.updatedAt)}</div>
+            </div>`).join('') : `<div class="emptyState">Patient history will appear here as visit, bill, lab, queue and prescription records arrive.</div>`}
+        </div>
       </div>
     </div>`;
   bindPatientActionButtons(host);

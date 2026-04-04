@@ -472,3 +472,29 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 @media (max-width: 540px){
   .patientHubActions,.workflowQuickGrid,.patientDrawerActionGrid,.infoStatGrid{grid-template-columns:1fr}
 }
+
+.patientHubGrid.advanced{grid-template-columns:minmax(0,1.25fr) minmax(320px,.95fr);gap:16px}
+.patientBriefGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.briefStat{padding:14px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);min-width:0}
+.briefStat span{display:block;color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.briefStat strong{display:block;font-size:1.25rem;line-height:1.1}
+.briefStat small{display:block;margin-top:8px;color:#bdd0ee;line-height:1.4}
+.smartNextNote{background:linear-gradient(135deg,rgba(95,181,255,.12),rgba(157,140,255,.08));border-color:rgba(95,181,255,.18)}
+.patientTimelineMini{padding:14px;border-radius:20px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:10px}
+.miniTimelineHead{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.timelineMiniRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 0;border-top:1px solid rgba(255,255,255,.06)}
+.timelineMiniRow:first-of-type{border-top:none;padding-top:4px}
+.timelineMiniRow .right{text-align:right;white-space:nowrap}
+.workflowFocus{outline:2px solid rgba(95,181,255,.45);box-shadow:0 0 0 4px rgba(95,181,255,.12);transition:box-shadow .2s ease, outline-color .2s ease}
+
+@media (max-width: 1180px){
+  .patientHubGrid.advanced{grid-template-columns:1fr}
+  .patientBriefGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width: 760px){
+  .patientBriefGrid{grid-template-columns:1fr}
+  .timelineMiniRow{grid-template-columns:1fr}
+  .timelineMiniRow .right{text-align:left}
+}
+.keyboardHintBar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+.keyboardHintBar span{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);font-size:.75rem;color:#d8e6ff}
