@@ -253,6 +253,22 @@ function ensureArrays(db){
   db.clinicCloudPrintJobs = arr(db.clinicCloudPrintJobs);
   db.clinicCloudPrintHosts = arr(db.clinicCloudPrintHosts);
 }
+const CLOUD_PRINT_HOST_TTL_MS = 2 * 60 * 1000;
+const CLOUD_PRINT_ASSIGNMENT_TTL_MS = 45 * 1000;
+function isFreshCloudPrintHost(host){
+  const seenAt = toNum(host?.lastSeenAt || host?.updatedAt, 0);
+  if (!seenAt) return false;
+  return (now() - seenAt) <= CLOUD_PRINT_HOST_TTL_MS;
+}
+function isCloudPrintAssignmentStale(db, clinicId, job){
+  const assignedDeviceId = toStr(job?.assignedHostDeviceId);
+  if (!assignedDeviceId) return true;
+  const assignedAt = toNum(job?.assignedAt, 0);
+  if (!assignedAt) return true;
+  if ((now() - assignedAt) > CLOUD_PRINT_ASSIGNMENT_TTL_MS) return true;
+  const host = arr(db.clinicCloudPrintHosts).find(x => String(x.clinicId) === String(clinicId) && String(x.deviceId) === assignedDeviceId);
+  return !host || !isFreshCloudPrintHost(host) || lower(host.status || 'online') === 'offline';
+}
 function cloudPrintQueueFor(db, clinicId){
   ensureArrays(db);
   return db.clinicCloudPrintJobs.filter(x => String(x.clinicId) === String(clinicId));
@@ -281,7 +297,7 @@ function resolveCloudPrintHost(db, clinicId, branchId=''){
   ensureArrays(db);
   const wantedBranch = toStr(branchId);
   const hosts = db.clinicCloudPrintHosts
-    .filter(x => String(x.clinicId) === String(clinicId) && lower(x.status || 'online') !== 'offline')
+    .filter(x => String(x.clinicId) === String(clinicId) && lower(x.status || 'online') !== 'offline' && isFreshCloudPrintHost(x))
     .sort((a,b) => toNum(b.lastSeenAt || b.updatedAt) - toNum(a.lastSeenAt || a.updatedAt));
   if (!hosts.length) return null;
   const sameBranch = wantedBranch ? hosts.find(x => !toStr(x.branchId) || String(x.branchId) === wantedBranch) : null;
@@ -3120,7 +3136,14 @@ r.get('/cloud/print/jobs/pull', (req, res) => {
     const printerName = toStr(req.query?.printerName || '');
     upsertCloudPrintHost(db, clinicId, { deviceId, deviceName: req.query?.deviceName, role, branchId, printerName, status:'online' });
     const jobs = cloudPrintQueueFor(db, clinicId)
-      .filter(x => toStr(x.status) === 'pending' && (!x.assignedHostDeviceId || String(x.assignedHostDeviceId) === String(deviceId)) && (!branchId || !x.branchId || String(x.branchId) === String(branchId)))
+      .filter(x => {
+        if (toStr(x.status) !== 'pending') return false;
+        if (branchId && x.branchId && String(x.branchId) !== String(branchId)) return false;
+        const assignedToThisDevice = String(x.assignedHostDeviceId || '') === String(deviceId);
+        const unassigned = !toStr(x.assignedHostDeviceId);
+        const staleAssignment = isCloudPrintAssignmentStale(db, clinicId, x);
+        return unassigned || assignedToThisDevice || staleAssignment;
+      })
       .sort((a,b) => toNum(a.createdAt) - toNum(b.createdAt))
       .slice(0, 10);
     for (const job of jobs) {
@@ -3128,6 +3151,7 @@ r.get('/cloud/print/jobs/pull', (req, res) => {
       job.assignedHostName = toStr(req.query?.deviceName || deviceId);
       job.assignedAt = now();
       job.updatedAt = now();
+      if (job.assignedHostDeviceId === deviceId) job.lastError = '';
       job.attemptCount = toNum(job.attemptCount) + 1;
     }
     writeDB(db);
