@@ -281,12 +281,30 @@
         <div class="ribbonCard accentViolet"><span>Search Ready</span><strong id="patientRibbonSearch">Live Search</strong><small>Quickly jump from registry to profile, AI and billing.</small></div>
         <div class="ribbonCard accentGreen"><span>Sync Confidence</span><strong id="patientRibbonSync">Stable</strong><small>Two-way sync intelligence is active for patient rows.</small></div>
       </div>
-      <div class="grid2 patientsShell">
-        <article class="glass card">
+
+      <section class="glass card patientSpotlightCard">
+        <div class="patientSpotlightShell">
+          <div>
+            <div class="eyebrow">Doctor & Staff Fast Lane</div>
+            <h3>Simple patient-centered workflow</h3>
+            <p class="itemMeta">Register patient once, then launch billing, appointment, visit, prescription, lab, pharmacy, admission or nurse desk directly from the same patient workspace.</p>
+          </div>
+          <div class="row wrap gap8">
+            <button class="btn btnPrimary openPatientModal" type="button">New Patient</button>
+            <button class="btn btnGhost" type="button" id="spotlightSearchBtn">Find Existing Patient</button>
+          </div>
+        </div>
+        <div id="selectedPatientHub" class="selectedPatientHub empty">
+          <div class="emptyState">Select or register a patient to open the direct action hub.</div>
+        </div>
+      </section>
+
+      <div class="grid2 patientsShell patientsShellEnhanced">
+        <article class="glass card patientEntryCard">
           <div class="cardHead cardHeadWrap">
-            <div><div class="eyebrow">Registration</div><h3>Register New Patient</h3></div>
-            <div class="row gap8"><span class="badge">Wizard</span><span class="badge">Realtime</span></div>
-            <button class="btn btnGhost small openPatientModal" type="button">Launch Wizard</button>
+            <div><div class="eyebrow">Quick Registration</div><h3>Front Desk Patient Entry</h3></div>
+            <div class="row gap8"><span class="badge">Fast Form</span><span class="badge">Auto Action Hub</span></div>
+            <button class="btn btnGhost small openPatientModal" type="button">Launch Full Wizard</button>
           </div>
           <form id="patientForm" class="formGrid">
             <input name="fullName" placeholder="Full Name" required>
@@ -302,15 +320,18 @@
             <input name="nextOfKin" placeholder="Next of Kin">
             <input name="nextOfKinPhone" placeholder="Next of Kin Phone">
             <textarea name="address" placeholder="Address" class="span2"></textarea>
-            <textarea name="notes" placeholder="Notes" class="span2"></textarea>
-            <div class="span2 row end"><button type="submit" class="btn btnPrimary">Save Patient</button></div>
+            <textarea name="notes" placeholder="Notes / Triage info" class="span2"></textarea>
+            <div class="span2 row end"><button type="submit" class="btn btnPrimary">Save Patient & Open Hub</button></div>
           </form>
         </article>
         <article class="glass card registryCard">
-          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div><div class="row gap8"><span class="badge">Live Feed</span><span class="badge">Profile Drawer</span></div></div>
-          <div class="registryToolbar">
-            <div class="registryHint">Select any patient card to open full profile, receipt, AI insight and quick actions.</div>
-            <button class="btn btnGhost small" type="button" id="patientsOpenSearchBtn">Open Search Desk</button>
+          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div><div class="row gap8"><span class="badge">Live Feed</span><span class="badge">One-Click Actions</span></div></div>
+          <div class="registryToolbar registryToolbarWide">
+            <div class="registryHint">Open patient workspace and continue directly to visit, bill, appointment, prescription, lab, pharmacy, admission or nurse desk.</div>
+            <div class="row gap8 wrap">
+              <button class="btn btnGhost small" type="button" id="patientsOpenSearchBtn">Open Search Desk</button>
+              <button class="btn btnGhost small" type="button" id="patientsRefreshHubBtn">Refresh Registry</button>
+            </div>
           </div>
           <div id="patientsList" class="stack10 patientDeck"></div>
           <div id="recentPatients" class="stack10 mt16"></div>
@@ -324,6 +345,13 @@
         <div class="ribbonCard accentOrange"><span>Clinical Desk</span><strong>Visit + Queue</strong><small>Drive doctor queue and patient movement from one unified control area.</small></div>
         <div class="ribbonCard accentPink"><span>Care Desk</span><strong>Lab + Rx + Nurse</strong><small>Track care actions with a richer command layout and faster sync.</small></div>
       </div>
+
+      <section class="glass card workflowPatientCard" id="workflowPatientCard">
+        <div id="workflowPatientBanner" class="workflowPatientBanner empty">
+          <div class="emptyState">Choose a patient from Patients Desk or Search Desk to lock this workflow to one patient and reduce repeated typing.</div>
+        </div>
+      </section>
+
       <div class="workspaceHero">
         <article class="glass card spanWide">
           <div class="cardHead compact"><div><div class="eyebrow">Unified Command Workspace</div><h3>Cross Desk Pulse</h3></div></div>
@@ -337,7 +365,7 @@
       <div class="workflowGrid">
         <article class="glass card">
           <div class="cardHead"><div><div class="eyebrow">Billing</div><h3>Direct Billing Workflow</h3></div><button class="btn btnGhost small openBillModal" type="button">Quick Bill Modal</button></div>
-          <form id="billForm" class="formGrid compactGrid">
+          <form id="billForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="billing">
             <input name="patientId" placeholder="Patient ID" required>
             <input name="patientName" placeholder="Patient Name optional">
             <input name="serviceName" placeholder="Service Name" required>
@@ -352,7 +380,7 @@
 
         <article class="glass card stack12">
           <div class="cardHead"><div><div class="eyebrow">Clinical Workflow</div><h3>Visits / Appointment / Queue</h3></div></div>
-          <form id="visitForm" class="formGrid compactGrid">
+          <form id="visitForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="visit">
             <input name="patientId" placeholder="Visit Patient ID" required>
             <input name="doctorName" placeholder="Doctor Name">
             <input name="reason" placeholder="Reason">
@@ -362,7 +390,7 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Visit</button></div>
           </form>
           <div class="divider"></div>
-          <form id="appointmentForm" class="formGrid compactGrid">
+          <form id="appointmentForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="appointment">
             <input name="patientId" placeholder="Appointment Patient ID" required>
             <input name="doctorName" placeholder="Doctor Name">
             <input name="appointmentDate" placeholder="2026-03-26 14:00">
@@ -370,7 +398,7 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Book Appointment</button></div>
           </form>
           <div class="divider"></div>
-          <form id="queueForm" class="formGrid compactGrid">
+          <form id="queueForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="queue">
             <input name="patientId" placeholder="Queue Patient ID" required>
             <input name="doctorName" placeholder="Doctor Name">
             <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critical">Critical</option></select>
@@ -381,7 +409,7 @@
 
         <article class="glass card stack12">
           <div class="cardHead"><div><div class="eyebrow">Care Desk</div><h3>Lab / Prescription / Nurse / Staff</h3></div></div>
-          <form id="labForm" class="formGrid compactGrid">
+          <form id="labForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="lab">
             <input name="patientId" placeholder="Lab Patient ID" required>
             <input name="testName" placeholder="Test Name" required>
             <input name="doctorName" placeholder="Doctor Name">
@@ -389,7 +417,7 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Create Lab Request</button></div>
           </form>
           <div class="divider"></div>
-          <form id="prescriptionForm" class="formGrid compactGrid">
+          <form id="prescriptionForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="prescription">
             <input name="patientId" placeholder="Prescription Patient ID" required>
             <input name="drugName" placeholder="Drug Name" required>
             <input name="dosage" placeholder="Dosage">
@@ -397,7 +425,7 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Prescription</button></div>
           </form>
           <div class="divider"></div>
-          <form id="nurseForm" class="formGrid compactGrid">
+          <form id="nurseForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="nurse">
             <input name="patientId" placeholder="Nurse Desk Patient ID" required>
             <input name="note" placeholder="Nurse Note" required>
             <input name="vitalSummary" placeholder="Vitals Summary">
@@ -416,7 +444,7 @@
 
         <article class="glass card stack12">
           <div class="cardHead"><div><div class="eyebrow">Inpatient + Pharmacy</div><h3>Admission / Ward / Dispensing</h3></div></div>
-          <form id="admissionForm" class="formGrid compactGrid">
+          <form id="admissionForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="admission">
             <input name="patientId" placeholder="Admission Patient ID" required>
             <input name="ward" placeholder="Ward / Bed">
             <input name="doctorName" placeholder="Doctor Name">
@@ -457,7 +485,7 @@
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Post Purchase Receipt</button></div>
           </form>
           <div class="divider"></div>
-          <form id="pharmacyDispenseForm" class="formGrid compactGrid">
+          <form id="pharmacyDispenseForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="pharmacy">
             <input name="patientId" placeholder="Dispense Patient ID" required>
             <input name="itemName" placeholder="Drug / Item Name" required>
             <input name="quantity" type="number" step="0.01" placeholder="Qty">

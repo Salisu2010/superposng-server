@@ -416,3 +416,59 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 .auditTrailList{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 .permissionActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .permissionActions .btn{padding:8px 12px}
+
+/* ===== Simplified clinician workflow redesign ===== */
+.patientSpotlightCard{margin-bottom:18px;padding:20px;background:linear-gradient(180deg,rgba(14,32,58,.95),rgba(10,24,46,.96));border:1px solid rgba(95,181,255,.16)}
+.patientSpotlightShell{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
+.selectedPatientHub{border-radius:24px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.03));padding:18px}
+.selectedPatientHub.empty,.workflowPatientBanner.empty{padding:10px;background:transparent;border:none}
+.patientHubGrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(320px,.9fr);gap:16px}
+.patientHubHero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:18px;border-radius:22px;background:linear-gradient(135deg,rgba(95,181,255,.18),rgba(157,140,255,.08));border:1px solid rgba(255,255,255,.09)}
+.patientHubMeta{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.metaTag{display:inline-flex;align-items:center;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.09);font-size:.82rem;color:#d7e6ff}
+.patientHubActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.hubActionBtn{padding:14px 16px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.05);color:#fff;font-weight:700;text-align:left;line-height:1.35}
+.hubActionBtn small{display:block;color:var(--muted);font-weight:500;margin-top:4px}
+.hubActionBtn:hover{transform:translateY(-1px);background:rgba(95,181,255,.14)}
+.hubSideStack{display:grid;gap:12px}
+.infoStatGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.infoStat{padding:14px;border-radius:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.infoStat span{display:block;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.infoStat strong{font-size:1.05rem}
+.quickNote{padding:14px;border-radius:18px;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.12);color:#dce8ff;line-height:1.6}
+.patientsShellEnhanced{align-items:start}.patientEntryCard{position:sticky;top:12px}
+.registryToolbarWide{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.patientCardPremium{padding:16px;border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.08)}
+.patientActionRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.patientActionMini{padding:9px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.06);font-size:.82rem;color:#fff}
+.patientActionMini:hover{background:rgba(95,181,255,.14)}
+.workflowPatientCard{margin-bottom:18px;padding:16px;background:linear-gradient(180deg,rgba(16,35,62,.95),rgba(11,25,44,.96));border:1px solid rgba(95,181,255,.14)}
+.workflowPatientBanner{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);gap:16px;align-items:start}
+.workflowPatientHero{padding:18px;border-radius:22px;background:linear-gradient(135deg,rgba(57,217,138,.16),rgba(95,181,255,.11));border:1px solid rgba(255,255,255,.08)}
+.workflowQuickGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+.workflowQuickBtn{padding:12px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.05);color:#fff;font-weight:700;text-align:left}
+.workflowQuickBtn small{display:block;color:var(--muted);font-size:.75rem;font-weight:500;margin-top:3px}
+.workflowQuickBtn:hover{background:rgba(95,181,255,.14)}
+.workflowPatientAside{display:grid;gap:10px}
+.workflowHintCard{padding:14px;border-radius:18px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08)}
+.workflowHintCard strong{display:block;margin-bottom:5px}
+.workflowFormCard{scroll-margin-top:100px}
+.workflowFormCard.workflowFocus{border-color:rgba(95,181,255,.45);box-shadow:0 0 0 3px rgba(95,181,255,.12)}
+.patientDrawerActionGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.drawerActionBtn{padding:12px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.05);color:#fff;text-align:left;font-weight:700}
+.drawerActionBtn small{display:block;color:var(--muted);font-weight:500;margin-top:4px}
+.drawerSplitGrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.drawerPanelCard{padding:16px;border-radius:20px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)}
+.patientDrawerHeroStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}.drawerStat{padding:12px;border-radius:16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}.drawerStat span{display:block;color:var(--muted);font-size:.74rem;margin-bottom:4px}
+.inlineActions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.row.wrap{flex-wrap:wrap}
+@media (max-width: 1180px){
+  .patientHubGrid,.workflowPatientBanner,.drawerSplitGrid{grid-template-columns:1fr}
+  .patientEntryCard{position:static}
+}
+@media (max-width: 760px){
+  .patientSpotlightShell,.patientHubHero{flex-direction:column}
+  .patientHubActions,.workflowQuickGrid,.patientDrawerActionGrid,.infoStatGrid{grid-template-columns:1fr 1fr}
+}
+@media (max-width: 540px){
+  .patientHubActions,.workflowQuickGrid,.patientDrawerActionGrid,.infoStatGrid{grid-template-columns:1fr}
+}
