@@ -140,6 +140,7 @@ function requestValidation(req, res, next) {
     req.path.startsWith('/api/notifications') ||
     req.path.startsWith('/api/events/stream') ||
     req.path.startsWith('/api/clinic/events') ||
+    req.path.startsWith('/api/cloud/print/') ||
     req.path.startsWith('/api/patient/') ||
     req.path === '/api/patients' ||
     req.path.startsWith('/api/bill/') ||
