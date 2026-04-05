@@ -35,9 +35,7 @@ const state = {
     inventoryIntelligence: null,
   },
   selectedPatient: null,
-  selectedPatientProfile: null,
-  patientDeskQuery: '',
-  patientDeskFilter: 'all'
+  selectedPatientProfile: null
 };
 
 window.addEventListener('DOMContentLoaded', init);
@@ -89,21 +87,6 @@ function bindUI() {
   $('#patientsOpenSearchBtn')?.addEventListener('click', () => switchTab('search'));
   $('#spotlightSearchBtn')?.addEventListener('click', () => switchTab('search', true));
   $('#patientsRefreshHubBtn')?.addEventListener('click', refreshAll);
-  $('#patientDeskSearch')?.addEventListener('input', (e) => { state.patientDeskQuery = String(e.target.value || '').trim().toLowerCase(); renderPatients(); });
-  $('#patientDeskClearBtn')?.addEventListener('click', () => {
-    state.patientDeskQuery = '';
-    state.patientDeskFilter = 'all';
-    if ($('#patientDeskSearch')) $('#patientDeskSearch').value = '';
-    $$('.deskFilterChip').forEach(btn => btn.classList.toggle('active', btn.dataset.patientFilter === 'all'));
-    renderPatients();
-  });
-  $('#patientDeskFocusWorkflowBtn')?.addEventListener('click', () => switchTab('workflow', true));
-  $$('.deskFilterChip').forEach(btn => btn.addEventListener('click', () => {
-    state.patientDeskFilter = btn.dataset.patientFilter || 'all';
-    $$('.deskFilterChip').forEach(x => x.classList.toggle('active', x === btn));
-    renderPatients();
-  }));
-  $$('.workflowPresetBtn').forEach(btn => btn.addEventListener('click', () => applyWorkflowPreset(btn.dataset.workflowPreset)));
   $('#smartNavPatients')?.addEventListener('click', () => switchTab('patients', true));
   $('#smartNavWorkflow')?.addEventListener('click', () => switchTab('workflow', true));
   $('#smartNavSearch')?.addEventListener('click', () => switchTab('search', true));
@@ -409,6 +392,7 @@ async function loadNotificationsAndRender() { await loadNotifications(); renderF
 function clearSearchResults(message = 'Start typing to search patients instantly.') {
   const host = $('#searchResults');
   if (host) host.innerHTML = `<div class="emptyState">${escapeHtml(message)}</div>`;
+  renderSearchActionDock([], '');
 }
 
 function scheduleInstantSearch() {
@@ -448,6 +432,7 @@ async function runSearch(opts = {}) {
     const items = res.patients || [];
     if (!items.length) {
       host.innerHTML = `<div class="emptyState">No patient matched <strong>${escapeHtml(q)}</strong>.</div>`;
+      renderSearchActionDock([], q);
       $('#patientAiSummary').innerHTML = `<div class="emptyState">Select a patient to see AI summary.</div>`;
       return;
     }
@@ -458,7 +443,7 @@ async function runSearch(opts = {}) {
         const pid = escapeHtml(p.patientId || '--');
         const initials = escapeHtml(((p.fullName || p.patientName || 'P').split(/\s+/).slice(0,2).map(s => s[0] || '').join('') || 'P').toUpperCase());
         return `
-        <div class="searchCardPremium">
+        <div class="searchCardPremium ${String(state.selectedPatient?.patientId || '') === String(p.patientId || '') ? 'selected' : ''}">
           <div class="patientCardHead">
             <div class="patientIdentity">
               <div class="avatarOrb">${initials}</div>
@@ -471,16 +456,23 @@ async function runSearch(opts = {}) {
           </div>
           <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.email || '--')}</span></div>
           <div class="queueActions">
+            <button class="pillBtn" data-select="${escapeHtml(p.patientId || '')}">Select</button>
             <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI Summary</button>
             <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
             <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
           </div>
+          <div class="patientActionRow compactSearchRow">
+            ${['visit','lab','prescription','pharmacy','admission'].map(action => `<button class="patientActionMini" type="button" data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">${workflowActionMeta(action).title}</button>`).join('')}
+          </div>
         </div>`;
       }).join('')}
     `;
+    renderSearchActionDock(items, q);
+    $$('[data-select]', host).forEach(btn => btn.addEventListener('click', () => { const found = items.find(x => (x.patientId || x.id) === btn.dataset.select); if (found) setSelectedPatient(found); }));
     $$('[data-ai]', host).forEach(btn => btn.addEventListener('click', () => loadPatientAi(btn.dataset.ai)));
     $$('[data-view]', host).forEach(btn => btn.addEventListener('click', () => { const found = items.find(x => (x.patientId || x.id) === btn.dataset.view); if (found) setSelectedPatient(found); openPatientDrawer(btn.dataset.view); }));
     $$('[data-bill]', host).forEach(btn => btn.addEventListener('click', () => { const found = items.find(x => (x.patientId || x.id) === btn.dataset.bill); if (found) setSelectedPatient(found); openBillModal(btn.dataset.bill, btn.dataset.name); }));
+    bindPatientActionButtons(host);
     loadPatientAi(items[0].patientId);
   } catch (err) {
     if (seq !== state.searchSeq) return;
@@ -1329,8 +1321,9 @@ function setSelectedPatient(patient = {}, opts = {}) {
   state.selectedPatient = normalized;
   state.selectedPatientProfile = null;
   renderSelectedPatientHub();
-  renderPatientCommandCanvas();
+  renderPatientCommandDock();
   renderWorkflowPatientBanner();
+  renderWorkflowInsightRail();
   fillWorkflowPatient(normalized);
   if (normalized.patientId) loadSelectedPatientProfile(normalized.patientId);
   if (opts.switchToPatients) switchTab('patients', true);
@@ -1434,162 +1427,29 @@ function bindPatientActionButtons(root = document) {
 async function loadSelectedPatientProfile(patientId, opts = {}) {
   if (!patientId) {
     state.selectedPatientProfile = null;
-    if (!opts.silent) renderSelectedPatientHub();
+    if (!opts.silent) {
+      renderSelectedPatientHub();
+      renderPatientCommandDock();
+      renderWorkflowInsightRail();
+    }
     return;
   }
   try {
     const res = await api(`/api/portal/patient-profile?patientId=${encodeURIComponent(patientId)}`);
     if (String(state.selectedPatient?.patientId || '') !== String(patientId)) return;
     state.selectedPatientProfile = res;
-    if (!opts.silent) renderSelectedPatientHub();
+    if (!opts.silent) {
+      renderSelectedPatientHub();
+      renderPatientCommandDock();
+      renderWorkflowInsightRail();
+    }
   } catch (_err) {
     state.selectedPatientProfile = null;
-    if (!opts.silent) renderSelectedPatientHub();
-  }
-}
-
-
-function renderPatientDeskMetrics(visibleCount = 0) {
-  const host = $('#patientDeskMetrics');
-  if (!host) return;
-  const p = normalizePatientRecord(state.selectedPatient || {});
-  const summary = state.selectedPatientProfile?.summary || {};
-  const nextStep = (() => {
-    if (!p.patientId) return 'Ready';
-    if (num(summary.outstanding || 0) > 0) return 'Billing';
-    if ((summary.visitCount || 0) === 0) return 'Visit';
-    if ((summary.labCount || 0) > 0) return 'Lab';
-    if ((summary.prescriptionCount || 0) === 0) return 'Rx';
-    return 'Continue';
-  })();
-  host.innerHTML = `
-    <div class="metricMiniCard"><span>Visible</span><strong>${num(visibleCount)}</strong><small>registry cards</small></div>
-    <div class="metricMiniCard"><span>Outstanding</span><strong>${money(summary.outstanding || 0)}</strong><small>${p.patientId ? 'selected patient balance' : 'select patient first'}</small></div>
-    <div class="metricMiniCard"><span>Queue</span><strong>${num(summary.queueCount || 0)}</strong><small>${p.patientId ? 'linked to active patient' : 'waiting for patient'}</small></div>
-    <div class="metricMiniCard"><span>Next Step</span><strong>${escapeHtml(nextStep)}</strong><small>${p.patientId ? escapeHtml(p.fullName || p.patientId) : 'pick a command'}</small></div>`;
-}
-
-function renderPatientCommandCanvas() {
-  const rail = $('#patientJourneyRail');
-  const tasks = $('#patientCommandTasks');
-  if (!rail || !tasks) return;
-  const p = normalizePatientRecord(state.selectedPatient || {});
-  const summary = state.selectedPatientProfile?.summary || {};
-  if (!p.patientId) {
-    rail.innerHTML = '<div class="emptyState">Patient journey stages will appear here after you select a patient.</div>';
-    tasks.innerHTML = '<div class="emptyState">Open a patient to see smart actions for billing, visit, lab, nurse desk, pharmacy and admission.</div>';
-    return;
-  }
-  const stages = [
-    ['Registered', !!p.patientId, p.patientId || 'Patient record exists'],
-    ['Visit', (summary.visitCount || 0) > 0, `${num(summary.visitCount || 0)} visit(s)`],
-    ['Billing', (summary.billCount || 0) > 0, `${num(summary.billCount || 0)} bill(s)`],
-    ['Lab', (summary.labCount || 0) > 0, `${num(summary.labCount || 0)} request(s)`],
-    ['Prescription', (summary.prescriptionCount || 0) > 0, `${num(summary.prescriptionCount || 0)} item(s)`],
-    ['Pharmacy', (summary.pharmacyCount || 0) > 0, `${num(summary.pharmacyCount || 0)} dispense(s)`],
-    ['Admission', (summary.admissionCount || 0) > 0, `${num(summary.admissionCount || 0)} admission(s)`],
-  ];
-  rail.innerHTML = stages.map(([title, done, note]) => `
-    <div class="journeyStep ${done ? 'done' : ''}">
-      <div class="journeyDot"></div>
-      <div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(note)}</small></div>
-    </div>`).join('');
-
-  const taskDefs = [
-    { action: 'visit', title: 'Open consultation desk', note: 'Best when patient just arrived or no visit exists yet.', active: (summary.visitCount || 0) === 0 },
-    { action: 'bill', title: 'Create or complete billing', note: 'Use when there is cash collection, outstanding balance or service billing.', active: num(summary.outstanding || 0) > 0 || (summary.billCount || 0) === 0 },
-    { action: 'lab', title: 'Send for lab workup', note: 'Useful when clinical investigation is needed quickly.', active: (summary.labCount || 0) === 0 },
-    { action: 'prescription', title: 'Write prescription', note: 'Medication order from doctor workflow.', active: (summary.prescriptionCount || 0) === 0 },
-    { action: 'pharmacy', title: 'Dispense medication', note: 'Use after prescription or direct pharmacy sale.', active: (summary.prescriptionCount || 0) > 0 || (summary.pharmacyCount || 0) === 0 },
-    { action: 'nurse', title: 'Capture vitals / nurse note', note: 'Fast vitals and observation entry.', active: true },
-  ];
-  tasks.innerHTML = taskDefs.map(task => `
-    <button class="commandTaskCard ${task.active ? 'recommended' : ''}" type="button" data-patient-action="${escapeHtml(task.action)}" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">
-      <div>
-        <strong>${escapeHtml(task.title)}</strong>
-        <small>${escapeHtml(task.note)}</small>
-      </div>
-      <span>${task.active ? 'Recommended' : 'Open'}</span>
-    </button>`).join('');
-  bindPatientActionButtons(tasks);
-}
-
-function filterPatientRegistry(items) {
-  const query = String(state.patientDeskQuery || '').trim().toLowerCase();
-  const filter = state.patientDeskFilter || 'all';
-  return (items || []).filter(raw => {
-    const p = normalizePatientRecord(raw);
-    const searchBlob = [p.patientId, p.id, p.fullName, p.patientName, p.mrn, p.phone, p.email].join(' ').toLowerCase();
-    if (query && !searchBlob.includes(query)) return false;
-    if (filter === 'recent') {
-      const stamp = new Date(p.createdAt || p.updatedAt || 0).getTime();
-      const limit = Date.now() - (1000 * 60 * 60 * 24 * 14);
-      return stamp && stamp >= limit;
+    if (!opts.silent) {
+      renderSelectedPatientHub();
+      renderPatientCommandDock();
+      renderWorkflowInsightRail();
     }
-    if (filter === 'withBills') return num(p.billCount || p.totalBills || 0) > 0;
-    if (filter === 'outstanding') return num(p.outstanding || p.balance || 0) > 0;
-    if (filter === 'queue') return num(p.queueCount || p.inQueue || 0) > 0 || String(p.queueStatus || '').toLowerCase().includes('queue');
-    return true;
-  });
-}
-
-function applyWorkflowPreset(preset) {
-  const p = normalizePatientRecord(state.selectedPatient || {});
-  if (!p.patientId) {
-    showToast('Select Patient', 'Choose a patient first before applying a workflow preset.');
-    switchTab('patients', true);
-    return;
-  }
-  const setVal = (selector, value) => { const el = $(selector); if (el) el.value = value || ''; };
-  const now = new Date();
-  const appointmentDate = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-  if (preset === 'consultation') {
-    setVal('#visitForm input[name="patientId"]', p.patientId);
-    setVal('#visitForm input[name="reason"]', 'Doctor consultation');
-    setVal('#queueForm input[name="patientId"]', p.patientId);
-    setVal('#queueForm input[name="priority"]', 'Normal');
-    setVal('#appointmentForm input[name="patientId"]', p.patientId);
-    setVal('#appointmentForm input[name="appointmentDate"]', appointmentDate);
-    $('#workflowAutoFillHint').textContent = 'Consultation Pack loaded: visit, queue and appointment forms were prefilled.';
-    jumpToWorkflowTarget('#visitForm');
-    return;
-  }
-  if (preset == 'cashBilling') {
-    setVal('#billForm input[name="patientId"]', p.patientId);
-    setVal('#billForm input[name="patientName"]', p.fullName || p.patientName || '');
-    setVal('#billForm input[name="serviceName"]', 'Consultation Fee');
-    setVal('#billForm input[name="amount"]', '0');
-    setVal('#billForm input[name="paid"]', '0');
-    $('#workflowAutoFillHint').textContent = 'Cash Billing preset loaded: patient and consultation fee placeholders filled.';
-    jumpToWorkflowTarget('#billForm');
-    return;
-  }
-  if (preset == 'labWorkup') {
-    setVal('#labForm input[name="patientId"]', p.patientId);
-    setVal('#labForm input[name="testName"]', 'General Lab Workup');
-    setVal('#nurseForm input[name="patientId"]', p.patientId);
-    setVal('#nurseForm input[name="note"]', 'Vitals reviewed before lab workup');
-    $('#workflowAutoFillHint').textContent = 'Lab Workup preset loaded: lab request and nurse note prepared.';
-    jumpToWorkflowTarget('#labForm');
-    return;
-  }
-  if (preset == 'rxDispense') {
-    setVal('#prescriptionForm input[name="patientId"]', p.patientId);
-    setVal('#prescriptionForm input[name="drugName"]', 'Drug name');
-    setVal('#pharmacyDispenseForm input[name="patientId"]', p.patientId);
-    setVal('#pharmacyDispenseForm input[name="itemName"]', 'Drug name');
-    $('#workflowAutoFillHint').textContent = 'Rx + Dispense preset loaded: prescription and pharmacy forms linked to selected patient.';
-    jumpToWorkflowTarget('#prescriptionForm');
-    return;
-  }
-  if (preset == 'admissionPack') {
-    setVal('#admissionForm input[name="patientId"]', p.patientId);
-    setVal('#admissionForm input[name="reason"]', 'Requires admission');
-    setVal('#nurseForm input[name="patientId"]', p.patientId);
-    setVal('#nurseForm input[name="note"]', 'Prepare bed and admission vitals');
-    $('#workflowAutoFillHint').textContent = 'Admission Pack loaded: admission and nurse desk forms prepared.';
-    jumpToWorkflowTarget('#admissionForm');
-    return;
   }
 }
 
@@ -1682,7 +1542,6 @@ function renderSelectedPatientHub() {
       </div>
     </div>`;
   bindPatientActionButtons(host);
-  renderPatientCommandCanvas();
 }
 
 function renderWorkflowPatientBanner() {
@@ -1721,26 +1580,116 @@ function renderWorkflowPatientBanner() {
 }
 
 
+
+function renderPatientCommandDock() {
+  const host = $('#patientCommandDock');
+  if (!host) return;
+  const p = normalizePatientRecord(state.selectedPatient || {});
+  const summary = state.selectedPatientProfile?.summary || {};
+  if (!p.patientId && !p.fullName) {
+    host.className = 'patientCommandDock empty';
+    host.innerHTML = `<div class="emptyState">Choose a patient from Registry or Search Desk to activate the sticky command dock.</div>`;
+    return;
+  }
+  host.className = 'patientCommandDock';
+  const nextAction = num(summary.outstanding || 0) > 0
+    ? 'Billing follow-up recommended because outstanding balance exists.'
+    : (num(summary.visitCount || 0) === 0
+      ? 'Start New Visit first so clinical workflow begins from consultation.'
+      : (num(summary.labCount || 0) > 0 ? 'Review Lab desk because active lab workflow exists.' : 'Continue from Queue, Prescription, Pharmacy or Admission as needed.'));
+  host.innerHTML = `
+    <div class="commandDockIdentity">
+      <div class="avatarOrb">${escapeHtml(((p.fullName || p.patientName || 'P').split(/\s+/).slice(0,2).map(s => s[0] || '').join('') || 'P').toUpperCase())}</div>
+      <div>
+        <div class="eyebrow">Active Patient</div>
+        <h3>${escapeHtml(p.fullName || p.patientName || p.patientId)}</h3>
+        <div class="patientMetaLine"><span class="metaPill">${escapeHtml(p.patientId || '--')}</span><span class="metaPill">${escapeHtml(p.phone || '--')}</span><span class="metaPill">${escapeHtml(p.gender || '--')}</span></div>
+      </div>
+    </div>
+    <div class="commandDockMetrics">
+      <div class="dockMetric"><span>Visits</span><strong>${num(summary.visitCount || 0)}</strong></div>
+      <div class="dockMetric"><span>Bills</span><strong>${num(summary.billCount || 0)}</strong></div>
+      <div class="dockMetric"><span>Outstanding</span><strong>${money(summary.outstanding || 0)}</strong></div>
+      <div class="dockMetric"><span>Queue</span><strong>${num(summary.queueCount || 0)}</strong></div>
+    </div>
+    <div class="commandDockActions">
+      ${['visit','bill','queue','lab','prescription','pharmacy','admission','nurse'].map(action => `<button class="dockActionBtn" type="button" data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">${workflowActionMeta(action).title}</button>`).join('')}
+      <button class="dockActionBtn ghost" type="button" data-patient-action="drawer" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">Open Drawer</button>
+    </div>
+    <div class="commandDockNote"><strong>Smart next step:</strong> ${escapeHtml(nextAction)}</div>
+  `;
+  bindPatientActionButtons(host);
+}
+
+function renderWorkflowInsightRail() {
+  const host = $('#workflowInsightRail');
+  if (!host) return;
+  const p = normalizePatientRecord(state.selectedPatient || {});
+  const profile = state.selectedPatientProfile || {};
+  const summary = profile.summary || {};
+  if (!p.patientId) {
+    host.innerHTML = `<div class="emptyState">No selected patient yet. Choose a patient to get workflow intelligence for visit, billing, lab, prescription and admission.</div>`;
+    return;
+  }
+  const cards = [
+    ['Registration', p.patientId, p.fullName || p.patientName || 'Patient linked'],
+    ['Consultation', num(summary.visitCount || 0), num(summary.visitCount || 0) ? 'Visit history exists' : 'No visit yet'],
+    ['Financial', money(summary.outstanding || 0), num(summary.outstanding || 0) > 0 ? 'Outstanding follow-up needed' : 'Billing balanced'],
+    ['Clinical', `${num(summary.labCount || 0)} lab • ${num(summary.prescriptionCount || 0)} rx`, num(summary.labCount || 0) ? 'Pending or completed lab workflow' : 'No lab request yet'],
+    ['Admission', num(summary.admissionCount || 0), num(summary.admissionCount || 0) ? 'Inpatient workflow exists' : 'No admission record']
+  ];
+  host.innerHTML = cards.map(([label,value,note]) => `<div class="workflowInsightCard"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong><small>${escapeHtml(note)}</small></div>`).join('');
+}
+
+function renderSearchActionDock(items = [], query = '') {
+  const host = $('#searchActionDock');
+  if (!host) return;
+  if (!items.length) {
+    host.className = 'searchActionDock empty';
+    host.innerHTML = `<div class="emptyState">Search results will show action shortcuts here for bill, visit, lab, prescription, pharmacy and admission.</div>`;
+    return;
+  }
+  const p = normalizePatientRecord(items[0] || {});
+  host.className = 'searchActionDock';
+  host.innerHTML = `
+    <div class="searchDockHead">
+      <div>
+        <div class="eyebrow">Top Search Match</div>
+        <h3>${escapeHtml(p.fullName || p.patientName || p.patientId)}</h3>
+        <div class="itemMeta">${escapeHtml(items.length + ' result(s)')} for ${escapeHtml(query || '')}</div>
+      </div>
+      <div class="row gap8 wrap">
+        <button class="btn btnGhost small" type="button" data-patient-action="drawer" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">Open Drawer</button>
+        <button class="btn btnPrimary small" type="button" id="searchDockSelectBtn">Select Patient</button>
+      </div>
+    </div>
+    <div class="searchDockActions">
+      ${['visit','bill','lab','prescription','pharmacy','admission','queue'].map(action => `<button class="dockActionBtn" type="button" data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">${workflowActionMeta(action).title}</button>`).join('')}
+    </div>
+  `;
+  bindPatientActionButtons(host);
+  $('#searchDockSelectBtn')?.addEventListener('click', () => {
+    setSelectedPatient(p, { switchToPatients: false });
+    showToast('Search Match Selected', `${p.fullName || p.patientName || p.patientId} moved into active command center.`);
+  });
+}
+
 function renderPatients() {
   const items = state.data.patients || [];
-  const filteredItems = filterPatientRegistry(items);
   const overview = state.data.overview?.overview || {};
   const listHost = $('#patientsList');
   $('#patientRibbonCount').textContent = `${num(overview.patients || items.length)} Patients`;
-  $('#patientRibbonSearch').textContent = filteredItems.length === items.length ? (items.length ? 'Registry Connected' : 'Awaiting Records') : `${num(filteredItems.length)} Visible`;
+  $('#patientRibbonSearch').textContent = items.length ? 'Registry Connected' : 'Awaiting Records';
   $('#patientRibbonSync').textContent = state.transport === 'SSE' ? 'Realtime Active' : 'Polling Mode';
   renderSelectedPatientHub();
-  renderPatientCommandCanvas();
   renderWorkflowPatientBanner();
-  renderPatientDeskMetrics(filteredItems.length);
-  listHost.innerHTML = filteredItems.length ? filteredItems.slice(0, 24).map(raw => {
+  listHost.innerHTML = items.length ? items.slice(0, 24).map(raw => {
     const p = normalizePatientRecord(raw);
     const fullName = escapeHtml(p.fullName || 'Unnamed Patient');
     const pid = escapeHtml(p.patientId || '--');
     const initials = escapeHtml(((p.fullName || 'P').split(/\s+/).slice(0,2).map(s => s[0] || '').join('') || 'P').toUpperCase());
-    const outstanding = num(p.outstanding || p.balance || 0);
     return `
-      <div class="patientCardPremium ${state.selectedPatient?.patientId === p.patientId ? 'selectedPatientCard' : ''}">
+      <div class="patientCardPremium ${String(state.selectedPatient?.patientId || '') === String(p.patientId || '') ? 'selected' : ''}">
         <div class="patientCardHead">
           <div class="patientIdentity">
             <div class="avatarOrb">${initials}</div>
@@ -1749,12 +1698,13 @@ function renderPatients() {
               <div class="patientMetaLine"><span class="metaPill">${pid}</span><span class="metaPill">${escapeHtml(p.gender || '--')}</span><span class="metaPill">${escapeHtml(String(p.age || '--'))} yrs</span></div>
             </div>
           </div>
-          <span class="badge ${outstanding > 0 ? 'badgeWarn' : ''}">${outstanding > 0 ? 'Balance' : 'Live'}</span>
+          <span class="badge">Live</span>
         </div>
         <div class="itemMeta"><span>${escapeHtml(p.phone || '--')}</span><span>${escapeHtml(p.mrn || '--')}</span><span>${escapeHtml(p.email || '--')}</span></div>
         <div class="patientFoot">
           <div class="patientQuickStats"><div><strong>${escapeHtml(p.bloodGroup || '--')}</strong>Blood</div><div><strong>${escapeHtml(p.genotype || '--')}</strong>Genotype</div></div>
           <div class="queueActions">
+            <button class="pillBtn" data-select="${escapeHtml(p.patientId || '')}">Select</button>
             <button class="pillBtn" data-ai="${escapeHtml(p.patientId || '')}">AI</button>
             <button class="pillBtn" data-view="${escapeHtml(p.patientId || '')}">Profile</button>
             <button class="pillBtn" data-bill="${escapeHtml(p.patientId || '')}" data-name="${escapeHtml(p.fullName || '')}">Bill</button>
@@ -1766,7 +1716,14 @@ function renderPatients() {
           ].map(([action,title]) => `<button class="patientActionMini" type="button" data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || '')}" data-patient-name="${escapeHtml(p.fullName || '')}">${title}</button>`).join('')}
         </div>
       </div>`;
-  }).join('') : `<div class="emptyState">No patients matched the current filter.</div>`;
+  }).join('') : `<div class="emptyState">No patients registered yet.</div>`;
+  $$('[data-select]', listHost).forEach(btn => btn.addEventListener('click', () => {
+    const p = items.find(x => (x.patientId || x.id) === btn.dataset.select);
+    if (p) {
+      setSelectedPatient(p, { switchToPatients: false });
+      showToast('Patient Selected', `${p.fullName || p.patientName || p.patientId} is now active in the command center.`);
+    }
+  }));
   $$('[data-ai]', listHost).forEach(btn => btn.addEventListener('click', () => { switchTab('search'); $('#searchInput').value = btn.dataset.ai; runSearch({ immediate: true, source: 'patient-card' }); loadPatientAi(btn.dataset.ai); }));
   $$('[data-view]', listHost).forEach(btn => btn.addEventListener('click', () => {
     const p = items.find(x => (x.patientId || x.id) === btn.dataset.view);

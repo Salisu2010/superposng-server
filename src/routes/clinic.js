@@ -515,6 +515,8 @@ function clinicRows(db, clinicId, opts = {}){
 function buildSnapshotData(db, clinicId){
   const rows = clinicRows(db, clinicId, { canonical:true });
   return {
+    exported_at: now(),
+    version: getClinicVersion(db, clinicId),
     data: {
       ...rows,
       pharmacy: rows.pharmacy_dispenses,
