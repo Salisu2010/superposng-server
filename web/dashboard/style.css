@@ -566,3 +566,92 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
   .workflowSpeedBar,.quickCommandActions{display:grid;grid-template-columns:1fr 1fr}
   .speedJumpBtn,.quickCommandActions .btn{width:100%}
 }
+
+/* ===== Phase 2: Patient Command Center + Workflow Presets ===== */
+.patientDeskToolbar{
+  display:grid;
+  grid-template-columns:minmax(240px,1.4fr) minmax(280px,1.2fr) auto;
+  gap:14px;
+  align-items:center;
+  margin:18px 0 14px;
+}
+.patientDeskSearch{
+  width:100%;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(9,16,31,.78);
+  color:#eef4ff;
+  padding:15px 16px;
+  outline:none;
+}
+.patientDeskFilterRail{display:flex;flex-wrap:wrap;gap:10px}
+.deskFilterChip,.workflowPresetBtn{
+  border:none;
+  border-radius:999px;
+  padding:11px 14px;
+  background:rgba(255,255,255,.06);
+  color:#e9f0ff;
+  cursor:pointer;
+  font-weight:700;
+}
+.deskFilterChip.active,.workflowPresetBtn:hover,.workflowPresetBtn:focus,.commandTaskCard.recommended{
+  background:linear-gradient(135deg,rgba(87,162,255,.28),rgba(126,92,255,.28));
+  box-shadow:0 10px 24px rgba(29,86,182,.22);
+}
+.patientDeskMetrics{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+  margin:14px 0 18px;
+}
+.metricMiniCard,.workflowHintCard,.commandCanvasColumn{
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(8,14,28,.64);
+  border-radius:20px;
+  padding:16px;
+}
+.metricMiniCard span,.journeyStep small,.commandTaskCard small,.workflowAutoFillHint{color:#9fb0cf}
+.metricMiniCard strong{display:block;font-size:1.2rem;margin:6px 0}
+.patientCommandCanvas{
+  display:grid;
+  grid-template-columns:1.15fr .95fr;
+  gap:16px;
+  margin-top:18px;
+}
+.canvasHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}
+.canvasHead h4{margin:4px 0 0}
+.journeyRail,.commandTaskStack{display:flex;flex-direction:column;gap:12px}
+.journeyStep{
+  display:flex;gap:12px;align-items:flex-start;
+  padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.05);
+}
+.journeyDot{
+  width:12px;height:12px;border-radius:50%;margin-top:6px;
+  background:rgba(255,255,255,.18);box-shadow:0 0 0 6px rgba(255,255,255,.03);
+}
+.journeyStep.done .journeyDot{background:#72f0c2;box-shadow:0 0 0 6px rgba(114,240,194,.14)}
+.journeyStep strong,.commandTaskCard strong{display:block;color:#f5f8ff}
+.commandTaskCard{
+  width:100%;text-align:left;border:none;cursor:pointer;
+  display:flex;justify-content:space-between;gap:12px;align-items:flex-start;
+  padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.05);color:#eef4ff;
+}
+.commandTaskCard span{
+  font-size:.8rem;font-weight:800;padding:8px 10px;border-radius:999px;
+  background:rgba(255,255,255,.08);white-space:nowrap;
+}
+.workflowPresetBar{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.workflowAutoFillHint{
+  margin-top:12px;padding:14px 16px;border-radius:16px;
+  background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.14)
+}
+.selectedPatientCard{outline:2px solid rgba(114,240,194,.4);transform:translateY(-1px)}
+.badgeWarn{background:rgba(255,170,88,.18)!important;color:#ffd4a8!important}
+@media (max-width: 1100px){
+  .patientDeskToolbar,.patientDeskMetrics,.patientCommandCanvas{grid-template-columns:1fr}
+}
+@media (max-width: 760px){
+  .patientDeskFilterRail,.workflowPresetBar{overflow:auto;flex-wrap:nowrap;padding-bottom:2px}
+  .deskFilterChip,.workflowPresetBtn{white-space:nowrap}
+}

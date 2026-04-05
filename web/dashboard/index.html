@@ -312,8 +312,48 @@
             <button class="btn btnGhost" type="button" id="spotlightSearchBtn">Find Existing Patient</button>
           </div>
         </div>
+
+        <div class="patientDeskToolbar">
+          <div class="patientDeskSearchWrap">
+            <input id="patientDeskSearch" class="patientDeskSearch" type="text" placeholder="Filter registry by patient ID, name, MRN, phone or email">
+          </div>
+          <div class="patientDeskFilterRail" id="patientDeskFilterRail">
+            <button class="deskFilterChip active" type="button" data-patient-filter="all">All</button>
+            <button class="deskFilterChip" type="button" data-patient-filter="recent">Recent</button>
+            <button class="deskFilterChip" type="button" data-patient-filter="withBills">With Bills</button>
+            <button class="deskFilterChip" type="button" data-patient-filter="outstanding">Outstanding</button>
+            <button class="deskFilterChip" type="button" data-patient-filter="queue">In Queue</button>
+          </div>
+          <div class="row wrap gap8">
+            <button class="btn btnGhost small" type="button" id="patientDeskClearBtn">Clear</button>
+            <button class="btn btnGhost small" type="button" id="patientDeskFocusWorkflowBtn">Workflow Desk</button>
+          </div>
+        </div>
+
+        <div class="patientDeskMetrics" id="patientDeskMetrics">
+          <div class="metricMiniCard"><span>Visible</span><strong>0</strong><small>registry cards</small></div>
+          <div class="metricMiniCard"><span>Outstanding</span><strong>NGN 0</strong><small>from selected patient</small></div>
+          <div class="metricMiniCard"><span>Queue</span><strong>0</strong><small>linked to active patient</small></div>
+          <div class="metricMiniCard"><span>Next Step</span><strong>Ready</strong><small>pick a command</small></div>
+        </div>
+
         <div id="selectedPatientHub" class="selectedPatientHub empty">
           <div class="emptyState">Select or register a patient to open the direct action hub.</div>
+        </div>
+
+        <div class="patientCommandCanvas" id="patientCommandCanvas">
+          <div class="commandCanvasColumn">
+            <div class="canvasHead"><div><div class="eyebrow">Journey Board</div><h4>Patient journey snapshot</h4></div><span class="badge">Phase 2</span></div>
+            <div id="patientJourneyRail" class="journeyRail">
+              <div class="emptyState">Patient journey stages will appear here after you select a patient.</div>
+            </div>
+          </div>
+          <div class="commandCanvasColumn">
+            <div class="canvasHead"><div><div class="eyebrow">Smart Command Pack</div><h4>Recommended next actions</h4></div><span class="badge">Fast follow-up</span></div>
+            <div id="patientCommandTasks" class="commandTaskStack">
+              <div class="emptyState">Open a patient to see smart actions for billing, visit, lab, nurse desk, pharmacy and admission.</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -383,6 +423,14 @@
         <div id="workflowPatientBanner" class="workflowPatientBanner empty">
           <div class="emptyState">Choose a patient from Patients Desk or Search Desk to lock this workflow to one patient and reduce repeated typing.</div>
         </div>
+        <div class="workflowPresetBar" id="workflowPresetBar">
+          <button class="workflowPresetBtn" type="button" data-workflow-preset="consultation">Consultation Pack</button>
+          <button class="workflowPresetBtn" type="button" data-workflow-preset="cashBilling">Cash Billing</button>
+          <button class="workflowPresetBtn" type="button" data-workflow-preset="labWorkup">Lab Workup</button>
+          <button class="workflowPresetBtn" type="button" data-workflow-preset="rxDispense">Rx + Dispense</button>
+          <button class="workflowPresetBtn" type="button" data-workflow-preset="admissionPack">Admission Pack</button>
+        </div>
+        <div class="workflowAutoFillHint" id="workflowAutoFillHint">Pick a preset to prefill the most common workflow path for the selected patient.</div>
       </section>
 
       <div class="workspaceHero">
