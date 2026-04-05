@@ -4,6 +4,7 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const state = {
   baseUrl: localStorage.getItem('clinicPortalBaseUrl') || location.origin,
   hospitalId: localStorage.getItem('clinicPortalHospitalId') || '',
+  authToken: localStorage.getItem('clinicPortalToken') || sessionStorage.getItem('clinicPortalToken') || '',
   transport: 'Polling',
   lastSync: 0,
   sse: null,
@@ -43,6 +44,7 @@ window.addEventListener('DOMContentLoaded', init);
 function init() {
   $('#baseUrl').value = state.baseUrl;
   $('#hospitalId').value = state.hospitalId;
+  if ($('#accessToken')) $('#accessToken').value = state.authToken;
   $('#timelineDays').value = String(state.timelineDays);
   bindUI();
   bindKeyboardShortcuts();
@@ -260,9 +262,36 @@ function applyRouteState() {
 
 window.addEventListener('hashchange', () => applyRouteState());
 
+function normalizeBaseUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/$/, '');
+  if (raw.startsWith('//')) return `${location.protocol}${raw}`.replace(/\/$/, '');
+  if (raw.startsWith('/')) return `${location.origin}${raw}`.replace(/\/$/, '');
+  if (/^[a-z0-9.-]+(?::\d+)?(?:\/.*)?$/i.test(raw)) return `https://${raw}`.replace(/\/$/, '');
+  return raw.replace(/\/$/, '');
+}
+
+function buildUrl(path) {
+  const cleanPath = String(path || '').startsWith('/') ? String(path) : `/${String(path || '')}`;
+  const base = normalizeBaseUrl(state.baseUrl || location.origin) || location.origin;
+  try {
+    return new URL(cleanPath, `${base}/`).toString();
+  } catch {
+    return `${base}${cleanPath}`;
+  }
+}
+
+function getAuthHeaders(extra = {}) {
+  const headers = { 'X-Hospital-Id': state.hospitalId, ...extra };
+  if (state.authToken) headers.Authorization = `Bearer ${state.authToken}`;
+  return headers;
+}
+
 function connect() {
-  state.baseUrl = ($('#baseUrl').value || '').trim().replace(/\/$/, '');
+  state.baseUrl = normalizeBaseUrl($('#baseUrl').value || location.origin);
   state.hospitalId = ($('#hospitalId').value || '').trim();
+  state.authToken = ($('#accessToken')?.value || '').trim();
   if (!state.baseUrl || !state.hospitalId) {
     showToast('Missing Connection', 'Fill Base URL and Hospital ID first');
     renderDisconnected();
@@ -270,6 +299,13 @@ function connect() {
   }
   localStorage.setItem('clinicPortalBaseUrl', state.baseUrl);
   localStorage.setItem('clinicPortalHospitalId', state.hospitalId);
+  if (state.authToken) {
+    localStorage.setItem('clinicPortalToken', state.authToken);
+    sessionStorage.setItem('clinicPortalToken', state.authToken);
+  } else {
+    localStorage.removeItem('clinicPortalToken');
+    sessionStorage.removeItem('clinicPortalToken');
+  }
   $('#spotHospital').textContent = state.hospitalId;
   document.getElementById('focusChipHospital').textContent = `Hospital ${state.hospitalId}`;
   $('#clinicTitle').textContent = `Clinic Pro NG - ${state.hospitalId}`;
@@ -304,23 +340,8 @@ function renderDisconnected() {
 async function refreshAll() {
   if (!state.baseUrl || !state.hospitalId) return renderDisconnected();
   try {
-    await Promise.all([
-      loadLive(),
-      loadOverview(),
-      loadFinance(),
-      loadQueue(),
-      loadTimeline(),
-      loadPatients(),
-      loadNotifications(),
-      loadAiOverview(),
-      loadRisk(),
-      loadCommandCenter(),
-      loadDoctorWidgets(),
-      loadWorkspace(),
-      loadClinicalOps(),
-      loadFinancialIntelligence(),
-      loadInventoryIntelligence(),
-    ]);
+    await loadLiteBundle(['live','overview','finance','queue','timeline','patients','notifications','aiOverview','risk','commandCenter','doctorWidgets','workspace','clinicalOps','financialIntelligence','inventoryIntelligence']);
+    await Promise.allSettled([loadRbac(), loadAuditTrail()]);
     state.lastSync = Date.now();
     $('#lastSyncText').textContent = fmtTime(state.lastSync);
     document.getElementById('focusChipSync').textContent = `Last Sync ${fmtTime(state.lastSync)}`;
@@ -373,8 +394,10 @@ function applyLiteBundle(bundle = {}) {
   if (bundle.risk) state.data.risk = bundle.risk;
   if (bundle.commandCenter) state.data.commandCenter = bundle.commandCenter;
   if (bundle.doctorWidgets) state.data.doctorWidgets = bundle.doctorWidgets;
-  if (bundle.workspace) state.data.workspace = bundle.workspace;
-  if (bundle.clinicalOps) state.data.clinicalOps = bundle.clinicalOps;
+  if (bundle.workspace) state.data.workspace = bundle.workspace.workspace || bundle.workspace;
+  if (bundle.clinicalOps) state.data.clinicalOps = bundle.clinicalOps.modules || bundle.clinicalOps;
+  if (bundle.financialIntelligence) state.data.financialIntelligence = bundle.financialIntelligence.intelligence || bundle.financialIntelligence;
+  if (bundle.inventoryIntelligence) state.data.inventoryIntelligence = bundle.inventoryIntelligence.intelligence || bundle.inventoryIntelligence;
   state.version = Math.max(state.version || 0, num(bundle.version || bundle.live?.version || 0));
 }
 
@@ -2044,8 +2067,10 @@ function showToast(title, message) {
 function startRealtime() {
   stopRealtime();
   try {
-    const url = `${state.baseUrl}/api/events/stream?hospitalId=${encodeURIComponent(state.hospitalId)}`;
-    state.sse = new EventSource(url);
+    const q = new URLSearchParams({ hospitalId: state.hospitalId });
+    if (state.authToken) q.set('token', state.authToken);
+    const url = buildUrl(`/api/events/stream?${q.toString()}`);
+    state.sse = new EventSource(url, { withCredentials: false });
     state.sse.onopen = () => {
       state.transport = 'SSE';
       $('#transportText').textContent = 'SSE Live';
@@ -2172,16 +2197,30 @@ function stopRealtime() {
 }
 
 async function api(path, options = {}) {
-  const headers = { 'Content-Type': 'application/json', 'X-Hospital-Id': state.hospitalId, ...(options.headers || {}) };
-  const res = await fetch(`${state.baseUrl}${path}`, {
-    method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  let json = {};
-  try { json = await res.json(); } catch {}
-  if (!res.ok || json.ok === false) throw new Error(json.error || json.message || `Request failed (${res.status})`);
-  return json;
+  const controller = new AbortController();
+  const timeoutMs = Number(options.timeoutMs || 25000);
+  const timer = setTimeout(() => controller.abort(new DOMException('Request timeout', 'AbortError')), timeoutMs);
+  const extraHeaders = { ...(options.headers || {}) };
+  const headers = getAuthHeaders(extraHeaders);
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+  try {
+    const res = await fetch(buildUrl(path), {
+      method: options.method || 'GET',
+      headers,
+      body: options.body ? (options.body instanceof FormData ? options.body : JSON.stringify(options.body)) : undefined,
+      signal: controller.signal,
+    });
+    let json = {};
+    try { json = await res.json(); } catch {}
+    if (!res.ok || json.ok === false) throw new Error(json.error || json.message || `Request failed (${res.status})`);
+    return json;
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('Request timed out. Check Base URL / server health and try again.');
+    if (/Failed to fetch/i.test(String(err?.message || ''))) throw new Error(`Unable to reach ${state.baseUrl}. Check Base URL, DNS, SSL or server status.`);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 

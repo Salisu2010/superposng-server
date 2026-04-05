@@ -3893,6 +3893,21 @@ r.get('/portal/refresh-lite', (req, res) => {
     const days = toNum(req.query?.days, 14);
     const bundle = portalBundle(db, clinicId, { include, days });
     if (include.includes('doctorWidgets')) bundle.doctorWidgets = buildPortalDoctorWidgets(db, clinicId);
+    if (include.includes('workspace')) bundle.workspace = { ok:true, workspace: buildPortalWorkspace(db, clinicId) };
+    if (include.includes('clinicalOps')) bundle.clinicalOps = { ok:true, modules: {
+      registration: { count: db.clinicPatients.filter(x => String(x.clinicId) === clinicId).length, recent: sortRecent(db.clinicPatients.filter(x => String(x.clinicId) === clinicId)).slice(0, 8) },
+      visits: { count: db.clinicVisits.filter(x => String(x.clinicId) === clinicId && !['completed','cancelled','closed'].includes(lower(x.status || 'active'))).length, recent: sortRecent(db.clinicVisits.filter(x => String(x.clinicId) === clinicId && !['completed','cancelled','closed'].includes(lower(x.status || 'active')))).slice(0, 12) },
+      queue: { count: db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status || 'waiting'))).length, recent: sortRecent(db.clinicDoctorQueue.filter(x => String(x.clinicId) === clinicId && !['completed','closed','done','cancelled','served'].includes(lower(x.status || 'waiting')))).slice(0, 12) },
+      admissions: { count: db.clinicAdmissions.filter(x => String(x.clinicId) === clinicId && ['active','admitted','open'].includes(lower(x.status || 'active'))).length, recent: sortRecent(db.clinicAdmissions.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) },
+      nursing: { count: db.clinicNurseDesk.filter(x => String(x.clinicId) === clinicId && !['completed','closed'].includes(lower(x.status || 'open'))).length, recent: sortRecent(db.clinicNurseDesk.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) },
+      labs: { count: db.clinicLabRequests.filter(x => String(x.clinicId) === clinicId && !['completed','cancelled'].includes(lower(x.status || 'pending'))).length, recent: sortRecent(db.clinicLabRequests.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) },
+      pharmacy: { revenue: sortRecent(db.clinicPharmacyDispenses.filter(x => String(x.clinicId) === clinicId)).slice(0, 12).reduce((s,x)=>s + toNum(x.total || x.amount || 0), 0), count: db.clinicPharmacyDispenses.filter(x => String(x.clinicId) === clinicId).length, recent: sortRecent(db.clinicPharmacyDispenses.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) },
+      prescriptions: { count: db.clinicPrescriptions.filter(x => String(x.clinicId) === clinicId && !['completed','cancelled','stopped'].includes(lower(x.status || 'active'))).length, recent: sortRecent(db.clinicPrescriptions.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) },
+      billing: { revenue: db.clinicBills.filter(x => String(x.clinicId) === clinicId).reduce((s,x)=>s + toNum(x.total || x.amount || 0), 0), outstanding: db.clinicBills.filter(x => String(x.clinicId) === clinicId).reduce((s,x)=>s + toNum(x.balance || 0), 0), recent: sortRecent(db.clinicBills.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) },
+      appointments: { count: db.clinicAppointments.filter(x => String(x.clinicId) === clinicId && ['pending','booked','scheduled'].includes(lower(x.status || 'pending'))).length, recent: sortRecent(db.clinicAppointments.filter(x => String(x.clinicId) === clinicId)).slice(0, 12) }
+    }};
+    if (include.includes('financialIntelligence')) bundle.financialIntelligence = { ok:true, intelligence: computeFinancialIntelligence(db, clinicId) };
+    if (include.includes('inventoryIntelligence')) bundle.inventoryIntelligence = { ok:true, intelligence: computeInventoryIntelligence(db, clinicId) };
     return res.json(bundle);
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'portal refresh failed' });
