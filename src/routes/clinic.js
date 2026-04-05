@@ -1827,109 +1827,178 @@ function takeTs(...vals){
 }
 function normalizePatient(clinicId, raw = {}){
   const patientId = takeFirst(raw.patientId, raw.patient_id, raw.id, raw.local_id) || createId('pt');
+  const fullName = takeFirst(raw.fullName, raw.full_name, raw.patientName, raw.patient_name, raw.name);
+  const patientName = takeFirst(raw.patientName, raw.patient_name, raw.fullName, raw.full_name, raw.name);
+  const branchId = takeFirst(raw.branchId, raw.branch_id);
+  const createdAt = takeTs(raw.createdAt, raw.created_at);
+  const updatedAt = takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at);
   return {
     ...raw,
+    id: patientId,
     clinicId,
     patientId,
     patient_id: patientId,
     mrn: takeFirst(raw.mrn, raw.MRN),
-    fullName: takeFirst(raw.fullName, raw.full_name, raw.patientName, raw.patient_name, raw.name),
-    patientName: takeFirst(raw.patientName, raw.patient_name, raw.fullName, raw.full_name, raw.name),
+    fullName,
+    full_name: fullName,
+    patientName,
+    patient_name: patientName,
     phone: cleanPhone(raw.phone || raw.mobile || raw.patientPhone),
     email: takeFirst(raw.email),
     gender: takeFirst(raw.gender, raw.sex),
     age: toNum(raw.age, 0),
     dob: takeFirst(raw.dob, raw.date_of_birth),
+    date_of_birth: takeFirst(raw.date_of_birth, raw.dob),
     address: takeFirst(raw.address),
+    bloodGroup: takeFirst(raw.bloodGroup, raw.blood_group),
+    blood_group: takeFirst(raw.blood_group, raw.bloodGroup),
+    genotype: takeFirst(raw.genotype),
     nextOfKin: takeFirst(raw.nextOfKin, raw.next_of_kin),
+    next_of_kin: takeFirst(raw.next_of_kin, raw.nextOfKin),
     nextOfKinPhone: cleanPhone(raw.nextOfKinPhone || raw.next_of_kin_phone),
-    branchId: takeFirst(raw.branchId, raw.branch_id),
-    createdAt: takeTs(raw.createdAt, raw.created_at),
-    updatedAt: takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at)
+    next_of_kin_phone: cleanPhone(raw.next_of_kin_phone || raw.nextOfKinPhone),
+    maritalStatus: takeFirst(raw.maritalStatus, raw.marital_status),
+    marital_status: takeFirst(raw.marital_status, raw.maritalStatus),
+    notes: takeFirst(raw.notes, raw.note),
+    status: takeFirst(raw.status) || 'active',
+    branchId,
+    branch_id: branchId,
+    createdAt,
+    created_at: createdAt,
+    updatedAt,
+    updated_at: updatedAt
   };
 }
 function normalizeBill(clinicId, raw = {}){
-  const receiptNo = takeFirst(raw.receiptNo, raw.receipt_no, raw.billNo, raw.bill_no, raw.invoiceNo, raw.invoice_no, raw.id, raw.local_id) || ('BILL-' + nanoid(10));
+  const billId = takeFirst(raw.billId, raw.bill_id, raw.receiptNo, raw.receipt_no, raw.billNo, raw.bill_no, raw.invoiceNo, raw.invoice_no, raw.id, raw.local_id) || ('BILL-' + nanoid(10));
   const patientId = takeFirst(raw.patientId, raw.patient_id);
   const total = toNum(raw.total, Number.isFinite(Number(raw.amount)) ? Number(raw.amount) : toNum(raw.paid, 0));
   const paid = toNum(raw.paid, toNum(raw.amount_paid, 0));
+  const branchId = takeFirst(raw.branchId, raw.branch_id);
+  const createdAt = takeTs(raw.createdAt, raw.created_at);
+  const updatedAt = takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at);
   return {
     ...raw,
+    id: billId,
     clinicId,
-    receiptNo,
-    receipt_no: receiptNo,
-    billNo: receiptNo,
-    bill_no: receiptNo,
+    billId,
+    bill_id: billId,
+    receiptNo: billId,
+    receipt_no: billId,
+    billNo: billId,
+    bill_no: billId,
     patientId,
     patient_id: patientId,
     patientName: takeFirst(raw.patientName, raw.patient_name),
+    patient_name: takeFirst(raw.patient_name, raw.patientName),
     serviceName: takeFirst(raw.serviceName, raw.service_name, raw.title, raw.itemName),
+    service_name: takeFirst(raw.service_name, raw.serviceName, raw.title, raw.itemName),
     amount: total,
     total,
     paid,
     amount_paid: paid,
     balance: Math.max(0, total - paid),
     status: takeFirst(raw.status, raw.payment_status) || (paid >= total ? 'paid' : (paid > 0 ? 'partial' : 'unpaid')),
+    payment_status: takeFirst(raw.payment_status, raw.status) || (paid >= total ? 'paid' : (paid > 0 ? 'partial' : 'unpaid')),
     doctorName: takeFirst(raw.doctorName, raw.doctor_name),
+    doctor_name: takeFirst(raw.doctor_name, raw.doctorName),
     note: takeFirst(raw.note, raw.notes),
-    branchId: takeFirst(raw.branchId, raw.branch_id),
-    createdAt: takeTs(raw.createdAt, raw.created_at),
-    updatedAt: takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at)
+    notes: takeFirst(raw.notes, raw.note),
+    branchId,
+    branch_id: branchId,
+    createdAt,
+    created_at: createdAt,
+    updatedAt,
+    updated_at: updatedAt
   };
 }
 function normalizeVisit(clinicId, raw = {}){
-  const visitNo = takeFirst(raw.visitNo, raw.visit_no, raw.id, raw.local_id) || ('VIS-' + nanoid(10));
+  const visitId = takeFirst(raw.visitId, raw.visit_id, raw.visitNo, raw.visit_no, raw.id, raw.local_id) || ('VIS-' + nanoid(10));
   const patientId = takeFirst(raw.patientId, raw.patient_id);
+  const branchId = takeFirst(raw.branchId, raw.branch_id);
+  const createdAt = takeTs(raw.createdAt, raw.created_at);
+  const updatedAt = takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at);
   return {
     ...raw,
+    id: visitId,
     clinicId,
-    visitNo,
-    visit_no: visitNo,
+    visitId,
+    visit_id: visitId,
+    visitNo: visitId,
+    visit_no: visitId,
     patientId,
     patient_id: patientId,
     doctorName: takeFirst(raw.doctorName, raw.doctor_name, raw.doctor),
+    doctor_name: takeFirst(raw.doctor_name, raw.doctorName, raw.doctor),
     reason: takeFirst(raw.reason, raw.complaint),
+    complaint: takeFirst(raw.complaint, raw.reason),
     diagnosis: takeFirst(raw.diagnosis),
     vitalSummary: takeFirst(raw.vitalSummary, raw.vital_summary),
+    vital_summary: takeFirst(raw.vital_summary, raw.vitalSummary),
     status: takeFirst(raw.status) || 'active',
-    branchId: takeFirst(raw.branchId, raw.branch_id),
-    createdAt: takeTs(raw.createdAt, raw.created_at),
-    updatedAt: takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at)
+    branchId,
+    branch_id: branchId,
+    createdAt,
+    created_at: createdAt,
+    updatedAt,
+    updated_at: updatedAt
   };
 }
 function normalizeAppointment(clinicId, raw = {}){
-  const appointmentNo = takeFirst(raw.appointmentNo, raw.appointment_no, raw.id, raw.local_id) || ('APT-' + nanoid(10));
+  const appointmentId = takeFirst(raw.appointmentId, raw.appointment_id, raw.appointmentNo, raw.appointment_no, raw.id, raw.local_id) || ('APT-' + nanoid(10));
+  const branchId = takeFirst(raw.branchId, raw.branch_id);
+  const createdAt = takeTs(raw.createdAt, raw.created_at);
+  const updatedAt = takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at);
   return {
     ...raw,
+    id: appointmentId,
     clinicId,
-    appointmentNo,
-    appointment_no: appointmentNo,
+    appointmentId: appointmentId,
+    appointment_id: appointmentId,
+    appointmentNo: appointmentId,
+    appointment_no: appointmentId,
     patientId: takeFirst(raw.patientId, raw.patient_id),
     patient_id: takeFirst(raw.patient_id, raw.patientId),
     doctorName: takeFirst(raw.doctorName, raw.doctor_name, raw.doctor),
+    doctor_name: takeFirst(raw.doctor_name, raw.doctorName, raw.doctor),
     appointmentDate: takeFirst(raw.appointmentDate, raw.appointment_date, raw.scheduledAt, raw.scheduled_at),
+    appointment_date: takeFirst(raw.appointment_date, raw.appointmentDate, raw.scheduledAt, raw.scheduled_at),
     reason: takeFirst(raw.reason),
     status: takeFirst(raw.status) || 'pending',
-    branchId: takeFirst(raw.branchId, raw.branch_id),
-    createdAt: takeTs(raw.createdAt, raw.created_at),
-    updatedAt: takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at)
+    branchId: branchId,
+    branch_id: branchId,
+    createdAt: createdAt,
+    created_at: createdAt,
+    updatedAt: updatedAt,
+    updated_at: updatedAt
   };
 }
 function normalizeAdmission(clinicId, raw = {}){
-  const admissionNo = takeFirst(raw.admissionNo, raw.admission_no, raw.id, raw.local_id) || ('ADM-' + nanoid(10));
+  const admissionId = takeFirst(raw.admissionId, raw.admission_id, raw.admissionNo, raw.admission_no, raw.id, raw.local_id) || ('ADM-' + nanoid(10));
+  const branchId = takeFirst(raw.branchId, raw.branch_id);
+  const createdAt = takeTs(raw.createdAt, raw.created_at);
+  const updatedAt = takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at);
   return {
     ...raw,
+    id: admissionId,
     clinicId,
-    admissionNo,
-    admission_no: admissionNo,
+    admissionId: admissionId,
+    admission_id: admissionId,
+    admissionNo: admissionId,
+    admission_no: admissionId,
     patientId: takeFirst(raw.patientId, raw.patient_id),
     patient_id: takeFirst(raw.patient_id, raw.patientId),
     wardName: takeFirst(raw.wardName, raw.ward_name),
+    ward_name: takeFirst(raw.ward_name, raw.wardName),
     bedName: takeFirst(raw.bedName, raw.bed_name),
+    bed_name: takeFirst(raw.bed_name, raw.bedName),
     status: takeFirst(raw.status) || 'active',
-    branchId: takeFirst(raw.branchId, raw.branch_id),
-    createdAt: takeTs(raw.createdAt, raw.created_at),
-    updatedAt: takeTs(raw.updatedAt, raw.updated_at, raw.createdAt, raw.created_at)
+    branchId: branchId,
+    branch_id: branchId,
+    createdAt: createdAt,
+    created_at: createdAt,
+    updatedAt: updatedAt,
+    updated_at: updatedAt
   };
 }
 function normalizeSimplePatientRow(clinicId, raw = {}, kind = 'row'){
@@ -2228,7 +2297,8 @@ r.get('/clinic/snapshot/pull', (req, res) => {
     const db = readDB(); ensureArrays(db);
     const latest = getLatestSnapshot(db, clinicId);
     const fallback = buildSnapshotData(db, clinicId);
-    return res.json({ ok:true, version: getClinicVersion(db, clinicId), snapshot: latest?.snapshot || fallback, snapshot_meta: latest ? { snapshotId: latest.snapshotId, createdAt: latest.createdAt, deviceId: latest.deviceId, branchId: latest.branchId } : null, server_time: now() });
+    const snapshot = latest?.snapshot || fallback;
+    return res.json({ ok:true, version: getClinicVersion(db, clinicId), snapshot, pull_snapshot: snapshot, data: snapshot?.data || {}, snapshot_meta: latest ? { snapshotId: latest.snapshotId, createdAt: latest.createdAt, deviceId: latest.deviceId, branchId: latest.branchId } : null, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'pull failed' });
   }
@@ -2258,7 +2328,8 @@ r.get('/clinic/sync/pull', (req, res) => {
     const db = readDB(); ensureArrays(db);
     const latest = getLatestSnapshot(db, clinicId);
     const fallback = buildSnapshotData(db, clinicId);
-    return res.json({ ok:true, pulled:true, version: getClinicVersion(db, clinicId), snapshot: latest?.snapshot || fallback, server_time: now() });
+    const snapshot = latest?.snapshot || fallback;
+    return res.json({ ok:true, pulled:true, version: getClinicVersion(db, clinicId), snapshot, pull_snapshot: snapshot, data: snapshot?.data || {}, server_time: now() });
   } catch (e) {
     return res.status(500).json({ ok:false, error:e?.message || 'pull failed' });
   }
@@ -2283,6 +2354,8 @@ r.get('/clinic/delta/pull', (req, res) => {
       changeCount: rows.length,
       changes: rows.slice(-50),
       snapshot,
+      pull_snapshot: snapshot,
+      data: snapshot?.data || {},
       server_time: now()
     });
   } catch (e) {
