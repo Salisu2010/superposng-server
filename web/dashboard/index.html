@@ -95,6 +95,24 @@
       </div>
     </section>
 
+    <section class="glass quickCommandBar">
+      <div class="quickCommandSearch">
+        <div>
+          <div class="eyebrow">Fast Staff Mode</div>
+          <strong>Simple, fast and visual command flow</strong>
+          <div class="itemMeta">Jump straight to patient search, billing, visits or refresh without opening extra menus.</div>
+        </div>
+      </div>
+      <div class="quickCommandActions">
+        <button id="smartNavPatients" class="btn btnGhost" type="button">Patients Desk</button>
+        <button id="smartNavWorkflow" class="btn btnGhost" type="button">Workflow Desk</button>
+        <button id="smartNavSearch" class="btn btnGhost" type="button">Search Desk</button>
+        <button id="smartRefreshBtn" class="btn btnGhost" type="button">Refresh Live Data</button>
+        <button id="smartNewPatientBtn" class="btn btnPrimary" type="button">New Patient</button>
+        <button id="smartNewBillBtn" class="btn btnPrimary" type="button">New Bill</button>
+      </div>
+    </section>
+
     <section class="heroGrid heroGridPro">
       <article class="heroPanel glass heroPanelPro">
         <div class="heroCopy">
@@ -346,6 +364,21 @@
         <div class="ribbonCard accentPink"><span>Care Desk</span><strong>Lab + Rx + Nurse</strong><small>Track care actions with a richer command layout and faster sync.</small></div>
       </div>
 
+      <section class="glass card workflowSpeedCard">
+        <div class="cardHead compact"><div><div class="eyebrow">Speed Workspace</div><h3>Jump directly to the exact desk you need</h3></div><span class="badge">Less clicking</span></div>
+        <div class="workflowSpeedBar">
+          <button class="speedJumpBtn" type="button" data-jump-target="#billForm">Billing</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#visitForm">Visit</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#queueForm">Queue</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#labForm">Lab</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#prescriptionForm">Prescription</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#pharmacyDispenseForm">Pharmacy</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#admissionForm">Admission</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#nurseForm">Nurse Desk</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#dischargeForm">Discharge</button>
+        </div>
+      </section>
+
       <section class="glass card workflowPatientCard" id="workflowPatientCard">
         <div id="workflowPatientBanner" class="workflowPatientBanner empty">
           <div class="emptyState">Choose a patient from Patients Desk or Search Desk to lock this workflow to one patient and reduce repeated typing.</div>
@@ -363,7 +396,7 @@
         </article>
       </div>
       <div class="workflowGrid">
-        <article class="glass card">
+        <article class="glass card workflowDeskCard" data-workspace-card="billing">
           <div class="cardHead"><div><div class="eyebrow">Billing</div><h3>Direct Billing Workflow</h3></div><button class="btn btnGhost small openBillModal" type="button">Quick Bill Modal</button></div>
           <form id="billForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="billing">
             <input name="patientId" placeholder="Patient ID" required>
@@ -442,7 +475,7 @@
           </form>
         </article>
 
-        <article class="glass card stack12">
+        <article class="glass card stack12 workflowDeskCard" data-workspace-card="inpatient">
           <div class="cardHead"><div><div class="eyebrow">Inpatient + Pharmacy</div><h3>Admission / Ward / Dispensing</h3></div></div>
           <form id="admissionForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="admission">
             <input name="patientId" placeholder="Admission Patient ID" required>
@@ -504,7 +537,7 @@
           </form>
         </article>
 
-        <article class="glass card stack12">
+        <article class="glass card stack12 workflowDeskCard" data-workspace-card="closure">
           <div class="cardHead"><div><div class="eyebrow">Discharge + Refund + Theatre</div><h3>Closing and Procedure Workflow</h3></div></div>
           <form id="dischargeForm" class="formGrid compactGrid">
             <input name="patientId" placeholder="Discharge Patient ID" required>

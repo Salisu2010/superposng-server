@@ -498,3 +498,71 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 }
 .keyboardHintBar{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
 .keyboardHintBar span{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);font-size:.75rem;color:#d8e6ff}
+
+.quickCommandBar{
+  display:grid;
+  grid-template-columns:minmax(280px,1.2fr) minmax(0,1.8fr);
+  gap:16px;
+  align-items:center;
+  padding:18px 20px;
+  position:sticky;
+  top:14px;
+  z-index:18;
+  backdrop-filter:blur(18px);
+}
+.quickCommandActions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+.quickCommandSearch strong{display:block;font-size:1.05rem;margin-top:4px}
+.workflowSpeedCard{padding:18px 20px}
+.workflowSpeedBar{display:flex;flex-wrap:wrap;gap:10px}
+.speedJumpBtn{
+  border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.05);
+  color:#eaf2ff;
+  border-radius:999px;
+  padding:11px 15px;
+  font-weight:700;
+  transition:transform .18s ease, border-color .18s ease, background .18s ease;
+}
+.speedJumpBtn:hover{transform:translateY(-1px);border-color:rgba(95,181,255,.4);background:rgba(95,181,255,.12)}
+.workflowDeskCard{
+  position:relative;
+  overflow:hidden;
+}
+.workflowDeskCard::before{
+  content:"";
+  position:absolute;
+  inset:0 auto 0 0;
+  width:4px;
+  background:linear-gradient(180deg,var(--primary),var(--violet));
+  opacity:.9;
+}
+.workflowFormCard{
+  padding:14px;
+  border-radius:18px;
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.06);
+}
+.workflowFocus{
+  outline:2px solid rgba(95,181,255,.55);
+  box-shadow:0 0 0 6px rgba(95,181,255,.12), 0 18px 30px rgba(0,0,0,.18);
+  transition:box-shadow .2s ease, outline-color .2s ease;
+}
+.patientSpotlightShell{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.keyboardHintBar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 8px}
+.keyboardHintBar span{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);font-size:.78rem;color:#cfe0fb
+}
+.registryToolbarWide{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;padding:14px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);margin-bottom:14px}
+.registryHint{max-width:720px;color:var(--muted);line-height:1.5}
+.patientDeck{max-height:480px;overflow:auto;padding-right:4px}
+.selectedPatientHub{margin-top:16px}
+.workflowPatientCard,.patientSpotlightCard,.patientEntryCard,.registryCard{overflow:hidden}
+@media (max-width: 1180px){
+  .quickCommandBar{grid-template-columns:1fr;top:10px}
+  .quickCommandActions{justify-content:flex-start}
+}
+@media (max-width: 760px){
+  .workflowSpeedBar,.quickCommandActions{display:grid;grid-template-columns:1fr 1fr}
+  .speedJumpBtn,.quickCommandActions .btn{width:100%}
+}

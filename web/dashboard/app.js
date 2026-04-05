@@ -87,6 +87,13 @@ function bindUI() {
   $('#patientsOpenSearchBtn')?.addEventListener('click', () => switchTab('search'));
   $('#spotlightSearchBtn')?.addEventListener('click', () => switchTab('search', true));
   $('#patientsRefreshHubBtn')?.addEventListener('click', refreshAll);
+  $('#smartNavPatients')?.addEventListener('click', () => switchTab('patients', true));
+  $('#smartNavWorkflow')?.addEventListener('click', () => switchTab('workflow', true));
+  $('#smartNavSearch')?.addEventListener('click', () => switchTab('search', true));
+  $('#smartRefreshBtn')?.addEventListener('click', refreshAll);
+  $('#smartNewPatientBtn')?.addEventListener('click', openPatientWizard);
+  $('#smartNewBillBtn')?.addEventListener('click', () => openBillModal());
+  $$('.speedJumpBtn').forEach(btn => btn.addEventListener('click', () => jumpToWorkflowTarget(btn.dataset.jumpTarget)));
   $('#fabVisitBtn').addEventListener('click', () => { toggleFab(false); switchTab('workflow'); });
   $('#fabSearchBtn').addEventListener('click', () => { toggleFab(false); switchTab('search'); });
   $('#fabMain').addEventListener('click', () => toggleFab());
@@ -1332,7 +1339,22 @@ function fillWorkflowPatient(patient = {}) {
   ];
   mappings.forEach(([selector, value]) => {
     const el = $(selector);
-    if (el && !el.value) el.value = value;
+    if (!el) return;
+    el.value = value || '';
+  });
+}
+
+function jumpToWorkflowTarget(selector) {
+  if (!selector) return;
+  switchTab('workflow', true);
+  requestAnimationFrame(() => {
+    const target = $(selector);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.add('workflowFocus');
+    setTimeout(() => target.classList.remove('workflowFocus'), 1800);
+    const firstInput = target.querySelector('input, textarea, select');
+    if (firstInput) firstInput.focus({ preventScroll: true });
   });
 }
 
