@@ -534,7 +534,6 @@ function renderAll() {
   renderDoctorBars();
   renderAnalyticsPanels();
   renderPatients();
-  renderWorkflowActionPanels();
   renderWorkspace();
   renderClinicalOps();
   renderCommandCenter();
@@ -1605,60 +1604,6 @@ function renderWorkflowPatientBanner() {
 
 
 
-
-function renderWorkflowActionPanels() {
-  const billingHost = $('#billingActionPanel');
-  const clinicalHost = $('#clinicalActionPanel');
-  const careHost = $('#careActionPanel');
-  if (!billingHost || !clinicalHost || !careHost) return;
-  const p = normalizePatientRecord(state.selectedPatient || {});
-  const profile = state.selectedPatientProfile || {};
-  const summary = profile.summary || {};
-  if (!p.patientId && !p.fullName) {
-    const empty = '<div class="emptyState">Select a patient from Patients Desk or Search Desk. These action panels will then suggest the fastest next step.</div>';
-    billingHost.innerHTML = empty;
-    clinicalHost.innerHTML = empty;
-    careHost.innerHTML = empty;
-    return;
-  }
-  const fullName = escapeHtml(p.fullName || p.patientName || p.patientId || 'Patient');
-  const pid = escapeHtml(p.patientId || '');
-  const outstanding = num(summary.outstanding || 0);
-  const queueCount = num(summary.queueCount || 0);
-  const labCount = num(summary.labCount || 0);
-  const rxCount = num(summary.prescriptionCount || 0);
-  const visitCount = num(summary.visitCount || 0);
-  const billCount = num(summary.billCount || 0);
-  billingHost.innerHTML = `
-    <div class="actionPanelHero"><div><div class="eyebrow">Billing focus</div><h4>${fullName}</h4></div><div class="actionPanelMetric ${outstanding > 0 ? 'warn' : ''}">${money(outstanding)}</div></div>
-    <div class="actionPanelCopy">${outstanding > 0 ? 'Outstanding balance exists. Staff can open direct billing or receipt preview immediately.' : 'No current outstanding balance. Create new charge or review latest receipt status.'}</div>
-    <div class="actionActionGrid">
-      <button class="panelActionBtn primary" type="button" data-patient-action="bill" data-patient-id="${pid}" data-patient-name="${fullName}">Create Bill<small>${billCount} existing bill(s)</small></button>
-      <button class="panelActionBtn" type="button" data-patient-action="drawer" data-patient-id="${pid}" data-patient-name="${fullName}">Open Receipt Queue<small>Preview and edit billing records</small></button>
-    </div>
-    <div class="actionMiniStats"><div><span>Outstanding</span><strong>${money(outstanding)}</strong></div><div><span>Bills</span><strong>${billCount}</strong></div><div><span>Status</span><strong>${outstanding > 0 ? 'Follow-up' : 'Balanced'}</strong></div></div>`;
-  clinicalHost.innerHTML = `
-    <div class="actionPanelHero"><div><div class="eyebrow">Clinical flow</div><h4>${fullName}</h4></div><div class="actionPanelMetric ${queueCount > 0 ? 'hot' : ''}">${queueCount}</div></div>
-    <div class="actionPanelCopy">${visitCount === 0 ? 'No visit yet. Start consultation workflow now so every other desk has a clinical anchor.' : 'Patient already has clinical activity. Continue with queue, admission, or another visit.'}</div>
-    <div class="actionActionGrid">
-      <button class="panelActionBtn primary" type="button" data-patient-action="visit" data-patient-id="${pid}" data-patient-name="${fullName}">Open Visit Desk<small>${visitCount} visit(s) recorded</small></button>
-      <button class="panelActionBtn" type="button" data-patient-action="queue" data-patient-id="${pid}" data-patient-name="${fullName}">Push To Queue<small>${queueCount} open queue item(s)</small></button>
-      <button class="panelActionBtn" type="button" data-patient-action="admission" data-patient-id="${pid}" data-patient-name="${fullName}">Admission Desk<small>Ward and inpatient flow</small></button>
-    </div>
-    <div class="actionMiniStats"><div><span>Visits</span><strong>${visitCount}</strong></div><div><span>Queue</span><strong>${queueCount}</strong></div><div><span>Priority</span><strong>${queueCount > 0 ? 'Live' : 'Ready'}</strong></div></div>`;
-  careHost.innerHTML = `
-    <div class="actionPanelHero"><div><div class="eyebrow">Care completion</div><h4>${fullName}</h4></div><div class="actionPanelMetric ${labCount > 0 ? 'warn' : rxCount > 0 ? 'good' : ''}">${labCount + rxCount}</div></div>
-    <div class="actionPanelCopy">${labCount > 0 ? 'Active lab workflow exists. Review tests and coordinate with prescription or pharmacy after results.' : 'Use this area to complete medication, nurse notes, and dispensing with fewer clicks.'}</div>
-    <div class="actionActionGrid">
-      <button class="panelActionBtn primary" type="button" data-patient-action="lab" data-patient-id="${pid}" data-patient-name="${fullName}">Lab Desk<small>${labCount} request(s)</small></button>
-      <button class="panelActionBtn" type="button" data-patient-action="prescription" data-patient-id="${pid}" data-patient-name="${fullName}">Prescription<small>${rxCount} medication order(s)</small></button>
-      <button class="panelActionBtn" type="button" data-patient-action="pharmacy" data-patient-id="${pid}" data-patient-name="${fullName}">Pharmacy<small>Dispense and charge</small></button>
-      <button class="panelActionBtn" type="button" data-patient-action="nurse" data-patient-id="${pid}" data-patient-name="${fullName}">Nurse Desk<small>Vitals and progress note</small></button>
-    </div>
-    <div class="actionMiniStats"><div><span>Lab</span><strong>${labCount}</strong></div><div><span>Rx</span><strong>${rxCount}</strong></div><div><span>Mode</span><strong>${labCount > 0 ? 'Follow Result' : 'Complete Care'}</strong></div></div>`;
-  [billingHost, clinicalHost, careHost].forEach(bindPatientActionButtons);
-}
-
 function renderPatientCommandDock() {
   const host = $('#patientCommandDock');
   if (!host) return;
@@ -1953,12 +1898,6 @@ async function openPatientDrawer(patientId) {
     const admissions = Array.isArray(res.admissions) ? res.admissions : [];
     const summary = res.summary || {};
     showDrawer(`${p.fullName || p.patientName || 'Patient Profile'}`, `
-      <div class="drawerTabBar">
-        <button class="drawerTabBtn active" type="button" data-drawer-tab="overview">Overview</button>
-        <button class="drawerTabBtn" type="button" data-drawer-tab="timeline">Timeline</button>
-        <button class="drawerTabBtn" type="button" data-drawer-tab="finance">Finance</button>
-      </div>
-      <section class="drawerTabPane" data-drawer-pane="overview">
       <div class="drawerHero">
         <div>
           <div class="eyebrow">Patient Profile Drawer</div>
@@ -1993,8 +1932,6 @@ async function openPatientDrawer(patientId) {
           ].map(([action,title,note]) => `<button class="drawerActionBtn" type="button" data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}">${title}<small>${note}</small></button>`).join('')}
         </div>
       </div>
-      </section>
-      <section class="drawerTabPane hidden" data-drawer-pane="timeline">
       <div class="drawerSplitGrid">
         <div class="drawerPanelCard">
           <div class="cardHead compact"><div><div class="eyebrow">Timeline</div><h3>Recent Encounters</h3></div></div>
@@ -2005,23 +1942,15 @@ async function openPatientDrawer(patientId) {
           <div class="stack10">${admissions.length ? admissions.map(a => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(a.ward || 'Ward')} • ${escapeHtml(a.status || '--')}</div><div>${escapeHtml(a.doctorName || '--')}</div><div class="itemMeta"><span>${escapeHtml(a.bed || '--')}</span><span>${fmtDateTime(a.admittedAt || a.createdAt)}</span></div></div>`).join('') : `<div class="emptyState">No admission records for this patient.</div>`}</div>
         </div>
       </div>
-      </section>
-      <section class="drawerTabPane hidden" data-drawer-pane="finance">
       <div class="drawerSection">
         <div class="cardHead compact"><div><div class="eyebrow">Billing</div><h3>Receipt Preview Queue</h3></div></div>
         <div class="stack10">${billing.length ? billing.map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span><span>${fmtDateTime(b.createdAt)}</span></div><div class="inlineActions"><button class="pillBtn" type="button" data-receipt="${escapeHtml(b.billId || '')}">Open Receipt</button><button class="pillBtn warn" type="button" data-edit-bill="${escapeHtml(b.billId || '')}" data-category="${escapeHtml(b.category || '')}" data-total="${escapeHtml(String(b.total || ''))}" data-paid="${escapeHtml(String(b.paid || ''))}" data-status="${escapeHtml(b.status || '')}" data-payment="${escapeHtml(b.paymentMethod || '')}" data-description="${escapeHtml(b.description || '')}">Edit Bill</button></div></div>`).join('') : `<div class="emptyState">No bills created for this patient.</div>`}</div>
       </div>
-      </section>
     `);
     document.getElementById('drawerBillBtn')?.addEventListener('click', () => { closeModal(); setSelectedPatient(p); openBillModal(p.patientId || patientId, p.fullName || p.patientName || ''); });
     document.getElementById('drawerEditBtn')?.addEventListener('click', () => openPatientWizard(p));
     const activeModal = document.getElementById('activeModal');
     bindPatientActionButtons(activeModal);
-    $$('.drawerTabBtn', activeModal).forEach(btn => btn.addEventListener('click', () => {
-      const tab = btn.dataset.drawerTab;
-      $$('.drawerTabBtn', activeModal).forEach(x => x.classList.toggle('active', x === btn));
-      $$('.drawerTabPane', activeModal).forEach(pane => pane.classList.toggle('hidden', pane.dataset.drawerPane !== tab));
-    }));
     $$('[data-receipt]', activeModal).forEach(btn => btn.addEventListener('click', () => openReceiptPreview(btn.dataset.receipt)));
     $$('[data-edit-bill]', activeModal).forEach(btn => btn.addEventListener('click', () => openBillEditModal({ billId: btn.dataset.editBill, category: btn.dataset.category, total: btn.dataset.total, paid: btn.dataset.paid, status: btn.dataset.status, paymentMethod: btn.dataset.payment, description: btn.dataset.description })));
   } catch (err) {
