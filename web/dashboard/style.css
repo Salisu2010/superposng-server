@@ -454,6 +454,72 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 .workflowHintCard strong{display:block;margin-bottom:5px}
 .workflowFormCard{scroll-margin-top:100px}
 .workflowFormCard.workflowFocus{border-color:rgba(95,181,255,.45);box-shadow:0 0 0 3px rgba(95,181,255,.12)}
+
+.fastLaneSection{
+  background:linear-gradient(180deg,rgba(95,181,255,.08),rgba(255,255,255,.03));
+}
+.fastLaneHeader{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:14px;
+}
+.drawerFastLaneGrid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:16px;
+}
+.drawerPrimaryActionBtn{
+  position:relative;
+  overflow:hidden;
+  min-height:88px;
+  padding:18px 18px 16px;
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,.12);
+  color:#fff;
+  text-align:left;
+  cursor:pointer;
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.drawerPrimaryActionBtn::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,.18),transparent 50%);
+  pointer-events:none;
+}
+.drawerPrimaryActionBtn span{
+  display:block;
+  font-size:1.02rem;
+  font-weight:800;
+  letter-spacing:.01em;
+}
+.drawerPrimaryActionBtn small{
+  display:block;
+  margin-top:6px;
+  color:rgba(232,239,255,.82);
+  font-weight:500;
+  line-height:1.35;
+}
+.drawerPrimaryActionBtn.billing{
+  background:linear-gradient(135deg,rgba(34,197,94,.28),rgba(15,23,42,.88));
+}
+.drawerPrimaryActionBtn.visit{
+  background:linear-gradient(135deg,rgba(59,130,246,.30),rgba(15,23,42,.88));
+}
+.drawerPrimaryActionBtn:hover,
+.drawerPrimaryActionBtn:focus-visible{
+  transform:translateY(-1px);
+  border-color:rgba(255,255,255,.26);
+  box-shadow:0 18px 40px rgba(15,23,42,.24);
+  outline:none;
+}
+.drawerPrimaryActionBtn.fastLaneFocus{
+  border-color:rgba(255,255,255,.34);
+  box-shadow:0 0 0 3px rgba(95,181,255,.22),0 18px 42px rgba(15,23,42,.28);
+}
 .patientDrawerActionGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .drawerActionBtn{padding:12px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.05);color:#fff;text-align:left;font-weight:700}
 .drawerActionBtn small{display:block;color:var(--muted);font-weight:500;margin-top:4px}
@@ -468,9 +534,12 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 @media (max-width: 760px){
   .patientSpotlightShell,.patientHubHero{flex-direction:column}
   .patientHubActions,.workflowQuickGrid,.patientDrawerActionGrid,.infoStatGrid{grid-template-columns:1fr 1fr}
+  .drawerFastLaneGrid{grid-template-columns:1fr}
 }
 @media (max-width: 540px){
   .patientHubActions,.workflowQuickGrid,.patientDrawerActionGrid,.infoStatGrid{grid-template-columns:1fr}
+  .drawerFastLaneGrid{grid-template-columns:1fr}
+  .fastLaneHeader{flex-direction:column;align-items:stretch}
 }
 
 .patientHubGrid.advanced{grid-template-columns:minmax(0,1.25fr) minmax(320px,.95fr);gap:16px}

@@ -36,10 +36,78 @@ const state = {
     inventoryIntelligence: null,
   },
   selectedPatient: null,
-  selectedPatientProfile: null
+  selectedPatientProfile: null,
+  pendingDrawerFocus: null,
+  pendingDrawerSuggestion: null
 };
 
 window.addEventListener('DOMContentLoaded', init);
+
+function computeWorkflowSuggestion({ patient = {}, profile = null, registrationPayload = null, isNewRegistration = false } = {}) {
+  const p = normalizePatientRecord(patient || {});
+  const summary = profile?.summary || {};
+  const outstanding = num(summary.outstanding || p.outstanding || 0);
+  const visitCount = num(summary.visitCount || p.visitCount || 0);
+  const billCount = num(summary.billCount || p.billCount || 0);
+  const lowerNotes = String(registrationPayload?.notes || '').toLowerCase();
+  const lowerStatus = String(registrationPayload?.status || p.status || '').toLowerCase();
+
+  if (outstanding > 0) {
+    return {
+      action: 'bill',
+      headline: 'Billing first is recommended',
+      reason: 'Outstanding balance already exists on this patient record, so finance follow-up should come before other workflow steps.',
+      billingText: 'Recommended now • collect payment / issue receipt',
+      visitText: 'Start visit after billing if clinical review is still needed'
+    };
+  }
+
+  if (isNewRegistration || visitCount === 0) {
+    return {
+      action: 'visit',
+      headline: 'New Visit first is recommended',
+      reason: 'A newly registered patient should usually begin from consultation so the doctor or nurse can open the clinical workflow before billing.',
+      billingText: 'Use first only for billing-only / cash-only walk-in cases',
+      visitText: 'Recommended now • start consultation and diagnosis flow'
+    };
+  }
+
+  if (lowerNotes.includes('billing') || lowerNotes.includes('payment') || lowerStatus.includes('cash')) {
+    return {
+      action: 'bill',
+      headline: 'Billing first is recommended',
+      reason: 'The registration details suggest this patient is primarily in a payment or billing workflow right now.',
+      billingText: 'Recommended now • open billing desk immediately',
+      visitText: 'Open after payment if consultation is still required'
+    };
+  }
+
+  if (visitCount > 0 && billCount === 0) {
+    return {
+      action: 'bill',
+      headline: 'Create Bill next',
+      reason: 'A consultation trail already exists, but there is no billing record yet. The next likely step is receipt and payment.',
+      billingText: 'Recommended now • generate bill and receipt',
+      visitText: 'Use if a second consultation is needed'
+    };
+  }
+
+  return {
+    action: 'visit',
+    headline: 'Continue from New Visit',
+    reason: 'Clinical review remains the safest default next step when no urgent finance signal is detected.',
+    billingText: 'Open when payment or receipt is needed',
+    visitText: 'Recommended now • continue clinical workflow'
+  };
+}
+
+function getEffectiveDrawerSuggestion(patientId, profile = null, fallbackPatient = null) {
+  const pending = state.pendingDrawerSuggestion;
+  if (pending && String(pending.patientId || '') === String(patientId || '')) {
+    return pending;
+  }
+  return computeWorkflowSuggestion({ patient: fallbackPatient || {}, profile });
+}
 
 function init() {
   $('#baseUrl').value = state.baseUrl;
@@ -110,10 +178,15 @@ function bindUI() {
     closeModal();
     const savedPatient = normalizePatientRecord(res?.patient || {});
     showToast('Patient Saved', savedPatient.fullName || savedPatient.patientName || 'Patient registration completed');
-    await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
     if (savedPatient.patientId) {
+      state.pendingDrawerSuggestion = {
+        patientId: savedPatient.patientId,
+        ...computeWorkflowSuggestion({ patient: savedPatient, isNewRegistration: true })
+      };
+      state.pendingDrawerFocus = state.pendingDrawerSuggestion.action;
       setSelectedPatient(savedPatient, { openDrawer: true, switchToPatients: true });
     }
+    targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']).catch(() => refreshAll());
   });
   bindForm('#billForm', '/api/bill/create', 'Bill created', async (res) => {
     closeModal();
@@ -1855,8 +1928,15 @@ function bindPatientWizard(path, patientId) {
       const res = await api(path, { method: 'POST', body });
       closeModal();
       showToast(patientId ? 'Patient Updated' : 'Patient Saved', res?.patient?.fullName || 'Patient record stored');
-      await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
-      if (res?.patient?.patientId) setSelectedPatient(res.patient, { openDrawer: true });
+      if (res?.patient?.patientId) {
+        state.pendingDrawerSuggestion = {
+          patientId: res.patient.patientId,
+          ...computeWorkflowSuggestion({ patient: res.patient, registrationPayload: body, isNewRegistration: !patientId })
+        };
+        state.pendingDrawerFocus = state.pendingDrawerSuggestion.action;
+        setSelectedPatient(res.patient, { openDrawer: true });
+      }
+      targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']).catch(() => refreshAll());
     } catch (err) {
       showToast('Wizard Failed', err.message || 'Unable to save patient');
     }
@@ -1866,6 +1946,107 @@ function bindPatientWizard(path, patientId) {
 
 function openPatientModal() {
   openPatientWizard();
+}
+
+
+function dismissRecommendedNextStepPopup() {
+  document.getElementById('recommendedNextStepPopup')?.remove();
+}
+
+function showRecommendedNextStepPopup(suggestion = {}) {
+  dismissRecommendedNextStepPopup();
+  const recommendedAction = suggestion?.action === 'bill' ? 'bill' : 'visit';
+  const popup = document.createElement('div');
+  popup.id = 'recommendedNextStepPopup';
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-modal', 'false');
+  popup.setAttribute('aria-label', 'Recommended Next Step');
+  popup.style.cssText = [
+    'position:fixed',
+    'right:20px',
+    'bottom:20px',
+    'width:min(420px, calc(100vw - 24px))',
+    'z-index:9999',
+    'border-radius:24px',
+    'padding:18px',
+    'background:linear-gradient(180deg, rgba(12,24,42,0.98), rgba(9,18,33,0.98))',
+    'border:1px solid rgba(148,163,184,0.24)',
+    'box-shadow:0 24px 80px rgba(2,6,23,0.38)',
+    'color:#e5eefb',
+    'backdrop-filter:blur(14px)'
+  ].join(';');
+  const recommendedBadge = recommendedAction === 'bill' ? 'Create Bill first' : 'New Visit first';
+  const reason = escapeHtml(suggestion?.reason || 'Use the recommended button below to continue workflow immediately.');
+  const visitText = escapeHtml(suggestion?.visitText || 'Start consultation and diagnosis workflow');
+  const billingText = escapeHtml(suggestion?.billingText || 'Open billing desk and receipt flow instantly');
+  popup.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+      <div>
+        <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#93c5fd;margin-bottom:8px;">Recommended Next Step</div>
+        <div style="font-size:1.05rem;font-weight:800;line-height:1.3;">${escapeHtml(suggestion?.headline || recommendedBadge)}</div>
+      </div>
+      <button type="button" data-next-step-dismiss aria-label="Close recommendation" style="border:0;background:rgba(148,163,184,0.14);color:#e5eefb;width:34px;height:34px;border-radius:999px;cursor:pointer;font-size:18px;line-height:1;">×</button>
+    </div>
+    <div style="margin-top:10px;padding:12px 14px;border-radius:16px;background:rgba(59,130,246,0.10);border:1px solid rgba(96,165,250,0.18);font-size:.93rem;line-height:1.55;color:#dbeafe;">${reason}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
+      <button type="button" data-next-step-action="visit" style="text-align:left;border:1px solid ${recommendedAction === 'visit' ? 'rgba(96,165,250,0.55)' : 'rgba(148,163,184,0.18)'};background:${recommendedAction === 'visit' ? 'linear-gradient(180deg, rgba(37,99,235,0.25), rgba(37,99,235,0.14))' : 'rgba(15,23,42,0.66)'};color:#eff6ff;padding:14px 14px;border-radius:18px;cursor:pointer;box-shadow:${recommendedAction === 'visit' ? '0 18px 44px rgba(37,99,235,0.18)' : 'none'};">
+        <div style="font-weight:800;font-size:1rem;">New Visit ${recommendedAction === 'visit' ? '• Recommended' : ''}</div>
+        <div style="margin-top:6px;font-size:.84rem;line-height:1.5;color:#cbd5e1;">${visitText}</div>
+      </button>
+      <button type="button" data-next-step-action="bill" style="text-align:left;border:1px solid ${recommendedAction === 'bill' ? 'rgba(34,197,94,0.42)' : 'rgba(148,163,184,0.18)'};background:${recommendedAction === 'bill' ? 'linear-gradient(180deg, rgba(22,163,74,0.24), rgba(21,128,61,0.14))' : 'rgba(15,23,42,0.66)'};color:#eff6ff;padding:14px 14px;border-radius:18px;cursor:pointer;box-shadow:${recommendedAction === 'bill' ? '0 18px 44px rgba(34,197,94,0.16)' : 'none'};">
+        <div style="font-weight:800;font-size:1rem;">Create Bill ${recommendedAction === 'bill' ? '• Recommended' : ''}</div>
+        <div style="margin-top:6px;font-size:.84rem;line-height:1.5;color:#cbd5e1;">${billingText}</div>
+      </button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;font-size:.82rem;color:#94a3b8;">
+      <span>Choose the next desk now to keep registration workflow moving fast.</span>
+      <button type="button" data-next-step-dismiss style="border:0;background:transparent;color:#93c5fd;cursor:pointer;font-weight:700;">Later</button>
+    </div>
+  `;
+  document.body.appendChild(popup);
+  popup.querySelectorAll('[data-next-step-dismiss]').forEach(btn => btn.addEventListener('click', dismissRecommendedNextStepPopup));
+  popup.querySelectorAll('[data-next-step-action]').forEach(btn => btn.addEventListener('click', () => {
+    const action = btn.getAttribute('data-next-step-action');
+    dismissRecommendedNextStepPopup();
+    const target = action === 'bill'
+      ? (document.getElementById('drawerBillPrimaryBtn') || document.getElementById('drawerBillBtn'))
+      : (document.getElementById('drawerVisitPrimaryBtn') || document.getElementById('drawerVisitBtn'));
+    if (target) {
+      try { target.focus({ preventScroll: false }); } catch (_) { try { target.focus(); } catch (_) {} }
+      target.click();
+    }
+  }));
+  const autoBtn = popup.querySelector(`[data-next-step-action="${recommendedAction}"]`) || popup.querySelector('[data-next-step-action]');
+  requestAnimationFrame(() => {
+    try { autoBtn?.focus({ preventScroll: true }); } catch (_) { try { autoBtn?.focus(); } catch (_) {} }
+  });
+}
+
+
+function applyPostSaveDrawerFocus() {
+  if (!state.pendingDrawerFocus) return;
+  const modal = document.getElementById('activeModal');
+  if (!modal) return;
+  const billBtn = document.getElementById('drawerBillBtn') || document.getElementById('drawerBillPrimaryBtn');
+  const visitBtn = document.getElementById('drawerVisitBtn') || document.getElementById('drawerVisitPrimaryBtn') || modal.querySelector('[data-primary-drawer-action="visit"]');
+  const preferred = state.pendingDrawerFocus === 'visit' ? visitBtn : billBtn;
+  const anchor = preferred || billBtn || visitBtn;
+  if (!anchor) return;
+  const actionSection = anchor.closest('.drawerSection') || anchor;
+  try {
+    actionSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (_) {}
+  requestAnimationFrame(() => {
+    try { anchor.focus({ preventScroll: true }); } catch (_) { try { anchor.focus(); } catch (_) {} }
+  });
+  const suggestion = state.pendingDrawerSuggestion;
+  const nextLabel = (suggestion?.action === 'visit' ? 'New Visit' : 'Create Bill');
+  showToast('Ready for next step', `${nextLabel} is recommended for the next workflow step`);
+  if (suggestion) {
+    setTimeout(() => showRecommendedNextStepPopup(suggestion), 120);
+  }
+  state.pendingDrawerFocus = null;
+  state.pendingDrawerSuggestion = null;
 }
 
 function openBillModal(patientId = '', patientName = '') {
@@ -1892,14 +2073,39 @@ function openBillModal(patientId = '', patientName = '') {
 
 async function openPatientDrawer(patientId) {
   if (!patientId) return;
+  const seed = normalizePatientRecord(
+    state.selectedPatient?.patientId === patientId
+      ? state.selectedPatient
+      : (state.data.patients || []).find(x => String(x.patientId || '') === String(patientId)) || { patientId }
+  );
+  if (seed.patientId || seed.fullName) {
+    setSelectedPatient(seed);
+  }
+  showDrawer(`${escapeHtml(seed.fullName || seed.patientName || patientId)}`, `
+    <div class="drawerHero drawerLoadingHero">
+      <div>
+        <div class="eyebrow">Patient Profile Drawer</div>
+        <h3>${escapeHtml(seed.fullName || seed.patientName || patientId)}</h3>
+        <div class="itemMeta"><span>${escapeHtml(seed.patientId || '--')}</span><span>${escapeHtml(seed.phone || '--')}</span></div>
+      </div>
+      <div class="drawerHeroBadge">Loading</div>
+    </div>
+    <div class="drawerGrid">
+      <div class="miniPanel"><div class="itemTitle">Opening profile</div><div>Loading patient summary, encounters and billing...</div></div>
+      <div class="miniPanel"><div class="itemTitle">Quick actions ready</div><div>You can continue workflow as soon as the drawer finishes loading.</div></div>
+    </div>
+  `);
   try {
     const res = await api(`/api/portal/patient-profile?patientId=${encodeURIComponent(patientId)}`);
-    const p = normalizePatientRecord(res.patient || {});
+    const p = normalizePatientRecord(res.patient || seed || {});
     setSelectedPatient(p);
     const encounters = Array.isArray(res.encounters) ? res.encounters : [];
     const billing = Array.isArray(res.bills) ? res.bills : [];
     const admissions = Array.isArray(res.admissions) ? res.admissions : [];
     const summary = res.summary || {};
+    const suggestion = getEffectiveDrawerSuggestion(p.patientId || patientId, res, p);
+    const billRecommended = suggestion.action === 'bill';
+    const visitRecommended = suggestion.action === 'visit';
     showDrawer(`${p.fullName || p.patientName || 'Patient Profile'}`, `
       <div class="drawerHero">
         <div>
@@ -1920,8 +2126,27 @@ async function openPatientDrawer(patientId) {
         <div class="miniPanel"><div class="itemTitle">Next of Kin</div><div>${escapeHtml(p.nextOfKin || '--')}</div><div class="itemMeta"><span>${escapeHtml(p.nextOfKinPhone || '--')}</span></div></div>
         <div class="miniPanel"><div class="itemTitle">Clinical Totals</div><div>${num(summary.visitCount)} visits • ${num(summary.billCount)} bills</div><div class="itemMeta"><span>${num(summary.admissionCount)} admissions</span><span>${money(summary.outstanding || 0)} outstanding</span></div></div>
       </div>
-      <div class="drawerSection">
-        <div class="cardHead compact"><div><div class="eyebrow">Command Actions</div><h3>Direct Clinical Controls</h3></div><div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill</button></div></div>
+      <div class="drawerSection fastLaneSection">
+        <div class="fastLaneHeader">
+          <div>
+            <div class="eyebrow">Fast Lane Workflow</div>
+            <h3>${escapeHtml(suggestion.headline || 'Continue immediately after registration')}</h3>
+            <div class="itemMeta"><span>Open billing</span><span>Start consultation</span><span>No extra navigation</span></div>
+          </div>
+          <div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill</button></div>
+        </div>
+        <div class="quickNote smartNextNote"><strong>Smart suggestion:</strong> ${escapeHtml(suggestion.reason || '')}</div>
+        <div class="drawerFastLaneGrid">
+          <button class="drawerPrimaryActionBtn billing ${billRecommended ? 'fastLaneFocus' : ''}" type="button" id="drawerBillPrimaryBtn" data-primary-drawer-action="bill" aria-label="Create Bill${billRecommended ? ' recommended' : ''}">
+            <span>Create Bill ${billRecommended ? '• Recommended' : ''}</span>
+            <small>${escapeHtml(suggestion.billingText || 'Open billing desk and receipt flow instantly')}</small>
+          </button>
+          <button class="drawerPrimaryActionBtn visit ${visitRecommended ? 'fastLaneFocus' : ''}" type="button" id="drawerVisitPrimaryBtn" data-primary-drawer-action="visit" data-patient-action="visit" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}" aria-label="New Visit${visitRecommended ? ' recommended' : ''}">
+            <span>New Visit ${visitRecommended ? '• Recommended' : ''}</span>
+            <small>${escapeHtml(suggestion.visitText || 'Send patient straight to doctor consultation workflow')}</small>
+          </button>
+        </div>
+        <div class="cardHead compact"><div><div class="eyebrow">Command Actions</div><h3>Direct Clinical Controls</h3></div></div>
         <div class="patientDrawerActionGrid">
           ${[
             ['visit','New Visit','Consultation + diagnosis'],
@@ -1932,7 +2157,7 @@ async function openPatientDrawer(patientId) {
             ['admission','Admission','Ward / bed'],
             ['nurse','Nurse Desk','Vitals / note'],
             ['queue','Queue','Doctor waiting line']
-          ].map(([action,title,note]) => `<button class="drawerActionBtn" type="button" data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}">${title}<small>${note}</small></button>`).join('')}
+          ].map(([action,title,note]) => `<button class="drawerActionBtn" type="button" ${action === 'visit' ? 'id="drawerVisitBtn" data-primary-drawer-action="visit"' : ''} data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}">${title}<small>${note}</small></button>`).join('')}
         </div>
       </div>
       <div class="drawerSplitGrid">
@@ -1950,8 +2175,11 @@ async function openPatientDrawer(patientId) {
         <div class="stack10">${billing.length ? billing.map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span><span>${fmtDateTime(b.createdAt)}</span></div><div class="inlineActions"><button class="pillBtn" type="button" data-receipt="${escapeHtml(b.billId || '')}">Open Receipt</button><button class="pillBtn warn" type="button" data-edit-bill="${escapeHtml(b.billId || '')}" data-category="${escapeHtml(b.category || '')}" data-total="${escapeHtml(String(b.total || ''))}" data-paid="${escapeHtml(String(b.paid || ''))}" data-status="${escapeHtml(b.status || '')}" data-payment="${escapeHtml(b.paymentMethod || '')}" data-description="${escapeHtml(b.description || '')}">Edit Bill</button></div></div>`).join('') : `<div class="emptyState">No bills created for this patient.</div>`}</div>
       </div>
     `);
-    document.getElementById('drawerBillBtn')?.addEventListener('click', () => { closeModal(); setSelectedPatient(p); openBillModal(p.patientId || patientId, p.fullName || p.patientName || ''); });
+    const openBillFromDrawer = () => { closeModal(); setSelectedPatient(p); openBillModal(p.patientId || patientId, p.fullName || p.patientName || ''); };
+    document.getElementById('drawerBillBtn')?.addEventListener('click', openBillFromDrawer);
+    document.getElementById('drawerBillPrimaryBtn')?.addEventListener('click', openBillFromDrawer);
     document.getElementById('drawerEditBtn')?.addEventListener('click', () => openPatientWizard(p));
+    applyPostSaveDrawerFocus();
     const activeModal = document.getElementById('activeModal');
     bindPatientActionButtons(activeModal);
     $$('[data-receipt]', activeModal).forEach(btn => btn.addEventListener('click', () => openReceiptPreview(btn.dataset.receipt)));
@@ -2059,7 +2287,7 @@ function showModal(title, bodyHtml) {
   $('#activeModal').addEventListener('click', (e) => { if (e.target.id === 'activeModal') closeModal(); });
 }
 
-function closeModal() { $('#modalHost').innerHTML = ''; }
+function closeModal() { dismissRecommendedNextStepPopup(); $('#modalHost').innerHTML = ''; }
 
 function showToast(title, message) {
   const id = `toast_${Date.now()}`;
