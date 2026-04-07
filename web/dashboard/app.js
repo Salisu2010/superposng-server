@@ -2071,7 +2071,53 @@ function openBillModal(patientId = '', patientName = '') {
 }
 
 
-async function openPatientDrawer(patientId) {
+function buildDrawerInlineWorkflowForm(mode, patient = {}) {
+  const sourceSelector = mode === 'bill' ? '#billForm' : '#visitForm';
+  const source = $(sourceSelector);
+  if (!source) return '<div class="emptyState">Workflow form source is unavailable right now.</div>';
+  const clone = source.cloneNode(true);
+  const inlineId = mode === 'bill' ? 'drawerInlineBillForm' : 'drawerInlineVisitForm';
+  clone.id = inlineId;
+  clone.classList.add('compactGrid');
+  const patientIdEl = clone.querySelector('[name="patientId"]');
+  if (patientIdEl) patientIdEl.value = patient.patientId || '';
+  const patientNameEl = clone.querySelector('[name="patientName"]');
+  if (patientNameEl) patientNameEl.value = patient.fullName || patient.patientName || '';
+  const firstSubmit = clone.querySelector('button[type="submit"], .btnPrimary');
+  if (firstSubmit) firstSubmit.textContent = mode === 'bill' ? 'Save Bill Inside Drawer' : 'Save Visit Inside Drawer';
+  return clone.outerHTML;
+}
+
+async function activateDrawerWorkflowPanel(mode, patient = {}, opts = {}) {
+  const workspace = document.getElementById('drawerWorkflowWorkspace');
+  if (!workspace) return;
+  const normalizedMode = mode === 'bill' ? 'bill' : 'visit';
+  const patientLabel = escapeHtml(patient.fullName || patient.patientName || patient.patientId || 'Selected Patient');
+  workspace.innerHTML = `
+    <div class="miniPanel" style="border:1px solid rgba(59,130,246,0.18);background:rgba(15,23,42,0.48);padding:16px;border-radius:20px;">
+      <div class="cardHead compact" style="margin-bottom:12px;"><div><div class="eyebrow">Drawer Workspace</div><h3>${normalizedMode === 'bill' ? 'Create Bill' : 'New Visit'} • ${patientLabel}</h3></div><div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerWorkspaceSwitchVisit">New Visit</button><button class="btn btnGhost small" type="button" id="drawerWorkspaceSwitchBill">Create Bill</button></div></div>
+      <div class="quickNote" style="margin-bottom:14px;"><strong>Fast-lane mode:</strong> Save ${normalizedMode === 'bill' ? 'billing' : 'visit'} here without leaving Patient Profile Drawer.</div>
+      ${buildDrawerInlineWorkflowForm(normalizedMode, patient)}
+    </div>`;
+  document.getElementById('drawerWorkspaceSwitchVisit')?.addEventListener('click', () => activateDrawerWorkflowPanel('visit', patient, { focus: true }));
+  document.getElementById('drawerWorkspaceSwitchBill')?.addEventListener('click', () => activateDrawerWorkflowPanel('bill', patient, { focus: true }));
+  const formId = normalizedMode === 'bill' ? '#drawerInlineBillForm' : '#drawerInlineVisitForm';
+  const path = normalizedMode === 'bill' ? '/api/bill/create' : '/api/visit/create';
+  const successMsg = normalizedMode === 'bill' ? 'Bill created' : 'Visit saved';
+  bindForm(formId, path, successMsg, async (res) => {
+    showToast(normalizedMode === 'bill' ? 'Bill Created' : 'Visit Saved', normalizedMode === 'bill' ? `${res?.bill?.category || 'Service'} billing saved inside patient profile` : 'Clinical visit recorded inside patient profile');
+    await targetedRealtimeRefresh(['patients','visits','bills','doctor_queue','appointments','admissions','lab_requests','pharmacy_dispenses','nurse_desk','prescriptions','staff','audit_logs']);
+    await openPatientDrawer(patient.patientId || state.selectedPatient?.patientId || '', { workspaceMode: normalizedMode, focusWorkspace: true });
+  });
+  const target = workspace.querySelector(formId);
+  if (opts.focus !== false && target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const firstInput = target.querySelector('input, textarea, select');
+    if (firstInput) firstInput.focus({ preventScroll: true });
+  }
+}
+
+async function openPatientDrawer(patientId, opts = {}) {
   if (!patientId) return;
   const seed = normalizePatientRecord(
     state.selectedPatient?.patientId === patientId
@@ -2133,7 +2179,7 @@ async function openPatientDrawer(patientId) {
             <h3>${escapeHtml(suggestion.headline || 'Continue immediately after registration')}</h3>
             <div class="itemMeta"><span>Open billing</span><span>Start consultation</span><span>No extra navigation</span></div>
           </div>
-          <div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill</button></div>
+          <div class="row gap8"><button class="btn btnGhost small" type="button" id="drawerEditBtn">Edit Patient</button><button class="btn btnGhost small" type="button" id="drawerBillBtn">Create Bill Inside Drawer</button><button class="btn btnGhost small" type="button" id="drawerVisitQuickBtn">New Visit Inside Drawer</button></div>
         </div>
         <div class="quickNote smartNextNote"><strong>Smart suggestion:</strong> ${escapeHtml(suggestion.reason || '')}</div>
         <div class="drawerFastLaneGrid">
@@ -2141,7 +2187,7 @@ async function openPatientDrawer(patientId) {
             <span>Create Bill ${billRecommended ? '• Recommended' : ''}</span>
             <small>${escapeHtml(suggestion.billingText || 'Open billing desk and receipt flow instantly')}</small>
           </button>
-          <button class="drawerPrimaryActionBtn visit ${visitRecommended ? 'fastLaneFocus' : ''}" type="button" id="drawerVisitPrimaryBtn" data-primary-drawer-action="visit" data-patient-action="visit" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}" aria-label="New Visit${visitRecommended ? ' recommended' : ''}">
+          <button class="drawerPrimaryActionBtn visit ${visitRecommended ? 'fastLaneFocus' : ''}" type="button" id="drawerVisitPrimaryBtn" data-primary-drawer-action="visit" aria-label="New Visit${visitRecommended ? ' recommended' : ''}">
             <span>New Visit ${visitRecommended ? '• Recommended' : ''}</span>
             <small>${escapeHtml(suggestion.visitText || 'Send patient straight to doctor consultation workflow')}</small>
           </button>
@@ -2157,8 +2203,12 @@ async function openPatientDrawer(patientId) {
             ['admission','Admission','Ward / bed'],
             ['nurse','Nurse Desk','Vitals / note'],
             ['queue','Queue','Doctor waiting line']
-          ].map(([action,title,note]) => `<button class="drawerActionBtn" type="button" ${action === 'visit' ? 'id="drawerVisitBtn" data-primary-drawer-action="visit"' : ''} data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}">${title}<small>${note}</small></button>`).join('')}
+          ].map(([action,title,note]) => `<button class="drawerActionBtn" type="button" ${action === 'visit' ? 'id="drawerVisitBtn" data-primary-drawer-action="visit" data-drawer-inline-action="visit"' : `data-patient-action="${action}" data-patient-id="${escapeHtml(p.patientId || patientId)}" data-patient-name="${escapeHtml(p.fullName || p.patientName || '')}"`} >${title}<small>${note}</small></button>`).join('')}
         </div>
+      </div>
+      <div class="drawerSection">
+        <div class="cardHead compact"><div><div class="eyebrow">Fast-lane Workspace</div><h3>Create Bill or New Visit inside this profile drawer</h3></div><div class="itemMeta"><span>No exit</span><span>No extra navigation</span></div></div>
+        <div id="drawerWorkflowWorkspace"><div class="emptyState">Choose <b>Create Bill</b> or <b>New Visit</b> above to open the form table here inside the drawer.</div></div>
       </div>
       <div class="drawerSplitGrid">
         <div class="drawerPanelCard">
@@ -2175,13 +2225,20 @@ async function openPatientDrawer(patientId) {
         <div class="stack10">${billing.length ? billing.map(b => `<div class="miniPanel"><div class="itemTitle">${escapeHtml(b.category || 'General')} • ${money(b.total)}</div><div class="itemMeta"><span>${money(b.paid)} paid</span><span>${money(b.balance)} balance</span><span>${fmtDateTime(b.createdAt)}</span></div><div class="inlineActions"><button class="pillBtn" type="button" data-receipt="${escapeHtml(b.billId || '')}">Open Receipt</button><button class="pillBtn warn" type="button" data-edit-bill="${escapeHtml(b.billId || '')}" data-category="${escapeHtml(b.category || '')}" data-total="${escapeHtml(String(b.total || ''))}" data-paid="${escapeHtml(String(b.paid || ''))}" data-status="${escapeHtml(b.status || '')}" data-payment="${escapeHtml(b.paymentMethod || '')}" data-description="${escapeHtml(b.description || '')}">Edit Bill</button></div></div>`).join('') : `<div class="emptyState">No bills created for this patient.</div>`}</div>
       </div>
     `);
-    const openBillFromDrawer = () => { closeModal(); setSelectedPatient(p); openBillModal(p.patientId || patientId, p.fullName || p.patientName || ''); };
+    const openBillFromDrawer = () => activateDrawerWorkflowPanel('bill', p, { focus: true });
+    const openVisitFromDrawer = () => activateDrawerWorkflowPanel('visit', p, { focus: true });
     document.getElementById('drawerBillBtn')?.addEventListener('click', openBillFromDrawer);
     document.getElementById('drawerBillPrimaryBtn')?.addEventListener('click', openBillFromDrawer);
+    document.getElementById('drawerVisitBtn')?.addEventListener('click', openVisitFromDrawer);
+    document.getElementById('drawerVisitPrimaryBtn')?.addEventListener('click', openVisitFromDrawer);
+    document.getElementById('drawerVisitQuickBtn')?.addEventListener('click', openVisitFromDrawer);
     document.getElementById('drawerEditBtn')?.addEventListener('click', () => openPatientWizard(p));
     applyPostSaveDrawerFocus();
     const activeModal = document.getElementById('activeModal');
     bindPatientActionButtons(activeModal);
+    if (opts.workspaceMode === 'bill' || opts.workspaceMode === 'visit') {
+      activateDrawerWorkflowPanel(opts.workspaceMode, p, { focus: opts.focusWorkspace !== false });
+    }
     $$('[data-receipt]', activeModal).forEach(btn => btn.addEventListener('click', () => openReceiptPreview(btn.dataset.receipt)));
     $$('[data-edit-bill]', activeModal).forEach(btn => btn.addEventListener('click', () => openBillEditModal({ billId: btn.dataset.editBill, category: btn.dataset.category, total: btn.dataset.total, paid: btn.dataset.paid, status: btn.dataset.status, paymentMethod: btn.dataset.payment, description: btn.dataset.description })));
   } catch (err) {
