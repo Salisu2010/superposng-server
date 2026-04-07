@@ -590,3 +590,341 @@ body.sidebar-open-mobile .sidebarBackdrop{opacity:1;pointer-events:auto}
 .compactSearchRow{margin-top:12px}
 @media (max-width: 980px){.commandDockMetrics,.searchDockActions,.commandDockActions,.workflowInsightRail{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media (max-width: 620px){.commandDockMetrics,.searchDockActions,.commandDockActions,.workflowInsightRail{grid-template-columns:1fr;}}
+
+/* ===== Simple Fast Enterprise Redesign Override ===== */
+:root{
+  --bg:#0b1220;
+  --bg-soft:#10192b;
+  --card:#121d31;
+  --line:rgba(255,255,255,.08);
+  --line-strong:rgba(255,255,255,.12);
+}
+body{
+  background:linear-gradient(180deg,#08111f 0%, #0b1424 100%);
+}
+body::before, body::after, .brandAura, .heroRightPro, .heroPanelPro{display:none !important}
+.glass,
+.kpiCard,
+.queueCard,
+.miniPanel,
+.listCard,
+.feedItem,
+.doctorRow,
+.doctorWidgetCard,
+.alertItem,
+.searchCard,
+.billQuickCard,
+.drawerCard,
+.metricRow,
+.modalCard,
+.sidebar,
+.topbar,
+.card,
+.metaCard,
+.sideStatGrid div,
+.footerSignal,
+.navBtn,
+.actionCard,
+.quickBtn,
+.speedJumpBtn,
+.workflowPatientBanner,
+.rayon,
+.ribbonCard{
+  backdrop-filter:none !important;
+  box-shadow:none !important;
+}
+.shellSimpleFast{
+  grid-template-columns:280px minmax(0,1fr);
+  gap:18px;
+}
+.simpleSidebar{
+  background:var(--bg-soft);
+  border-color:var(--line);
+}
+.compactBrandBlock{
+  padding:18px 18px 10px;
+}
+.compactBrandBlock h1{
+  margin:6px 0 8px;
+  font-size:1.35rem;
+  line-height:1.2;
+}
+.compactConnectionPanel,
+.compactQuickLaunch,
+.simpleSummaryPanel,
+.simpleFooterPanel,
+.navPanel{
+  background:rgba(255,255,255,.02);
+  border:1px solid var(--line);
+}
+.navSidebarPrimary .navBtn{
+  background:rgba(95,181,255,.06);
+}
+.navPanelSecondary .navBtn{
+  opacity:.88;
+}
+.simpleEnterpriseContent{
+  gap:18px;
+}
+.simpleTopbar{
+  grid-template-columns:minmax(0,1.4fr) minmax(280px,.9fr);
+  padding:20px 22px;
+  background:var(--card);
+}
+.compactMeta{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.quickCommandBarSimple,
+.tickerStripSimple,
+.workflowSpeedCard,
+.workflowInsightsCard,
+.patientSpotlightCard,
+.commandCenterCard,
+.workflowPatientCard,
+.overviewMainCard,
+.overviewSideCard,
+.overviewWideCard,
+.workflowDeskCard,
+.registryCard,
+.patientEntryCard,
+.aiSpotlightCard,
+.analyticsExecutiveCard,
+.doctorCommandCard,
+.railCard,
+.modalCard{
+  background:var(--card);
+  border:1px solid var(--line);
+}
+.focusRailSimple{
+  gap:10px;
+  margin-top:-4px;
+}
+.focusRailSimple .focusChip{
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--line);
+}
+.kpiGrid{
+  gap:14px;
+}
+.kpiCard{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:16px;
+}
+.overviewGridSimple{
+  display:grid;
+  grid-template-columns:minmax(0,1.25fr) minmax(300px,.8fr);
+  gap:18px;
+}
+.overviewWideCard{grid-column:1 / -1}
+.simpleActionGrid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.actionCard,
+.quickBtn,
+.speedJumpBtn,
+.fabAction,
+.iconBtn,
+.btn,
+input,
+select,
+textarea{
+  border-radius:14px;
+}
+.actionCard,
+.quickBtn,
+.speedJumpBtn,
+.fabAction{
+  border:1px solid var(--line);
+  background:rgba(255,255,255,.03);
+}
+.actionCard:hover,
+.quickBtn:hover,
+.speedJumpBtn:hover,
+.navBtn:hover,
+.btn:hover{
+  transform:translateY(-1px);
+}
+.chartHost{
+  min-height:280px;
+  border-radius:18px;
+  background:rgba(255,255,255,.02);
+  border:1px solid var(--line);
+}
+.smallTall{min-height:220px}
+.commandRibbon{
+  margin-bottom:14px;
+}
+.compactRibbon{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.ribbonCard{
+  padding:14px 16px;
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--line);
+  border-radius:16px;
+}
+.secondaryTabHeader{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:flex-start;
+  margin-bottom:14px;
+}
+.secondaryStatusRow{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.patientSpotlightShell,
+.registryToolbar,
+.quickCommandBar,
+.workspaceHero,
+.finderRow,
+.workflowSpeedBar{
+  align-items:center;
+}
+.patientSpotlightShell{
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+}
+.selectedPatientHub,
+.patientCommandDock,
+.workflowInsightRail,
+.searchActionDock,
+#searchActionDock{
+  min-height:72px;
+}
+.workflowGridSimple{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.workflowGridSimple .spanWide,
+.workflowGridSimple .spanFull{grid-column:1 / -1}
+.workflowDeskCard{
+  border-radius:18px;
+}
+.workflowFormCard,
+.formGrid input,
+.formGrid select,
+.formGrid textarea,
+.finderRow input{
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--line);
+}
+.formGrid textarea{min-height:88px}
+.queueBoard,
+.summaryGrid,
+.enterpriseInsightsGrid,
+.executiveOverviewGrid{
+  gap:12px;
+}
+.searchDeskGrid{
+  align-items:start;
+}
+.aiSpotlight{
+  border-radius:18px;
+  background:linear-gradient(180deg,rgba(95,181,255,.10),rgba(255,255,255,.02));
+  border:1px solid var(--line);
+}
+.fabMain{
+  width:56px;
+  height:56px;
+}
+.sidebar-collapsed .shellSimpleFast{
+  grid-template-columns:88px minmax(0,1fr);
+}
+.sidebar-collapsed .compactBrandBlock p,
+.sidebar-collapsed .compactBrandBlock h1,
+.sidebar-collapsed .sectionTitle,
+.sidebar-collapsed .navBtn small,
+.sidebar-collapsed .sidebarStatusPill,
+.sidebar-collapsed .sideStatGrid,
+.sidebar-collapsed .simpleSummaryPanel,
+.sidebar-collapsed .simpleFooterPanel,
+.sidebar-collapsed .compactQuickLaunch,
+.sidebar-collapsed .navPanelSecondary,
+.sidebar-collapsed .compactConnectionPanel input,
+.sidebar-collapsed .compactConnectionPanel .row,
+.sidebar-collapsed .compactConnectionPanel .miniStats{display:none !important}
+.sidebar-collapsed .navBtn span{font-size:.86rem}
+@media (max-width: 1300px){
+  .overviewGridSimple,
+  .workspaceHero{
+    grid-template-columns:1fr;
+  }
+  .workflowGridSimple{
+    grid-template-columns:1fr;
+  }
+}
+@media (max-width: 1100px){
+  .shellSimpleFast{
+    grid-template-columns:1fr;
+  }
+  .simpleSidebar{
+    position:fixed;
+    left:16px;
+    top:16px;
+    bottom:16px;
+    width:min(320px, calc(100vw - 32px));
+    transform:translateX(-120%);
+    z-index:90;
+  }
+  body.sidebar-open-mobile .simpleSidebar{
+    transform:translateX(0);
+  }
+  .sidebarBackdrop{
+    display:block;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    opacity:0;
+    pointer-events:none;
+    transition:.2s ease;
+    z-index:80;
+  }
+  body.sidebar-open-mobile .sidebarBackdrop{
+    opacity:1;
+    pointer-events:auto;
+  }
+  .mobileOnly{display:inline-flex}
+  .simpleTopbar{
+    grid-template-columns:1fr;
+  }
+}
+@media (max-width: 780px){
+  body{padding:12px}
+  .compactRibbon,
+  .kpiGrid,
+  .queueBoard,
+  .summaryGrid,
+  .enterpriseInsightsGrid,
+  .executiveOverviewGrid,
+  .dualAnalyticsRow,
+  .operationsShell,
+  .analyticsSuite,
+  .grid2,
+  .topMeta,
+  .miniStats.compactStats{
+    grid-template-columns:1fr !important;
+  }
+  .patientSpotlightShell,
+  .secondaryTabHeader,
+  .quickCommandBar,
+  .headlineRow,
+  .finderRow,
+  .row.split2{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .quickCommandActions{
+    width:100%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  .quickCommandActions .btn{width:100%}
+}

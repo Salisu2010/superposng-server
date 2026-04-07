@@ -64,6 +64,7 @@ function bindUI() {
   window.addEventListener('resize', handleResponsiveSidebar);
   $('#refreshBtn').addEventListener('click', refreshAll);
   $('#manualFeedBtn').addEventListener('click', loadNotificationsAndRender);
+  $('#manualFeedBtnSecondary')?.addEventListener('click', loadNotificationsAndRender);
   $('#timelineDays').addEventListener('change', async (e) => {
     state.timelineDays = Number(e.target.value || 14);
     localStorage.setItem('clinicPortalTimelineDays', String(state.timelineDays));
@@ -209,13 +210,13 @@ function switchTab(tab, pushHash = false) {
   $$('.tabPane').forEach(p => p.classList.add('hidden'));
   $(`#tab-${tab}`)?.classList.remove('hidden');
   $('#modeText').textContent = {
-    overview: 'Analytics',
+    overview: 'Overview',
     operations: 'Operations',
     analytics: 'Intelligence',
     patients: 'Patients',
     workflow: 'Workflow',
     search: 'Search'
-  }[tab] || 'Analytics';
+  }[tab] || 'Overview';
   document.getElementById('focusChipMode').textContent = {
     overview: 'Executive Overview',
     operations: 'Operations Board',
@@ -225,6 +226,8 @@ function switchTab(tab, pushHash = false) {
     search: 'Patient Search'
   }[tab] || 'Executive Overview';
   document.getElementById('focusChipMode').classList.add('active');
+  if (tab === 'search') setTimeout(() => $('#searchInput')?.focus(), 80);
+  if (tab === 'patients') setTimeout(() => $('#patientForm [name="fullName"]')?.focus(), 80);
   if (pushHash) history.replaceState(null, '', `#${tab}`);
   setMobileSidebar(false);
   window.scrollTo({ top: 0, behavior: 'smooth' });

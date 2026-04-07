@@ -3,33 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Clinic Pro NG Enterprise Command Center</title>
+  <title>Clinic Pro NG Fast Enterprise Dashboard</title>
   <link rel="stylesheet" href="/dashboard/style.css">
 </head>
 <body>
-<div class="shell enterpriseShell">
+<div class="shell enterpriseShell shellSimpleFast">
   <div class="sidebarBackdrop" id="sidebarBackdrop"></div>
-  <aside class="sidebar glass enterpriseSidebar" id="enterpriseSidebar">
+
+  <aside class="sidebar glass enterpriseSidebar simpleSidebar" id="enterpriseSidebar">
     <div class="sidebarInner">
       <div class="sidebarTopActions">
         <button id="sidebarCollapseBtn" class="iconBtn" type="button" aria-label="Collapse sidebar">☰</button>
-        <div class="sidebarStatusPill">Hospital UI v9.2</div>
+        <div class="sidebarStatusPill">Fast Enterprise UI</div>
       </div>
-      <section class="brandBlock brandBlockPro">
-        <div class="brandAura"></div>
+
+      <section class="brandBlock brandBlockPro compactBrandBlock">
         <div class="eyebrow">Clinic Pro NG</div>
-        <h1>World Class Hospital Portal</h1>
-        <p class="muted">Unified enterprise control room for registration, billing, queue, lab, prescription, staff workflow and realtime hospital intelligence.</p>
+        <h1>Simple + Fast Hospital Portal</h1>
+        <p class="muted">Premium redesign focused on speed, patient flow, billing, queue, lab and daily hospital work.</p>
       </section>
 
-      <section class="panel stack10 connectionPanel">
-        <div class="sectionTitle">Portal Connection</div>
-        <label class="fieldLabel">Base URL</label>
+      <section class="panel stack10 compactConnectionPanel">
+        <div class="sectionTitle">Connection</div>
         <input id="baseUrl" placeholder="https://api.superpos.com.ng">
-        <label class="fieldLabel">Hospital ID</label>
-        <input id="hospitalId" placeholder="cln_xxxxxxxx">
-        <label class="fieldLabel">Access Token <small class="muted">optional but recommended for secure SSE</small></label>
-        <input id="accessToken" placeholder="Paste JWT token if available">
+        <input id="hospitalId" placeholder="Hospital ID">
+        <input id="accessToken" placeholder="Access token (optional)">
         <div class="row split2">
           <button id="connectBtn" class="btn btnPrimary" type="button">Connect</button>
           <button id="refreshBtn" class="btn btnGhost" type="button">Refresh</button>
@@ -41,34 +39,40 @@
       </section>
 
       <section class="panel stack8 navPanel">
-        <div class="sectionTitle">Sidebar Navigation</div>
-        <nav class="navList navSidebar">
-          <button class="navBtn active" data-tab="overview" type="button"><span>Executive Overview</span><small>Live KPIs, revenue, queue board</small></button>
-          <button class="navBtn" data-tab="operations" type="button"><span>Operations Board</span><small>Activity feed, finance, doctors</small></button>
-          <button class="navBtn" data-tab="analytics" type="button"><span>Analytics Suite</span><small>Signals, benchmarks, summaries</small></button>
-          <button class="navBtn" data-tab="patients" type="button"><span>Patients Desk</span><small>Registration, registry, patient profile</small></button>
-          <button class="navBtn" data-tab="workflow" type="button"><span>Workflow Workspace</span><small>Billing, visit, queue, lab, nurse</small></button>
-          <button class="navBtn" data-tab="search" type="button"><span>Patient Search</span><small>Find patient and AI summary</small></button>
+        <div class="sectionTitle">Main Navigation</div>
+        <nav class="navList navSidebar navSidebarPrimary">
+          <button class="navBtn active" data-tab="overview" type="button"><span>Overview</span><small>KPIs, queue, alerts</small></button>
+          <button class="navBtn" data-tab="patients" type="button"><span>Patients</span><small>Registry and command center</small></button>
+          <button class="navBtn" data-tab="workflow" type="button"><span>Workflow</span><small>Billing, visit, lab, pharmacy</small></button>
+          <button class="navBtn" data-tab="search" type="button"><span>Search</span><small>Find patient fast</small></button>
         </nav>
       </section>
 
-      <section class="panel stack8 quickLaunchPanel">
-        <div class="sectionTitle">Quick Launch</div>
-        <button id="quickPatientBtn" class="quickBtn" type="button">New Patient Registration</button>
-        <button id="quickBillBtn" class="quickBtn" type="button">Direct Billing</button>
-        <button id="quickVisitBtn" class="quickBtn" type="button">New Visit</button>
-        <button id="quickQueueBtn" class="quickBtn" type="button">Doctor Queue</button>
+      <section class="panel stack8 navPanel navPanelSecondary">
+        <div class="sectionTitle">Extra Boards</div>
+        <nav class="navList navSidebar">
+          <button class="navBtn" data-tab="operations" type="button"><span>Operations</span><small>Activity, finance, doctor load</small></button>
+          <button class="navBtn" data-tab="analytics" type="button"><span>Analytics</span><small>Executive intelligence</small></button>
+        </nav>
       </section>
 
-      <section class="panel stack8 summaryPanel">
-        <div class="sectionTitle">Command Snapshot</div>
+      <section class="panel stack8 quickLaunchPanel compactQuickLaunch">
+        <div class="sectionTitle">Quick Launch</div>
+        <button id="quickPatientBtn" class="quickBtn" type="button">New Patient</button>
+        <button id="quickBillBtn" class="quickBtn" type="button">New Bill</button>
+        <button id="quickVisitBtn" class="quickBtn" type="button">Visit Desk</button>
+        <button id="quickQueueBtn" class="quickBtn" type="button">Operations Board</button>
+      </section>
+
+      <section class="panel stack8 summaryPanel simpleSummaryPanel">
+        <div class="sectionTitle">Live Snapshot</div>
         <div id="sideSummary" class="stack8">
           <div class="miniPanel"><div class="itemTitle">Status</div><div>Connect portal to start live mode.</div></div>
         </div>
       </section>
 
-      <section class="panel stack8 sidebarFooterPanel">
-        <div class="sectionTitle">Shift Readiness</div>
+      <section class="panel stack8 sidebarFooterPanel simpleFooterPanel">
+        <div class="sectionTitle">Status</div>
         <div class="sidebarFooterGrid">
           <div class="footerSignal"><span>Portal</span><strong id="sidebarPortalState">Standby</strong></div>
           <div class="footerSignal"><span>Queue</span><strong id="sidebarQueueState">0 Open</strong></div>
@@ -78,66 +82,44 @@
     </div>
   </aside>
 
-  <main class="content enterpriseContent">
-    <section class="topbar glass topbarPro">
+  <main class="content enterpriseContent simpleEnterpriseContent">
+    <section class="topbar glass topbarPro simpleTopbar">
       <button id="sidebarToggleMobile" class="iconBtn mobileOnly" type="button" aria-label="Open sidebar">☰</button>
-      <div>
-        <div class="eyebrow">Executive Control Bar</div>
+      <div class="topbarCopy">
+        <div class="eyebrow">Fast Enterprise Dashboard</div>
         <div class="headlineRow">
-          <h2 id="clinicTitle">Clinic Pro NG Web Portal</h2>
+          <h2 id="clinicTitle">Clinic Pro NG Command Center</h2>
           <span class="livePill" id="livePill">Disconnected</span>
         </div>
-        <p id="heroSub" class="heroSub">A premium browser command center for hospital operations, patient flow, billing, workforce coordination and realtime care delivery.</p>
+        <p id="heroSub" class="heroSub">Minimal clicks, faster workflow and a cleaner global dashboard for front desk, doctors, billing and care teams.</p>
       </div>
-      <div class="topMeta topMetaPro">
+      <div class="topMeta topMetaPro compactMeta">
         <div class="metaCard"><span>System Time</span><strong id="systemClock">--</strong></div>
         <div class="metaCard"><span>Hospital</span><strong id="spotHospital">--</strong></div>
         <div class="metaCard"><span>Realtime</span><strong id="realtimeText">Idle</strong></div>
-        <div class="metaCard"><span>Mode</span><strong id="modeText">Analytics</strong></div>
+        <div class="metaCard"><span>Mode</span><strong id="modeText">Overview</strong></div>
       </div>
     </section>
 
-    <section class="glass quickCommandBar">
+    <section class="glass quickCommandBar quickCommandBarSimple">
       <div class="quickCommandSearch">
         <div>
           <div class="eyebrow">Fast Staff Mode</div>
-          <strong>Simple, fast and visual command flow</strong>
-          <div class="itemMeta">Jump straight to patient search, billing, visits or refresh without opening extra menus.</div>
+          <strong>Open what matters immediately</strong>
+          <div class="itemMeta">Use Patients, Workflow and Search as the main working desks. The rest stays available without crowding the screen.</div>
         </div>
       </div>
       <div class="quickCommandActions">
-        <button id="smartNavPatients" class="btn btnGhost" type="button">Patients Desk</button>
-        <button id="smartNavWorkflow" class="btn btnGhost" type="button">Workflow Desk</button>
-        <button id="smartNavSearch" class="btn btnGhost" type="button">Search Desk</button>
-        <button id="smartRefreshBtn" class="btn btnGhost" type="button">Refresh Live Data</button>
+        <button id="smartNavPatients" class="btn btnGhost" type="button">Patients</button>
+        <button id="smartNavWorkflow" class="btn btnGhost" type="button">Workflow</button>
+        <button id="smartNavSearch" class="btn btnGhost" type="button">Search</button>
+        <button id="smartRefreshBtn" class="btn btnGhost" type="button">Refresh</button>
         <button id="smartNewPatientBtn" class="btn btnPrimary" type="button">New Patient</button>
         <button id="smartNewBillBtn" class="btn btnPrimary" type="button">New Bill</button>
       </div>
     </section>
 
-    <section class="heroGrid heroGridPro">
-      <article class="heroPanel glass heroPanelPro">
-        <div class="heroCopy">
-          <div class="eyebrow">Enterprise Hospital Command Center</div>
-          <h3>One world class workspace for patient registration, live billing, queue control, lab flow, prescription monitoring and operational intelligence</h3>
-          <p>Redesigned into a premium hospital portal with a dedicated sidebar navigation, executive overview, rich workflow workspace, live command cards and instant cross-desk visibility.</p>
-        </div>
-        <div class="heroBadges" id="heroBadges">
-          <span>SSE Live</span>
-          <span>Realtime Sync</span>
-          <span>Billing Control</span>
-          <span>Patient Registry</span>
-          <span>Doctor Queue</span>
-          <span>Hospital Analytics</span>
-        </div>
-      </article>
-      <article class="heroRight glass heroRightPro">
-        <div class="cardHead compact"><div><div class="eyebrow">Realtime Board</div><h3>Live Command Pulse</h3></div></div>
-        <div id="realtimeBoard" class="stack10"></div>
-      </article>
-    </section>
-
-    <section class="focusRail">
+    <section class="focusRail focusRailSimple">
       <div class="focusChip active" id="focusChipMode">Executive Overview</div>
       <div class="focusChip" id="focusChipTransport">Realtime Idle</div>
       <div class="focusChip" id="focusChipSync">Last Sync --</div>
@@ -146,90 +128,96 @@
 
     <section id="kpiGrid" class="kpiGrid revealUp"></section>
 
-    <section class="glass tickerStrip tickerStripPro">
+    <section class="glass tickerStrip tickerStripSimple">
       <div class="tickerHead">Live Counter Stream</div>
       <div id="liveTicker" class="tickerRow"></div>
     </section>
 
     <section id="tab-overview" class="tabPane revealUp">
-      <div class="executiveShell">
-        <div class="overviewMain stack16">
-          <article class="glass card">
-            <div class="cardHead">
-              <div>
-                <div class="eyebrow">Revenue Intelligence</div>
-                <h3>Collections Trend</h3>
-              </div>
-              <div class="row alignCenter">
-                <span class="legend"><i class="dot dotCyan"></i>Paid Revenue</span>
-                <select id="timelineDays" class="select compact">
-                  <option value="7">7d</option>
-                  <option value="14" selected>14d</option>
-                  <option value="30">30d</option>
-                  <option value="60">60d</option>
-                </select>
-              </div>
+      <div class="overviewGridSimple">
+        <article class="glass card overviewMainCard">
+          <div class="cardHead">
+            <div>
+              <div class="eyebrow">Revenue Intelligence</div>
+              <h3>Collections Trend</h3>
             </div>
-            <div id="revenueChart" class="chartHost"></div>
-          </article>
-
-          <div class="dualAnalyticsRow">
-            <article class="glass card">
-              <div class="cardHead compact"><div><div class="eyebrow">Operational Trend</div><h3>Patients, Visits and Queue Growth</h3></div></div>
-              <div id="operationsChart" class="chartHost smallTall"></div>
-            </article>
-            <article class="glass card">
-              <div class="cardHead compact"><div><div class="eyebrow">Performance Mix</div><h3>Operational Balance</h3></div></div>
-              <div id="mixChart" class="chartHost smallTall"></div>
-            </article>
+            <div class="row alignCenter gap8">
+              <button class="btn btnGhost small" id="manualFeedBtn" type="button">Reload Feed</button>
+              <select id="timelineDays" class="select compact">
+                <option value="7">7d</option>
+                <option value="14" selected>14d</option>
+                <option value="30">30d</option>
+                <option value="60">60d</option>
+              </select>
+            </div>
           </div>
+          <div id="revenueChart" class="chartHost"></div>
+        </article>
 
-          <article class="glass card">
-            <div class="cardHead"><div><div class="eyebrow">Operations Theater</div><h3>Doctor Queue Board</h3></div></div>
-            <div id="queueBoard" class="queueBoard"></div>
-          </article>
+        <article class="glass card overviewSideCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Realtime Pulse</div><h3>Live Command Pulse</h3></div></div>
+          <div id="realtimeBoard" class="stack10"></div>
+        </article>
 
-          <article class="glass card spanFull">
-            <div class="cardHead compact"><div><div class="eyebrow">Executive Control Dashboard</div><h3>Revenue, Capacity and Enterprise Readiness</h3></div><span class="badge">CEO / Medical Director</span></div>
-            <div id="executiveOverviewGrid" class="executiveOverviewGrid"></div>
-          </article>
-        </div>
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Operational Trend</div><h3>Patients, Visits and Queue</h3></div></div>
+          <div id="operationsChart" class="chartHost smallTall"></div>
+        </article>
 
-        <div class="overviewRail stack16">
-          <article class="glass card railCard">
-            <div class="cardHead compact"><div><div class="eyebrow">Action Center</div><h3>Quick Actions</h3></div></div>
-            <div class="actionGrid">
-              <button class="actionCard openPatientModal" type="button">Register Patient</button>
-              <button class="actionCard openBillModal" type="button">Create Bill</button>
-              <button class="actionCard" id="railVisitBtn" type="button">Open Visit Desk</button>
-              <button class="actionCard" id="railSearchBtn" type="button">Find Patient</button>
-            </div>
-          </article>
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Performance Mix</div><h3>Operational Balance</h3></div></div>
+          <div id="mixChart" class="chartHost smallTall"></div>
+        </article>
 
-          <article class="glass card railCard">
-            <div class="cardHead compact"><div><div class="eyebrow">AI Layer</div><h3>Risk Watchlist</h3></div></div>
-            <div id="alerts" class="stack10"></div>
-          </article>
+        <article class="glass card overviewWideCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Doctor Queue</div><h3>Live Queue Board</h3></div></div>
+          <div id="queueBoard" class="queueBoard"></div>
+        </article>
 
-          <article class="glass card railCard">
-            <div class="cardHead compact"><div><div class="eyebrow">Doctor Load</div><h3>Top Doctors</h3></div></div>
-            <div id="doctorBars" class="stack10"></div>
-          </article>
-        </div>
+        <article class="glass card overviewWideCard">
+          <div class="cardHead compact"><div><div class="eyebrow">Executive Control</div><h3>Revenue, Capacity and Readiness</h3></div></div>
+          <div id="executiveOverviewGrid" class="executiveOverviewGrid"></div>
+        </article>
+
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Quick Actions</div><h3>Open Core Desk</h3></div></div>
+          <div class="actionGrid simpleActionGrid">
+            <button class="actionCard openPatientModal" type="button">Register Patient</button>
+            <button class="actionCard openBillModal" type="button">Create Bill</button>
+            <button class="actionCard" id="railVisitBtn" type="button">Visit Desk</button>
+            <button class="actionCard" id="railSearchBtn" type="button">Find Patient</button>
+          </div>
+        </article>
+
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Risk Watch</div><h3>Alerts</h3></div></div>
+          <div id="alerts" class="stack10"></div>
+        </article>
+
+        <article class="glass card">
+          <div class="cardHead compact"><div><div class="eyebrow">Doctor Load</div><h3>Top Doctors</h3></div></div>
+          <div id="doctorBars" class="stack10"></div>
+        </article>
       </div>
     </section>
 
     <section id="tab-operations" class="tabPane hidden revealUp">
-      <div class="commandRibbon operationsRibbon">
-        <div class="ribbonCard accentBlue"><span>Operations Status</span><strong id="opsRibbonStatus">Live Control</strong><small>Command your front desk, doctor queue, billing flow and live operational activity from a single board.</small></div>
-        <div class="ribbonCard accentOrange"><span>Billing Engine</span><strong id="opsRibbonBilling">Collections Ready</strong><small>Track collection pressure, recent bills and receipt flow without leaving the operations board.</small></div>
-        <div class="ribbonCard accentGreen"><span>Doctor Coverage</span><strong id="opsRibbonDoctors">Balanced Load</strong><small>Watch service load, average waits and queue concentration across doctors in realtime.</small></div>
+      <div class="secondaryTabHeader">
+        <div>
+          <div class="eyebrow">Extra Board</div>
+          <h3>Operations Board</h3>
+        </div>
+        <div class="secondaryStatusRow">
+          <span class="badge" id="opsRibbonStatus">Live Control</span>
+          <span class="badge" id="opsRibbonBilling">Collections Ready</span>
+          <span class="badge" id="opsRibbonDoctors">Balanced Load</span>
+        </div>
       </div>
       <div class="operationsShell">
         <article class="glass card spanWide">
           <div class="cardHead">
             <div><div class="eyebrow">Live Activity</div><h3>Operational Feed</h3></div>
-            <button id="manualFeedBtn" class="btn btnGhost small" type="button">Reload</button>
+            <button id="manualFeedBtnSecondary" class="btn btnGhost small hidden" type="button">Reload</button>
           </div>
           <div id="activityFeed" class="stack10"></div>
         </article>
@@ -240,13 +228,13 @@
         </article>
 
         <article class="glass card">
-          <div class="cardHead compact"><div><div class="eyebrow">Fast Lane</div><h3>Direct Billing Cards</h3></div></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Billing Fast Lane</div><h3>Direct Billing Cards</h3></div></div>
           <div id="billingCards" class="stack10"></div>
           <div id="recentBills" class="stack10 mt16"></div>
         </article>
 
         <article class="glass card doctorCommandCard">
-          <div class="cardHead compact"><div><div class="eyebrow">Doctor Coverage</div><h3>Operational Load</h3></div><span class="badge">Live Widget Matrix</span></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Doctor Coverage</div><h3>Operational Load</h3></div></div>
           <div id="doctors" class="stack10"></div>
         </article>
 
@@ -258,10 +246,15 @@
     </section>
 
     <section id="tab-analytics" class="tabPane hidden revealUp">
-      <div class="commandRibbon analyticsRibbon">
-        <div class="ribbonCard accentViolet"><span>Analytics Layer</span><strong id="analyticsRibbonTitle">Executive Intelligence</strong><small>Premium board-level visibility into revenue, patient throughput, queue pressure and clinical workflow performance.</small></div>
-        <div class="ribbonCard accentCyan"><span>Financial Signal</span><strong id="analyticsRibbonFinance">Revenue Engine</strong><small>Monitor collections, outstanding exposure and pharmacy contribution with fast-reading visual summaries.</small></div>
-        <div class="ribbonCard accentPink"><span>Workflow Signal</span><strong id="analyticsRibbonWorkflow">Workflow Under Watch</strong><small>Labs, appointments, prescriptions and admissions are summarized into an executive intelligence feed.</small></div>
+      <div class="secondaryTabHeader">
+        <div>
+          <div class="eyebrow">Extra Board</div>
+          <h3>Analytics Board</h3>
+        </div>
+        <div class="secondaryStatusRow">
+          <span class="badge" id="analyticsRibbonFinance">Revenue Engine</span>
+          <span class="badge" id="analyticsRibbonWorkflow">Workflow Stable</span>
+        </div>
       </div>
       <div class="analyticsSuite">
         <article class="glass card">
@@ -269,7 +262,7 @@
           <div id="financeBreakdown" class="stack10"></div>
         </article>
         <article class="glass card">
-          <div class="cardHead compact"><div><div class="eyebrow">Productivity</div><h3>Inventory + Consumables Intelligence</h3></div></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Productivity</div><h3>Inventory + Consumables</h3></div></div>
           <div id="workflowBenchmarks" class="stack10"></div>
         </article>
         <article class="glass card">
@@ -277,41 +270,42 @@
           <div id="analyticsSignals" class="stack10"></div>
         </article>
         <article class="glass card spanFull analyticsExecutiveCard">
-          <div class="cardHead compact"><div><div class="eyebrow">Executive Notes</div><h3>Board Summary</h3></div><span class="badge">Board View</span></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Executive Notes</div><h3>Board Summary</h3></div></div>
           <div id="boardSummary" class="summaryGrid"></div>
         </article>
         <article class="glass card spanFull analyticsExecutiveCard">
-          <div class="cardHead compact"><div><div class="eyebrow">Enterprise Intelligence</div><h3>Forecasts, Productivity, Bottlenecks and Branch View</h3></div><span class="badge">Enterprise Layer</span></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Enterprise Intelligence</div><h3>Forecasts, Productivity and Bottlenecks</h3></div></div>
           <div id="enterpriseInsightsGrid" class="enterpriseInsightsGrid"></div>
         </article>
         <article class="glass card spanFull analyticsExecutiveCard">
-          <div class="cardHead compact"><div><div class="eyebrow">Granular Access Control</div><h3>Per-User Permission Matrix</h3></div><span class="badge">Least Privilege</span></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Granular Access</div><h3>Permission Matrix</h3></div></div>
           <div id="accessControlGrid" class="summaryGrid"></div>
         </article>
         <article class="glass card spanFull analyticsExecutiveCard">
-          <div class="cardHead compact"><div><div class="eyebrow">Full Audit Trail</div><h3>Who Opened, Changed, Approved or Refunded</h3></div><span class="badge">Traceability</span></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Audit Trail</div><h3>Who changed what</h3></div></div>
           <div id="auditTrailGrid" class="summaryGrid"></div>
         </article>
       </div>
     </section>
 
     <section id="tab-patients" class="tabPane hidden revealUp">
-      <div class="commandRibbon patientRibbon" id="patientCommandRibbon">
-        <div class="ribbonCard accentBlue"><span>Registry Pulse</span><strong id="patientRibbonCount">0 Patients</strong><small>Connected records flowing across Android and portal.</small></div>
-        <div class="ribbonCard accentViolet"><span>Search Ready</span><strong id="patientRibbonSearch">Live Search</strong><small>Quickly jump from registry to profile, AI and billing.</small></div>
-        <div class="ribbonCard accentGreen"><span>Sync Confidence</span><strong id="patientRibbonSync">Stable</strong><small>Two-way sync intelligence is active for patient rows.</small></div>
+      <div class="commandRibbon patientRibbon compactRibbon">
+        <div class="ribbonCard accentBlue"><span>Registry Pulse</span><strong id="patientRibbonCount">0 Patients</strong><small>Recent patients and registry status.</small></div>
+        <div class="ribbonCard accentViolet"><span>Search Ready</span><strong id="patientRibbonSearch">Live Search</strong><small>Jump to patient profile and next action.</small></div>
+        <div class="ribbonCard accentGreen"><span>Sync Confidence</span><strong id="patientRibbonSync">Stable</strong><small>Cloud and Android patient rows under watch.</small></div>
       </div>
 
       <section class="glass card patientSpotlightCard">
         <div class="patientSpotlightShell">
           <div>
-            <div class="eyebrow">Doctor & Staff Fast Lane</div>
-            <h3>Simple patient-centered workflow</h3><div class="keyboardHintBar"><span>/ Search</span><span>N New Patient</span><span>V New Visit</span><span>B New Bill</span><span>L Lab</span><span>R Refresh</span></div>
-            <p class="itemMeta">Register patient once, then launch billing, appointment, visit, prescription, lab, pharmacy, admission or nurse desk directly from the same patient workspace.</p>
+            <div class="eyebrow">Fast Patient Desk</div>
+            <h3>Patient command center</h3>
+            <div class="keyboardHintBar"><span>/ Search</span><span>N New Patient</span><span>V Visit</span><span>B Bill</span><span>L Lab</span><span>R Refresh</span></div>
+            <p class="itemMeta">Open one patient and continue directly to visit, billing, prescription, lab, pharmacy, admission or nurse desk.</p>
           </div>
           <div class="row wrap gap8">
             <button class="btn btnPrimary openPatientModal" type="button">New Patient</button>
-            <button class="btn btnGhost" type="button" id="spotlightSearchBtn">Find Existing Patient</button>
+            <button class="btn btnGhost" type="button" id="spotlightSearchBtn">Find Patient</button>
           </div>
         </div>
         <div id="selectedPatientHub" class="selectedPatientHub empty">
@@ -320,9 +314,9 @@
       </section>
 
       <section class="glass card commandCenterCard">
-        <div class="cardHead compact"><div><div class="eyebrow">Phase 3 Patient Command Center</div><h3>Sticky command dock for direct next action</h3></div><span class="badge">Fast visual control</span></div>
+        <div class="cardHead compact"><div><div class="eyebrow">Patient Command Dock</div><h3>Direct next actions</h3></div></div>
         <div id="patientCommandDock" class="patientCommandDock empty">
-          <div class="emptyState">Choose a patient from Registry or Search Desk to activate the sticky command dock.</div>
+          <div class="emptyState">Choose a patient from Registry or Search to activate direct action buttons.</div>
         </div>
       </section>
 
@@ -330,8 +324,7 @@
         <article class="glass card patientEntryCard">
           <div class="cardHead cardHeadWrap">
             <div><div class="eyebrow">Quick Registration</div><h3>Front Desk Patient Entry</h3></div>
-            <div class="row gap8"><span class="badge">Fast Form</span><span class="badge">Auto Action Hub</span></div>
-            <button class="btn btnGhost small openPatientModal" type="button">Launch Full Wizard</button>
+            <button class="btn btnGhost small openPatientModal" type="button">Full Wizard</button>
           </div>
           <form id="patientForm" class="formGrid">
             <input name="fullName" placeholder="Full Name" required>
@@ -348,15 +341,16 @@
             <input name="nextOfKinPhone" placeholder="Next of Kin Phone">
             <textarea name="address" placeholder="Address" class="span2"></textarea>
             <textarea name="notes" placeholder="Notes / Triage info" class="span2"></textarea>
-            <div class="span2 row end"><button type="submit" class="btn btnPrimary">Save Patient & Open Hub</button></div>
+            <div class="span2 row end"><button type="submit" class="btn btnPrimary">Save Patient</button></div>
           </form>
         </article>
+
         <article class="glass card registryCard">
-          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div><div class="row gap8"><span class="badge">Live Feed</span><span class="badge">One-Click Actions</span></div></div>
+          <div class="cardHead"><div><div class="eyebrow">Registry</div><h3>Recent Patients</h3></div></div>
           <div class="registryToolbar registryToolbarWide">
-            <div class="registryHint">Open patient workspace and continue directly to visit, bill, appointment, prescription, lab, pharmacy, admission or nurse desk.</div>
+            <div class="registryHint">Select a patient and continue work from the command dock.</div>
             <div class="row gap8 wrap">
-              <button class="btn btnGhost small" type="button" id="patientsOpenSearchBtn">Open Search Desk</button>
+              <button class="btn btnGhost small" type="button" id="patientsOpenSearchBtn">Open Search</button>
               <button class="btn btnGhost small" type="button" id="patientsRefreshHubBtn">Refresh Registry</button>
             </div>
           </div>
@@ -367,14 +361,14 @@
     </section>
 
     <section id="tab-workflow" class="tabPane hidden revealUp">
-      <div class="commandRibbon workflowRibbon">
-        <div class="ribbonCard accentCyan"><span>Billing Desk</span><strong>Live Receipt Flow</strong><small>Create, preview and update bills without leaving the workspace.</small></div>
-        <div class="ribbonCard accentOrange"><span>Clinical Desk</span><strong>Visit + Queue</strong><small>Drive doctor queue and patient movement from one unified control area.</small></div>
-        <div class="ribbonCard accentPink"><span>Care Desk</span><strong>Lab + Rx + Nurse</strong><small>Track care actions with a richer command layout and faster sync.</small></div>
+      <div class="commandRibbon workflowRibbon compactRibbon">
+        <div class="ribbonCard accentCyan"><span>Billing Desk</span><strong>Live Receipt Flow</strong><small>Billing and receipt work.</small></div>
+        <div class="ribbonCard accentOrange"><span>Clinical Desk</span><strong>Visit + Queue</strong><small>Visit, appointment and queue.</small></div>
+        <div class="ribbonCard accentPink"><span>Care Desk</span><strong>Lab + Rx + Nurse</strong><small>Clinical support workflow.</small></div>
       </div>
 
       <section class="glass card workflowSpeedCard">
-        <div class="cardHead compact"><div><div class="eyebrow">Speed Workspace</div><h3>Jump directly to the exact desk you need</h3></div><span class="badge">Less clicking</span></div>
+        <div class="cardHead compact"><div><div class="eyebrow">Speed Workspace</div><h3>Jump to exact desk</h3></div></div>
         <div class="workflowSpeedBar">
           <button class="speedJumpBtn" type="button" data-jump-target="#billForm">Billing</button>
           <button class="speedJumpBtn" type="button" data-jump-target="#visitForm">Visit</button>
@@ -383,25 +377,25 @@
           <button class="speedJumpBtn" type="button" data-jump-target="#prescriptionForm">Prescription</button>
           <button class="speedJumpBtn" type="button" data-jump-target="#pharmacyDispenseForm">Pharmacy</button>
           <button class="speedJumpBtn" type="button" data-jump-target="#admissionForm">Admission</button>
-          <button class="speedJumpBtn" type="button" data-jump-target="#nurseForm">Nurse Desk</button>
+          <button class="speedJumpBtn" type="button" data-jump-target="#nurseForm">Nurse</button>
           <button class="speedJumpBtn" type="button" data-jump-target="#dischargeForm">Discharge</button>
         </div>
       </section>
 
       <section class="glass card workflowPatientCard" id="workflowPatientCard">
         <div id="workflowPatientBanner" class="workflowPatientBanner empty">
-          <div class="emptyState">Choose a patient from Patients Desk or Search Desk to lock this workflow to one patient and reduce repeated typing.</div>
+          <div class="emptyState">Choose a patient from Patients Desk or Search to lock workflow to one patient and reduce typing.</div>
         </div>
       </section>
 
       <section class="glass card workflowInsightsCard">
-        <div class="cardHead compact"><div><div class="eyebrow">Phase 3 Workflow Insights</div><h3>Selected patient next action board</h3></div><span class="badge">Desk intelligence</span></div>
+        <div class="cardHead compact"><div><div class="eyebrow">Workflow Insights</div><h3>Selected patient next action board</h3></div></div>
         <div id="workflowInsightRail" class="workflowInsightRail"></div>
       </section>
 
       <div class="workspaceHero">
         <article class="glass card spanWide">
-          <div class="cardHead compact"><div><div class="eyebrow">Unified Command Workspace</div><h3>Cross Desk Pulse</h3></div></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Unified Workspace</div><h3>Cross desk pulse</h3></div></div>
           <div id="workspaceSummary" class="summaryGrid"></div>
         </article>
         <article class="glass card">
@@ -409,59 +403,60 @@
           <div id="workspaceTimeline" class="stack10"></div>
         </article>
       </div>
-      <div class="workflowGrid">
+
+      <div class="workflowGrid workflowGridSimple">
         <article class="glass card workflowDeskCard" data-workspace-card="billing">
-          <div class="cardHead"><div><div class="eyebrow">Billing</div><h3>Direct Billing Workflow</h3></div><button class="btn btnGhost small openBillModal" type="button">Quick Bill Modal</button></div>
+          <div class="cardHead"><div><div class="eyebrow">Billing</div><h3>Direct Billing Workflow</h3></div><button class="btn btnGhost small openBillModal" type="button">Quick Bill</button></div>
           <form id="billForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="billing">
             <input name="patientId" placeholder="Patient ID" required>
-            <input name="patientName" placeholder="Patient Name optional">
             <input name="serviceName" placeholder="Service Name" required>
-            <input name="amount" type="number" step="0.01" placeholder="Amount" required>
-            <input name="paid" type="number" step="0.01" placeholder="Paid amount">
-            <select name="status"><option value="paid">Paid</option><option value="partial">Partial</option><option value="unpaid">Unpaid</option></select>
-            <input name="doctorName" placeholder="Doctor Name">
-            <textarea name="note" class="span2" placeholder="Billing Note"></textarea>
+            <input name="category" placeholder="Billing Category">
+            <input name="unitPrice" type="number" step="0.01" placeholder="Amount">
+            <input name="quantity" type="number" step="0.01" placeholder="Qty">
+            <select name="paymentMethod"><option value="cash">Cash</option><option value="transfer">Transfer</option><option value="insurance">Insurance</option></select>
+            <input name="paidAmount" type="number" step="0.01" placeholder="Paid Amount">
+            <input name="createdBy" placeholder="Created By">
             <div class="span2 row end"><button type="submit" class="btn btnPrimary">Create Bill</button></div>
           </form>
+          <div id="receiptPreview" class="mt16"></div>
         </article>
 
-        <article class="glass card stack12">
-          <div class="cardHead"><div><div class="eyebrow">Clinical Workflow</div><h3>Visits / Appointment / Queue</h3></div></div>
+        <article class="glass card workflowDeskCard" data-workspace-card="clinical">
+          <div class="cardHead"><div><div class="eyebrow">Visit + Appointment + Queue</div><h3>Clinical Intake Desk</h3></div></div>
           <form id="visitForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="visit">
             <input name="patientId" placeholder="Visit Patient ID" required>
             <input name="doctorName" placeholder="Doctor Name">
-            <input name="reason" placeholder="Reason">
-            <input name="diagnosis" placeholder="Diagnosis">
-            <input name="vitalSummary" placeholder="Vitals Summary">
-            <select name="status"><option value="active">Active</option><option value="completed">Completed</option></select>
+            <input name="complaint" placeholder="Chief Complaint">
+            <input name="vitals" placeholder="Vitals">
+            <textarea name="notes" class="span2" placeholder="Clinical Notes"></textarea>
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Visit</button></div>
           </form>
           <div class="divider"></div>
           <form id="appointmentForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="appointment">
             <input name="patientId" placeholder="Appointment Patient ID" required>
             <input name="doctorName" placeholder="Doctor Name">
-            <input name="appointmentDate" placeholder="2026-03-26 14:00">
-            <input name="reason" placeholder="Reason">
+            <input name="appointmentDate" placeholder="Appointment Date">
+            <input name="appointmentTime" placeholder="Appointment Time">
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Book Appointment</button></div>
           </form>
           <div class="divider"></div>
           <form id="queueForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="queue">
             <input name="patientId" placeholder="Queue Patient ID" required>
-            <input name="doctorName" placeholder="Doctor Name">
-            <select name="priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="critical">Critical</option></select>
-            <input name="note" placeholder="Queue Note">
+            <input name="doctorName" placeholder="Doctor Name" required>
+            <input name="priority" placeholder="Priority normal/urgent">
+            <input name="reason" placeholder="Queue Reason">
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Add To Queue</button></div>
           </form>
         </article>
 
-        <article class="glass card stack12">
-          <div class="cardHead"><div><div class="eyebrow">Care Desk</div><h3>Lab / Prescription / Nurse / Staff</h3></div></div>
+        <article class="glass card workflowDeskCard" data-workspace-card="care">
+          <div class="cardHead"><div><div class="eyebrow">Lab + Prescription + Nurse</div><h3>Care Coordination Desk</h3></div></div>
           <form id="labForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="lab">
             <input name="patientId" placeholder="Lab Patient ID" required>
             <input name="testName" placeholder="Test Name" required>
-            <input name="doctorName" placeholder="Doctor Name">
-            <input name="status" placeholder="pending / completed">
-            <div class="span2 row end"><button type="submit" class="btn btnGhost">Create Lab Request</button></div>
+            <input name="requestedBy" placeholder="Requested By">
+            <input name="priority" placeholder="Priority">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Lab Request</button></div>
           </form>
           <div class="divider"></div>
           <form id="prescriptionForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="prescription">
@@ -469,12 +464,13 @@
             <input name="drugName" placeholder="Drug Name" required>
             <input name="dosage" placeholder="Dosage">
             <input name="frequency" placeholder="Frequency">
+            <textarea name="instruction" class="span2" placeholder="Instruction"></textarea>
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Prescription</button></div>
           </form>
           <div class="divider"></div>
           <form id="nurseForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="nurse">
             <input name="patientId" placeholder="Nurse Desk Patient ID" required>
-            <input name="note" placeholder="Nurse Note" required>
+            <input name="careNote" placeholder="Care Note" required>
             <input name="vitalSummary" placeholder="Vitals Summary">
             <input name="nurseName" placeholder="Nurse Name">
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Save Nurse Note</button></div>
@@ -490,13 +486,22 @@
         </article>
 
         <article class="glass card stack12 workflowDeskCard" data-workspace-card="inpatient">
-          <div class="cardHead"><div><div class="eyebrow">Inpatient + Pharmacy</div><h3>Admission / Ward / Dispensing</h3></div></div>
+          <div class="cardHead"><div><div class="eyebrow">Admission + Pharmacy</div><h3>Ward and Dispensing</h3></div></div>
           <form id="admissionForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="admission">
             <input name="patientId" placeholder="Admission Patient ID" required>
             <input name="ward" placeholder="Ward / Bed">
             <input name="doctorName" placeholder="Doctor Name">
             <input name="reason" placeholder="Admission Reason">
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Admit Patient</button></div>
+          </form>
+          <div class="divider"></div>
+          <form id="pharmacyDispenseForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="pharmacy">
+            <input name="patientId" placeholder="Dispense Patient ID" required>
+            <input name="itemName" placeholder="Drug / Item Name" required>
+            <input name="quantity" type="number" step="0.01" placeholder="Qty">
+            <input name="unitPrice" type="number" step="0.01" placeholder="Unit Price">
+            <input name="batchNo" placeholder="Batch No optional">
+            <div class="span2 row end"><button type="submit" class="btn btnGhost">Dispense Drug</button></div>
           </form>
           <div class="divider"></div>
           <form id="stockItemForm" class="formGrid compactGrid">
@@ -530,15 +535,6 @@
             <input name="expiryDate" placeholder="Expiry Date">
             <input name="invoiceNo" placeholder="Invoice / Receipt No">
             <div class="span2 row end"><button type="submit" class="btn btnGhost">Post Purchase Receipt</button></div>
-          </form>
-          <div class="divider"></div>
-          <form id="pharmacyDispenseForm" class="formGrid compactGrid workflowFormCard" data-workflow-form="pharmacy">
-            <input name="patientId" placeholder="Dispense Patient ID" required>
-            <input name="itemName" placeholder="Drug / Item Name" required>
-            <input name="quantity" type="number" step="0.01" placeholder="Qty">
-            <input name="unitPrice" type="number" step="0.01" placeholder="Unit Price">
-            <input name="batchNo" placeholder="Batch No optional">
-            <div class="span2 row end"><button type="submit" class="btn btnGhost">Dispense Drug</button></div>
           </form>
           <div class="divider"></div>
           <form id="stockMovementForm" class="formGrid compactGrid">
@@ -581,7 +577,7 @@
         </article>
 
         <article class="glass card spanWide">
-          <div class="cardHead compact"><div><div class="eyebrow">Full Clinical Operations Module</div><h3>Registration, Visits, Queue, Nursing, Lab, Pharmacy, Billing, Appointment, Theatre and Discharge</h3></div><span class="badge">Enterprise Ops</span></div>
+          <div class="cardHead compact"><div><div class="eyebrow">Clinical Operations</div><h3>Full operational module</h3></div></div>
           <div id="clinicalOpsGrid" class="summaryGrid"></div>
           <div id="clinicalOpsLists" class="mt16 stack10"></div>
         </article>
@@ -589,21 +585,18 @@
     </section>
 
     <section id="tab-search" class="tabPane hidden revealUp">
-      <div class="commandRibbon searchRibbon">
-        <div class="ribbonCard accentBlue"><span>Search Intelligence</span><strong>Find by ID, MRN, name, phone, email</strong><small>Optimized for quick profile launch and Android/web sync verification.</small></div>
-        <div class="ribbonCard accentGreen"><span>AI Co-Pilot</span><strong>Watch risk and patient pulse instantly</strong><small>Use AI summary to inspect outstanding, queue risk and next action.</small></div>
-      </div>
-      <div class="grid2">
+      <div class="grid2 searchDeskGrid">
         <article class="glass card">
-          <div class="cardHead"><div><div class="eyebrow">Patient Search</div><h3>Find Patient + AI Summary</h3></div></div>
+          <div class="cardHead"><div><div class="eyebrow">Patient Search</div><h3>Find patient fast</h3></div></div>
           <div class="finderRow">
             <input id="searchInput" placeholder="Search by patient ID, MRN, name, phone or email">
             <button id="searchBtn" class="btn btnPrimary" type="button">Search</button>
           </div>
+          <div id="searchActionDock" class="stack10 mt16"></div>
           <div id="searchResults" class="stack10 mt16"></div>
         </article>
         <article class="glass card aiSpotlightCard">
-          <div class="cardHead"><div><div class="eyebrow">AI Summary</div><h3>Patient Intelligence</h3></div></div>
+          <div class="cardHead"><div><div class="eyebrow">AI Summary</div><h3>Patient intelligence</h3></div></div>
           <div class="aiSpotlight" id="aiSpotlightBox">
             <div class="spotlightGlow"></div>
             <div>
@@ -620,6 +613,7 @@
 
 <div id="modalHost"></div>
 <div id="toastHost"></div>
+<div id="activeModal"></div>
 
 <div class="fabDock" id="fabDock">
   <button class="fabMain" id="fabMain" type="button">+</button>
