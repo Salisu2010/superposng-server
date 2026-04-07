@@ -43,6 +43,113 @@ const state = {
 
 window.addEventListener('DOMContentLoaded', init);
 
+
+function ensurePatientBadgeStyles() {
+  if (document.getElementById('activePatientBadgeStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'activePatientBadgeStyles';
+  style.textContent = `
+    .activePatientBadge {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:10px 12px;
+      margin:0 0 12px;
+      border-radius:14px;
+      border:1px solid rgba(59,130,246,0.18);
+      background:linear-gradient(135deg, rgba(59,130,246,0.12), rgba(15,23,42,0.78));
+      color:#e5eefc;
+    }
+    .activePatientBadge.is-empty {
+      border-style:dashed;
+      background:rgba(15,23,42,0.55);
+      color:#94a3b8;
+    }
+    .activePatientBadgeMain {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+      flex:1;
+    }
+    .activePatientBadgeDot {
+      width:10px;
+      height:10px;
+      border-radius:999px;
+      background:#22c55e;
+      flex:0 0 auto;
+      box-shadow:0 0 0 4px rgba(34,197,94,0.12);
+    }
+    .activePatientBadge.is-empty .activePatientBadgeDot {
+      background:#64748b;
+      box-shadow:none;
+    }
+    .activePatientBadgeText {
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+    }
+    .activePatientBadgeLabel {
+      font-size:11px;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      opacity:.78;
+    }
+    .activePatientBadgeValue {
+      font-weight:700;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .activePatientBadgeMeta {
+      flex:0 0 auto;
+      font-size:12px;
+      font-weight:600;
+      color:#bfdbfe;
+      white-space:nowrap;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function activePatientBadgeMarkup(patient = state.selectedPatient) {
+  const normalized = normalizePatientRecord(patient || {});
+  const hasPatient = !!(normalized.patientId || normalized.fullName);
+  const label = hasPatient ? escapeHtml(normalized.fullName || normalized.patientName || 'Selected Patient') : 'Select patient first';
+  const meta = hasPatient ? escapeHtml(normalized.patientId || '--') : 'Patient ID auto-picks here';
+  return `
+    <div class="activePatientBadge ${hasPatient ? '' : 'is-empty'}" data-active-patient-badge>
+      <div class="activePatientBadgeMain">
+        <span class="activePatientBadgeDot" aria-hidden="true"></span>
+        <div class="activePatientBadgeText">
+          <span class="activePatientBadgeLabel">Active Patient</span>
+          <span class="activePatientBadgeValue">${label}</span>
+        </div>
+      </div>
+      <div class="activePatientBadgeMeta">${hasPatient ? `ID • ${meta}` : meta}</div>
+    </div>`;
+}
+
+function renderPatientContextBadges(patient = state.selectedPatient) {
+  ensurePatientBadgeStyles();
+  const selectors = [...AUTO_PATIENT_CONTEXT_SELECTORS, '#billModalForm'];
+  const seen = new Set();
+  selectors.forEach(selector => {
+    const form = $(selector);
+    if (!form || seen.has(form)) return;
+    seen.add(form);
+    let badge = form.previousElementSibling;
+    if (!badge || !badge.matches('[data-active-patient-badge]')) {
+      form.insertAdjacentHTML('beforebegin', activePatientBadgeMarkup(patient));
+      badge = form.previousElementSibling;
+    }
+    if (badge && badge.matches('[data-active-patient-badge]')) {
+      badge.outerHTML = activePatientBadgeMarkup(patient);
+    }
+  });
+}
+
 function computeWorkflowSuggestion({ patient = {}, profile = null, registrationPayload = null, isNewRegistration = false } = {}) {
   const p = normalizePatientRecord(patient || {});
   const summary = profile?.summary || {};
@@ -114,6 +221,8 @@ function init() {
   $('#hospitalId').value = state.hospitalId;
   if ($('#accessToken')) $('#accessToken').value = state.authToken;
   $('#timelineDays').value = String(state.timelineDays);
+  syncPatientBoundInputs();
+  renderPatientContextBadges();
   bindUI();
   bindKeyboardShortcuts();
   applySidebarState();
@@ -150,8 +259,14 @@ function bindUI() {
 
   $$('.navBtn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab, true)));
   $('#quickPatientBtn').addEventListener('click', openPatientWizard);
-  $('#quickBillBtn').addEventListener('click', () => openBillModal());
-  $('#quickVisitBtn').addEventListener('click', () => switchTab('workflow'));
+  $('#quickBillBtn').addEventListener('click', () => {
+    if (state.selectedPatient?.patientId) openBillModal(state.selectedPatient.patientId, state.selectedPatient.fullName || state.selectedPatient.patientName || '');
+    else enforceAutoPatientContext($('#billForm'), { interactive: true });
+  });
+  $('#quickVisitBtn').addEventListener('click', () => {
+    if (state.selectedPatient?.patientId) goToPatientAction('visit');
+    else enforceAutoPatientContext($('#visitForm'), { interactive: true });
+  });
   $('#quickQueueBtn').addEventListener('click', () => switchTab('operations'));
   $('#railVisitBtn').addEventListener('click', () => switchTab('workflow'));
   $('#railSearchBtn').addEventListener('click', () => switchTab('search'));
@@ -163,9 +278,12 @@ function bindUI() {
   $('#smartNavSearch')?.addEventListener('click', () => switchTab('search', true));
   $('#smartRefreshBtn')?.addEventListener('click', refreshAll);
   $('#smartNewPatientBtn')?.addEventListener('click', openPatientWizard);
-  $('#smartNewBillBtn')?.addEventListener('click', () => openBillModal());
+  $('#smartNewBillBtn')?.addEventListener('click', () => {
+    if (state.selectedPatient?.patientId) openBillModal(state.selectedPatient.patientId, state.selectedPatient.fullName || state.selectedPatient.patientName || '');
+    else enforceAutoPatientContext($('#billForm'), { interactive: true });
+  });
   $$('.speedJumpBtn').forEach(btn => btn.addEventListener('click', () => jumpToWorkflowTarget(btn.dataset.jumpTarget)));
-  $('#fabVisitBtn').addEventListener('click', () => { toggleFab(false); switchTab('workflow'); });
+  $('#fabVisitBtn').addEventListener('click', () => { toggleFab(false); if (state.selectedPatient?.patientId) goToPatientAction('visit'); else enforceAutoPatientContext($('#visitForm'), { interactive: true }); });
   $('#fabSearchBtn').addEventListener('click', () => { toggleFab(false); switchTab('search'); });
   $('#fabMain').addEventListener('click', () => toggleFab());
   document.addEventListener('click', (e) => {
@@ -250,9 +368,18 @@ function bindForm(selector, path, successMsg, onDone) {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
+      const patientContext = enforceAutoPatientContext(form, { interactive: true });
+      if (hasPatientContextField(form) && !patientContext) return;
       const body = formToObject(form);
+      if (hasPatientContextField(form) && patientContext?.patientId) {
+        body.patientId = patientContext.patientId;
+        if ('patientName' in body || form.querySelector('[name="patientName"]')) {
+          body.patientName = patientContext.fullName || patientContext.patientName || '';
+        }
+      }
       const res = await api(path, { method: 'POST', body });
       form.reset();
+      syncPatientBoundInputs();
       showToast(successMsg, res?.message || 'Done');
       if (onDone) await onDone(res);
     } catch (err) {
@@ -1424,38 +1551,91 @@ function setSelectedPatient(patient = {}, opts = {}) {
   renderWorkflowPatientBanner();
   renderWorkflowInsightRail();
   fillWorkflowPatient(normalized);
+  renderPatientContextBadges(normalized);
   if (normalized.patientId) loadSelectedPatientProfile(normalized.patientId);
   if (opts.switchToPatients) switchTab('patients', true);
   if (opts.openDrawer && normalized.patientId) openPatientDrawer(normalized.patientId);
 }
 
-function fillWorkflowPatient(patient = {}) {
-  const normalized = normalizePatientRecord(patient);
+const AUTO_PATIENT_CONTEXT_SELECTORS = [
+  '#billForm',
+  '#visitForm',
+  '#appointmentForm',
+  '#queueForm',
+  '#labForm',
+  '#prescriptionForm',
+  '#nurseForm',
+  '#admissionForm',
+  '#pharmacyDispenseForm',
+  '#dischargeForm',
+  '#theatreForm',
+  '#drawerInlineBillForm',
+  '#drawerInlineVisitForm'
+];
+
+function hasPatientContextField(root) {
+  return !!root?.querySelector?.('[name="patientId"]');
+}
+
+function enforceAutoPatientField(input, value, emptyText) {
+  if (!input) return;
+  input.value = value || '';
+  input.readOnly = true;
+  input.setAttribute('readonly', 'readonly');
+  input.dataset.autoPatientLocked = '1';
+  input.title = value ? 'Auto-picked from selected patient profile' : 'Select patient first from Patients Desk or Search Desk';
+  input.placeholder = value ? 'Auto-picked patient' : (emptyText || 'Select patient first');
+  input.classList.add('autoPatientLockedField');
+}
+
+function syncPatientBoundInputs(patient = state.selectedPatient) {
+  const normalized = normalizePatientRecord(patient || {});
   const patientId = normalized.patientId || '';
   const patientName = normalized.fullName || normalized.patientName || '';
-  const mappings = [
-    ['#billForm [name="patientId"]', patientId],
-    ['#billForm [name="patientName"]', patientName],
-    ['#visitForm [name="patientId"]', patientId],
-    ['#appointmentForm [name="patientId"]', patientId],
-    ['#queueForm [name="patientId"]', patientId],
-    ['#labForm [name="patientId"]', patientId],
-    ['#prescriptionForm [name="patientId"]', patientId],
-    ['#nurseForm [name="patientId"]', patientId],
-    ['#admissionForm [name="patientId"]', patientId],
-    ['#pharmacyDispenseForm [name="patientId"]', patientId],
-    ['#dischargeForm [name="patientId"]', patientId],
-    ['#theatreForm [name="patientId"]', patientId],
-  ];
-  mappings.forEach(([selector, value]) => {
-    const el = $(selector);
-    if (!el) return;
-    el.value = value || '';
+  renderPatientContextBadges(normalized);
+  AUTO_PATIENT_CONTEXT_SELECTORS.forEach(selector => {
+    const form = $(selector);
+    if (!form) return;
+    const patientIdEl = form.querySelector('[name="patientId"]');
+    const patientNameEl = form.querySelector('[name="patientName"]');
+    enforceAutoPatientField(patientIdEl, patientId, 'Select patient first');
+    if (patientNameEl) {
+      patientNameEl.value = patientName || '';
+      patientNameEl.readOnly = true;
+      patientNameEl.setAttribute('readonly', 'readonly');
+      patientNameEl.dataset.autoPatientLocked = '1';
+      patientNameEl.title = patientName ? 'Auto-picked from selected patient profile' : 'Patient name will fill automatically';
+      patientNameEl.placeholder = patientName ? 'Auto-picked patient name' : 'Patient name auto-fills';
+      patientNameEl.classList.add('autoPatientLockedField');
+    }
   });
+}
+
+function enforceAutoPatientContext(form, opts = {}) {
+  if (!hasPatientContextField(form)) return normalizePatientRecord(state.selectedPatient || {});
+  const normalized = normalizePatientRecord(state.selectedPatient || {});
+  if (!normalized.patientId) {
+    syncPatientBoundInputs();
+    if (opts.interactive) {
+      showToast('Select Patient First', 'Pick a patient from Patients Desk, Search Desk, or Patient Profile Drawer. Patient ID now fills automatically.');
+      switchTab('patients', true);
+      setTimeout(() => document.getElementById('patientsOpenSearchBtn')?.focus({ preventScroll: true }), 120);
+    }
+    return null;
+  }
+  syncPatientBoundInputs(normalized);
+  return normalized;
+}
+
+function fillWorkflowPatient(patient = {}) {
+  const normalized = normalizePatientRecord(patient);
+  syncPatientBoundInputs(normalized);
 }
 
 function jumpToWorkflowTarget(selector) {
   if (!selector) return;
+  const patientBound = ['#billForm', '#visitForm', '#appointmentForm', '#queueForm', '#labForm', '#prescriptionForm', '#nurseForm', '#admissionForm', '#pharmacyDispenseForm', '#dischargeForm', '#theatreForm'];
+  if (patientBound.includes(selector) && !enforceAutoPatientContext(document.querySelector(selector), { interactive: true })) return;
   switchTab('workflow', true);
   requestAnimationFrame(() => {
     const target = $(selector);
@@ -1486,8 +1666,10 @@ function workflowActionMeta(action) {
 
 function goToPatientAction(action, patient = state.selectedPatient) {
   const normalized = normalizePatientRecord(patient || {});
-  if (normalized.patientId) setSelectedPatient(normalized);
   const meta = workflowActionMeta(action);
+  const target = meta?.selector ? $(meta.selector) : null;
+  if (normalized.patientId) setSelectedPatient(normalized);
+  if (target && hasPatientContextField(target) && !enforceAutoPatientContext(target, { interactive: true })) return;
   switchTab(meta.tab, true);
   requestAnimationFrame(() => {
     const target = $(meta.selector);
@@ -2051,6 +2233,13 @@ function applyPostSaveDrawerFocus() {
 
 function openBillModal(patientId = '', patientName = '') {
   toggleFab(false);
+  const current = normalizePatientRecord(state.selectedPatient || {});
+  const resolvedPatientId = patientId || current.patientId || '';
+  const resolvedPatientName = patientName || current.fullName || current.patientName || '';
+  if (!resolvedPatientId) {
+    enforceAutoPatientContext($('#billForm'), { interactive: true });
+    return;
+  }
   const source = $('#billForm');
   if (!source) return;
   const clone = source.cloneNode(true);
@@ -2058,10 +2247,17 @@ function openBillModal(patientId = '', patientName = '') {
   const wrap = document.createElement('div');
   wrap.innerHTML = clone.outerHTML;
   const form = wrap.firstElementChild;
-  if (patientId) form.querySelector('[name="patientId"]').value = patientId;
+  const patientIdEl = form.querySelector('[name="patientId"]');
+  if (patientIdEl) enforceAutoPatientField(patientIdEl, resolvedPatientId, 'Select patient first');
   const patientNameEl = form.querySelector('[name="patientName"]');
-  if (patientName && patientNameEl) patientNameEl.value = patientName;
+  if (patientNameEl) {
+    patientNameEl.value = resolvedPatientName;
+    patientNameEl.readOnly = true;
+    patientNameEl.setAttribute('readonly', 'readonly');
+    patientNameEl.classList.add('autoPatientLockedField');
+  }
   showModal('Direct Billing Workflow', form.outerHTML);
+  renderPatientContextBadges(current.patientId ? { patientId: resolvedPatientId, fullName: resolvedPatientName, patientName: resolvedPatientName } : state.selectedPatient);
   bindForm('#billModalForm', '/api/bill/create', 'Bill created', async (res) => {
     closeModal();
     showToast('Bill Created', `${res?.bill?.category || 'Service'} billing saved`);
@@ -2080,9 +2276,14 @@ function buildDrawerInlineWorkflowForm(mode, patient = {}) {
   clone.id = inlineId;
   clone.classList.add('compactGrid');
   const patientIdEl = clone.querySelector('[name="patientId"]');
-  if (patientIdEl) patientIdEl.value = patient.patientId || '';
+  if (patientIdEl) enforceAutoPatientField(patientIdEl, patient.patientId || '', 'Select patient first');
   const patientNameEl = clone.querySelector('[name="patientName"]');
-  if (patientNameEl) patientNameEl.value = patient.fullName || patient.patientName || '';
+  if (patientNameEl) {
+    patientNameEl.value = patient.fullName || patient.patientName || '';
+    patientNameEl.readOnly = true;
+    patientNameEl.setAttribute('readonly', 'readonly');
+    patientNameEl.classList.add('autoPatientLockedField');
+  }
   const firstSubmit = clone.querySelector('button[type="submit"], .btnPrimary');
   if (firstSubmit) firstSubmit.textContent = mode === 'bill' ? 'Save Bill Inside Drawer' : 'Save Visit Inside Drawer';
   return clone.outerHTML;
@@ -2101,6 +2302,7 @@ async function activateDrawerWorkflowPanel(mode, patient = {}, opts = {}) {
     </div>`;
   document.getElementById('drawerWorkspaceSwitchVisit')?.addEventListener('click', () => activateDrawerWorkflowPanel('visit', patient, { focus: true }));
   document.getElementById('drawerWorkspaceSwitchBill')?.addEventListener('click', () => activateDrawerWorkflowPanel('bill', patient, { focus: true }));
+  renderPatientContextBadges(patient);
   const formId = normalizedMode === 'bill' ? '#drawerInlineBillForm' : '#drawerInlineVisitForm';
   const path = normalizedMode === 'bill' ? '/api/bill/create' : '/api/visit/create';
   const successMsg = normalizedMode === 'bill' ? 'Bill created' : 'Visit saved';
@@ -2236,6 +2438,7 @@ async function openPatientDrawer(patientId, opts = {}) {
     applyPostSaveDrawerFocus();
     const activeModal = document.getElementById('activeModal');
     bindPatientActionButtons(activeModal);
+    syncPatientBoundInputs(p);
     if (opts.workspaceMode === 'bill' || opts.workspaceMode === 'visit') {
       activateDrawerWorkflowPanel(opts.workspaceMode, p, { focus: opts.focusWorkspace !== false });
     }
