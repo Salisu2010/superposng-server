@@ -462,6 +462,18 @@ app.get("/api/events", (req, res) => {
   });
 });
 
+
+// Final enterprise error handler: prevents thrown route errors from killing the process
+// and returns structured JSON to clients. Keep this after all routes.
+app.use((err, req, res, _next) => {
+  try { console.error('[express-error]', req?.method, req?.originalUrl || req?.url, err?.stack || err); } catch {}
+  if (res.headersSent) return;
+  res.status(err?.status || err?.statusCode || 500).json({
+    ok: false,
+    error: err?.publicMessage || err?.message || 'Internal server error'
+  });
+});
+
 /**
  * TrackGuard online/offline reconciliation.
  * Marks device offline if no heartbeat within OFFLINE_MS and emits "status" events.
@@ -490,7 +502,26 @@ setInterval(() => {
 }, 5000);
 
 const PORT = parseInt(process.env.PORT || "8080", 10);
-app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`));
+const server = app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`));
+server.on('error', (err) => {
+  safeServerLog('error', 'HTTP server error', { error: String(err?.stack || err || '') });
+});
+
+function shutdown(signal) {
+  safeServerLog('info', `Received ${signal}; closing HTTP server`);
+  try {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 8000).unref?.();
+  } catch {
+    process.exit(0);
+  }
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // StayMasterNG Smart Reminder Engine (WhatsApp/SMS compose via client)
-startStmnReminderEngine();
+try {
+  startStmnReminderEngine();
+} catch (e) {
+  safeServerLog('error', 'Reminder engine failed to start', { error: String(e?.stack || e || '') });
+}

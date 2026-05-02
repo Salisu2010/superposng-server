@@ -7,6 +7,38 @@ import * as Fcm from '../fcm.js';
 
 const r = Router();
 
+// ENTERPRISE STABILITY FIX:
+// Express 4 does not automatically catch rejected promises from async route handlers.
+// Patch this router locally so one failing Clinic endpoint returns JSON instead of
+// becoming an unhandled rejection that can crash or hang the process.
+function enterpriseRouteGuard(handler) {
+  if (typeof handler !== 'function') return handler;
+  return function guardedRoute(req, res, next) {
+    try {
+      const out = handler(req, res, next);
+      if (out && typeof out.then === 'function') {
+        out.catch((err) => {
+          try { console.error('[clinic-route-error]', err?.stack || err); } catch {}
+          if (res.headersSent) return next(err);
+          return res.status(500).json({ ok:false, error:'Clinic server error', detail:String(err?.message || err || 'Unknown error') });
+        });
+      }
+      return out;
+    } catch (err) {
+      try { console.error('[clinic-route-error]', err?.stack || err); } catch {}
+      if (res.headersSent) return next(err);
+      return res.status(500).json({ ok:false, error:'Clinic server error', detail:String(err?.message || err || 'Unknown error') });
+    }
+  };
+}
+for (const method of ['get','post','put','patch','delete']) {
+  const original = r[method].bind(r);
+  r[method] = (path, ...handlers) => original(path, ...handlers.map(enterpriseRouteGuard));
+}
+
+const ensureFcm = typeof Fcm.ensureFcm === 'function' ? Fcm.ensureFcm : (() => ({ ok:true, disabled:true, reason:'FCM helper unavailable' }));
+const pushShopChange = typeof Fcm.pushShopChange === 'function' ? Fcm.pushShopChange : (async () => ({ ok:true, skipped:true, reason:'FCM push helper unavailable' }));
+
 function secret(){ return process.env.JWT_SECRET || 'dev_secret_change_me'; }
 function sign(payload){ return jwt.sign(payload, secret(), { expiresIn: '30d' }); }
 function now(){ return Date.now(); }

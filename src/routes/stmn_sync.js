@@ -6,6 +6,31 @@ const pushShopChange = Fcm.pushShopChange || Fcm.pushShopChangeNow || (async () 
 
 const r = Router();
 
+function enterpriseRouteGuard(handler) {
+  if (typeof handler !== 'function') return handler;
+  return function guardedRoute(req, res, next) {
+    try {
+      const out = handler(req, res, next);
+      if (out && typeof out.then === 'function') {
+        out.catch((err) => {
+          try { console.error('[route-error]', req?.method, req?.originalUrl || req?.url, err?.stack || err); } catch {}
+          if (res.headersSent) return next(err);
+          return res.status(500).json({ ok:false, error:'Server error', detail:String(err?.message || err || 'Unknown error') });
+        });
+      }
+      return out;
+    } catch (err) {
+      try { console.error('[route-error]', req?.method, req?.originalUrl || req?.url, err?.stack || err); } catch {}
+      if (res.headersSent) return next(err);
+      return res.status(500).json({ ok:false, error:'Server error', detail:String(err?.message || err || 'Unknown error') });
+    }
+  };
+}
+for (const method of ['get','post','put','patch','delete']) {
+  const original = r[method].bind(r);
+  r[method] = (path, ...handlers) => original(path, ...handlers.map(enterpriseRouteGuard));
+}
+
 function requireShop(req, res) {
   const raw = req.auth?.shopId ? String(req.auth.shopId) : "";
   if (!raw) {
