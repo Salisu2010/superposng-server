@@ -36,7 +36,7 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
-const SERVER_PATCH_VERSION = "codex-v5-clinic-timeline-headers-fcm-2026-05-23";
+const SERVER_PATCH_VERSION = "codex-v6-full-audit-stable-2026-05-23";
 
 function safeServerLog(level, message, extra) {
   try {
@@ -240,6 +240,7 @@ app.get('/api/health/runtime', (_req, res) => {
     res.json({
       ok: true,
       status: 'healthy',
+      patchVersion: SERVER_PATCH_VERSION,
       node: process.version,
       pid: process.pid,
       uptime: process.uptime(),
@@ -295,6 +296,7 @@ app.get("/", (_req, res) => {
     ok: true,
     name: "SuperPOSNG + Clinic Pro NG Cloud Sync Server",
     version: "1.0.0",
+    patchVersion: SERVER_PATCH_VERSION,
     time: new Date().toISOString()
   });
 });
