@@ -66,6 +66,8 @@ function normRole(v){
 function clinicCode(){ return ('CLN-' + nanoid(6)).toUpperCase(); }
 function safeEmail(v){ return lower(v).replace(/\s+/g, ''); }
 function authClinicId(req){ return toStr(req.auth?.clinicId || req.auth?.hospitalId || req.headers['x-clinic-id'] || req.headers['x-hospital-id'] || req.query?.clinicId || req.query?.hospitalId || req.body?.clinicId || req.body?.hospitalId); }
+function buildTimeline(...args){ return buildTimelineSafe(...args); }
+function getClinicTimeline(...args){ return buildTimelineSafe(...args); }
 function roleAllowed(req, allowed){
   const role = normRole(req.auth?.role);
   return allowed.includes(role) || allowed.includes('*');
@@ -1194,8 +1196,6 @@ function liveCardsFromSnapshot(snapshot, changes = []){
   return { counts, cards, recentChanges: changes.slice(0,8) };
 }
 
-function buildTimeline(...args){ return buildTimelineSafe(...args); }
-function getClinicTimeline(...args){ return buildTimelineSafe(...args); }
 // Defensive alias for any legacy internal references.
 function buildPortalCommandCenter(db, clinicId, days = 14){
   const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };

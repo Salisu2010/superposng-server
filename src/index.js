@@ -36,7 +36,7 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
-const SERVER_PATCH_VERSION = "codex-v4-headers-fcm-2026-05-23";
+const SERVER_PATCH_VERSION = "codex-v5-clinic-timeline-headers-fcm-2026-05-23";
 
 function safeServerLog(level, message, extra) {
   try {
