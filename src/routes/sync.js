@@ -735,8 +735,11 @@ r.post(SALE_PATHS, (req, res) => {
       },
     });
   } catch (e) {
+    if (e?.code === "ERR_HTTP_HEADERS_SENT" || res.headersSent || res.writableEnded) {
+      console.error("POST /sales duplicate response ignored", e?.code || e?.message || e);
+      return;
+    }
     console.error("POST /sales error", e);
-    if (res.headersSent) return;
     return sendJsonOnce(res, 500, { ok: false, error: "sale_push_failed" });
   }
 });
