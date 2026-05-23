@@ -36,7 +36,7 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
-const SERVER_PATCH_VERSION = "codex-v6-full-audit-stable-2026-05-23";
+const SERVER_PATCH_VERSION = "codex-v7-healthz-timeout-audit-2026-05-23";
 
 function safeServerLog(level, message, extra) {
   try {
@@ -57,6 +57,11 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 app.set('trust proxy', true);
+
+app.get('/healthz', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(200).type('text/plain').send(`ok ${SERVER_PATCH_VERSION}`);
+});
 
 app.use((req, res, next) => {
   const originalJson = res.json.bind(res);
