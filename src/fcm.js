@@ -416,7 +416,7 @@ export async function pushShopChange(shopId, payload, opts = {}) {
 export const pushShopChangeNow = pushShopChange;
 
 
-async function pushStmnChatMessage(shopId, payload, filter = {}) {
+export async function pushStmnChatMessage(shopId, payload, filter = {}) {
   const init = ensureFcm();
   if (!init.ok) return { ok:false, error:init.reason || "FCM init failed" };
   if (init.disabled) return { ok:true, skipped:true, reason:init.reason || "FCM disabled" };
@@ -447,5 +447,3 @@ async function pushStmnChatMessage(shopId, payload, filter = {}) {
     return { ok:false, error:e?.message || String(e) };
   }
 }
-
-export { pushStmnChatMessage };
