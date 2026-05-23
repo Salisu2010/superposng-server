@@ -626,6 +626,7 @@ r.post(SALE_PATHS, (req, res) => {
           expiringSoon: expiringSoonItems,
         },
       });
+      return;
     }
 
     // Save sale
@@ -730,6 +731,7 @@ r.post(SALE_PATHS, (req, res) => {
     });
   } catch (e) {
     console.error("POST /sales error", e);
+    if (res.headersSent) return;
     return res.status(500).json({ ok: false, error: "sale_push_failed" });
   }
 });

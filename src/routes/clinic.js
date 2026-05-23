@@ -1194,8 +1194,8 @@ function liveCardsFromSnapshot(snapshot, changes = []){
   return { counts, cards, recentChanges: changes.slice(0,8) };
 }
 
-const buildTimeline = (...args) => buildTimelineSafe(...args);
-const getClinicTimeline = (...args) => buildTimelineSafe(...args);
+function buildTimeline(...args){ return buildTimelineSafe(...args); }
+function getClinicTimeline(...args){ return buildTimelineSafe(...args); }
 // Defensive alias for any legacy internal references.
 function buildPortalCommandCenter(db, clinicId, days = 14){
   const latest = getLatestSnapshot(db, clinicId) || { snapshot: buildSnapshotData(db, clinicId), createdAt: now() };
