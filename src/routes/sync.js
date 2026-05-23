@@ -74,6 +74,12 @@ function spngPing(shopId, payload) {
     pushSpngShopChange(shopId, payload || { type: "SPNG_SYNC" }).catch(() => {});
   } catch (_e) {}
 }
+
+function sendJsonOnce(res, status, body) {
+  if (res.headersSent) return null;
+  return status ? res.status(status).json(body) : res.json(body);
+}
+
 // Identify acting cashier (if this request is made with a cashier token)
 function getActor(req){
   const a = req && req.auth ? req.auth : {};
@@ -533,7 +539,7 @@ r.post(SALE_PATHS, (req, res) => {
     if (!shopId) return;
 
     const sale = extractSaleFromBody(req.body);
-    if (!sale) return res.status(400).json({ ok: false, error: "sale required" });
+    if (!sale) return sendJsonOnce(res, 400, { ok: false, error: "sale required" });
 
     const db = readDB();
     ensureDbArrays(db);
@@ -600,7 +606,7 @@ r.post(SALE_PATHS, (req, res) => {
     }
 
     if (expiredItems.length > 0) {
-      return res.status(409).json({
+      return sendJsonOnce(res, 409, {
         ok: false,
         code: "EXPIRED_BLOCK",
         messageEn:
@@ -615,7 +621,7 @@ r.post(SALE_PATHS, (req, res) => {
     // If duplicate sale: do NOT deduct stock or add debtor again
     if (exists) {
       spngPing(shopId, { type: "SPNG_SYNC", module: "sales" });
-  res.json({
+      return sendJsonOnce(res, 0, {
         ok: true,
         saved: false,
         duplicate: true,
@@ -626,7 +632,6 @@ r.post(SALE_PATHS, (req, res) => {
           expiringSoon: expiringSoonItems,
         },
       });
-      return;
     }
 
     // Save sale
@@ -718,7 +723,7 @@ r.post(SALE_PATHS, (req, res) => {
     } catch (_e) {}
 
     writeDB(db);
-    return res.json({
+    return sendJsonOnce(res, 0, {
       ok: true,
       saved: true,
       receiptNo,
@@ -732,7 +737,7 @@ r.post(SALE_PATHS, (req, res) => {
   } catch (e) {
     console.error("POST /sales error", e);
     if (res.headersSent) return;
-    return res.status(500).json({ ok: false, error: "sale_push_failed" });
+    return sendJsonOnce(res, 500, { ok: false, error: "sale_push_failed" });
   }
 });
 
