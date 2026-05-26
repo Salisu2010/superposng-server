@@ -13,105 +13,47 @@ function signToken(payload) {
 function normPhone(p) {
   return (p || "").toString().trim().replace(/\s+/g, "");
 }
-function normEmail(v) {
-  return (v || "").toString().trim().toLowerCase().replace(/\s+/g, "");
-}
-function lower(v) {
-  return (v || "").toString().trim().toLowerCase();
-}
-
-function normalizeApp(v) {
-  const a = (v || "").toString().trim().toUpperCase();
-  if (a === "STMN" || a === "SMTN" || a === "STAYMASTER" || a === "STAYMASTERNG") return "STMN";
-  if (a === "CPNG" || a === "CLP" || a === "CLINICPRONG" || a === "CLINICPRO") return "CPNG";
-  if (a === "RMP" || a === "REPAIRMASTERPRO") return "RMP";
-  return "SPNG";
-}
-function resolveRequestedApp(req) {
-  return normalizeApp(req.body?.app || (String(req.baseUrl || '').includes('/api/stmn/hotel') ? 'STMN' : 'SPNG'));
-}
-
-function ensureRestoreAudit(db) {
-  db.accountRestoreAudit = Array.isArray(db.accountRestoreAudit) ? db.accountRestoreAudit : [];
-}
-function pushRestoreAudit(db, payload = {}) {
-  ensureRestoreAudit(db);
-  db.accountRestoreAudit.unshift({
-    id: `RST-${Date.now()}-${nanoid(6)}`,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...payload,
-  });
-  if (db.accountRestoreAudit.length > 5000) db.accountRestoreAudit.length = 5000;
-}
-function canonicalShop(db, row) {
-  let shop = row || null;
-  if (!shop) return null;
-  if (shop.isMerged === true && shop.mergedInto) {
-    const canonical = (db.shops || []).find((x) => String(x.shopId) === String(shop.mergedInto));
-    if (canonical) shop = canonical;
-  }
-  return shop;
-}
 
 /**
  * Create or Reuse a Shop (Admin)
- * body: { shopName, ownerDeviceId, ownerPin, ownerPhone?, ownerEmail? }
+ * body: { shopName, ownerDeviceId, ownerPin, ownerPhone? }
  *
  * ✅ Professional:
- * - If ownerPhone or ownerEmail was used before, return the previous/canonical shopId.
- * - Prevent data loss after reinstall by restoring the old shop instead of creating a fresh one.
- * - Legacy clients without ownerPhone/ownerEmail can still create a new shop.
+ * - If ownerPhone+ownerPin match an existing shop, reuse it (idempotent create).
+ * - If only ownerDeviceId is provided (legacy clients), still creates a new shop.
  */
 r.post("/create", (req, res) => {
-  const app = resolveRequestedApp(req);
-  const body = req.body || {};
-  const shopName = body.shopName || body.hotelName || body.propertyName || body.businessName;
-  const ownerDeviceId = body.ownerDeviceId || body.deviceId || body.androidId;
-  const ownerPin = body.ownerPin || body.password || body.ownerPassword;
-  const ownerPhone = body.ownerPhone || body.phone;
-  const ownerEmail = body.ownerEmail || body.email;
+  const { shopName, ownerDeviceId, ownerPin, ownerPhone } = req.body || {};
   if (!shopName || !ownerDeviceId) {
-    return res.status(400).json({ ok: false, error: "shopName/hotelName and ownerDeviceId/deviceId are required" });
+    return res.status(400).json({ ok: false, error: "shopName and ownerDeviceId are required" });
   }
 
   const pin = (ownerPin || "").toString().trim();
   const phone = normPhone(ownerPhone);
-  const email = normEmail(ownerEmail);
 
   const db = readDB();
   if (!Array.isArray(db.shops)) db.shops = [];
   if (!Array.isArray(db.devices)) db.devices = [];
   if (!Array.isArray(db.shopAliases)) db.shopAliases = [];
-  ensureRestoreAudit(db);
 
+  // ✅ Reuse ONLY if same owner + same shopName (prevents duplicate-tap), otherwise allow multiple shops per owner
   let reused = false;
-  let reuseReason = "";
   let shop = null;
 
-  const requestedName = lower(shopName);
-  const byPhone = (s) => phone && normPhone(s.ownerPhone) === phone;
-  const byEmail = (s) => email && normEmail(s.ownerEmail) === email;
-  const byPin = (s) => pin && (s.ownerPin || "").toString().trim() === pin;
-  const sameName = (s) => requestedName && lower(s?.shopName) === requestedName;
+  const sameOwner = (s) => phone && pin && normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin;
+  const sameName = (s) => (s?.shopName || "").toString().trim().toLowerCase() === (shopName || "").toString().trim().toLowerCase();
 
-  // 1) Hard restore rule: same email or same phone should always restore the old shop.
-  if (phone || email) {
-    const exactContact = db.shops.find((s) => byPhone(s) || byEmail(s));
-    if (exactContact) {
-      shop = canonicalShop(db, exactContact);
-      reused = true;
-      reuseReason = byPhone(exactContact) ? "ownerPhone_reused" : "ownerEmail_reused";
-    }
-  }
-
-  // 2) Fallback for older data that may only have phone+pin+name.
-  if (!shop && phone && pin) {
-    const candidate = db.shops.find((s) => byPhone(s) && byPin(s) && sameName(s));
+  // If ownerPhone+ownerPin provided, we allow multiple shops. We only reuse when shopName matches.
+  if (phone && pin) {
+    const candidate = db.shops.find((s) => sameOwner(s) && sameName(s));
     if (candidate) {
-      shop = canonicalShop(db, candidate);
+      shop = candidate;
+      // If this shop was merged, return the canonical shop
+      if (shop.isMerged === true && shop.mergedInto) {
+        const canonical = db.shops.find(x => x.shopId === shop.mergedInto);
+        if (canonical) shop = canonical;
+      }
       reused = true;
-      reuseReason = "ownerPhonePinName_reused";
     }
   }
 
@@ -128,9 +70,6 @@ r.post("/create", (req, res) => {
       ownerDeviceId,
       ownerPin: pin,
       ownerPhone: phone,
-      ownerEmail: email,
-      app,
-      entityType: app === "STMN" ? "HOTEL" : "SHOP",
     };
     db.shops.push(shop);
   } else {
@@ -138,11 +77,6 @@ r.post("/create", (req, res) => {
     shop.shopName = shopName || shop.shopName;
     shop.updatedAt = Date.now();
     shop.ownerDeviceId = ownerDeviceId; // latest device that created/restored
-    if (phone) shop.ownerPhone = phone;
-    if (email) shop.ownerEmail = email;
-    if (pin) shop.ownerPin = pin;
-    if (app) shop.app = app;
-    if (!shop.entityType) shop.entityType = app === "STMN" ? "HOTEL" : "SHOP";
   }
 
   // ✅ register/update device as ADMIN for this shop
@@ -162,44 +96,19 @@ r.post("/create", (req, res) => {
     });
   }
 
-  pushRestoreAudit(db, {
-    app,
-    entityType: app === 'STMN' ? 'HOTEL' : 'SHOP',
-    action: reused ? 'restore_by_contact' : 'create_entity',
-    reused,
-    reuseReason,
-    entityId: shop.shopId,
-    entityCode: shop.shopCode,
-    entityName: shop.shopName,
-    ownerPhone: phone,
-    ownerEmail: email,
-    deviceId: ownerDeviceId,
-  });
-
   writeDB(db);
 
   // Provide an admin token for cloud sync right away (optional for clients)
   const token = signToken({ deviceId: ownerDeviceId, shopId: shop.shopId, role: "ADMIN" });
 
-  const payload = {
+  return res.json({
     ok: true,
-    app,
     reused,
-    reuseReason,
     shopId: shop.shopId,
     shopCode: shop.shopCode,
     shopName: shop.shopName,
     token,
-  };
-  if (app === "STMN") {
-    payload.hotelId = shop.shopId;
-    payload.hotelCode = shop.shopCode;
-    payload.hotelName = shop.shopName;
-    payload.propertyId = shop.shopId;
-    payload.propertyCode = shop.shopCode;
-    payload.propertyName = shop.shopName;
-  }
-  return res.json(payload);
+  });
 });
 
 /**
@@ -208,10 +117,9 @@ r.post("/create", (req, res) => {
  * returns: { ok:true, shops:[...], token?, shopId? }
  */
 r.post("/restore-login", (req, res) => {
-  const app = resolveRequestedApp(req);
-  const phone = normPhone(req.body?.ownerPhone || req.body?.phone);
-  const pin = (req.body?.ownerPin || req.body?.password || "").toString().trim();
-  const deviceId = (req.body?.deviceId || req.body?.ownerDeviceId || req.body?.androidId || "").toString().trim();
+  const phone = normPhone(req.body?.ownerPhone);
+  const pin = (req.body?.ownerPin || "").toString().trim();
+  const deviceId = (req.body?.deviceId || "").toString().trim();
 
   if (!phone || !pin || !deviceId) {
     return res.status(400).json({ ok: false, error: "ownerPhone, ownerPin, deviceId are required" });
@@ -220,7 +128,6 @@ r.post("/restore-login", (req, res) => {
   const db = readDB();
   if (!Array.isArray(db.shops)) db.shops = [];
   if (!Array.isArray(db.devices)) db.devices = [];
-  ensureRestoreAudit(db);
 
 const matches = db.shops.filter((s) => normPhone(s.ownerPhone) === phone && (s.ownerPin || "") === pin);
 
@@ -267,22 +174,6 @@ const recommendedShopId = chosen ? chosen.shopId : (shops[0]?.shopId || "");
   } else {
     db.devices.push({ deviceId, shopId, role: "ADMIN", pairedAt: Date.now(), isActive: true });
   }
-
-  const chosenShop = canonicalList.find((x) => x.shopId === shopId) || null;
-  pushRestoreAudit(db, {
-    app,
-    entityType: app === 'STMN' ? 'HOTEL' : 'SHOP',
-    action: 'restore_login',
-    reused: true,
-    reuseReason: mergeRequired ? 'multi_match_restore_login' : 'phone_pin_restore_login',
-    entityId: shopId,
-    entityCode: chosenShop?.shopCode || '',
-    entityName: chosenShop?.shopName || '',
-    ownerPhone: phone,
-    ownerEmail: chosenShop?.ownerEmail || '',
-    deviceId,
-    relatedCount: canonicalList.length,
-  });
 
   writeDB(db);
 

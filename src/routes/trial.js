@@ -28,8 +28,7 @@ function normalizeApp(app) {
   const a = String(app || "").trim().toUpperCase();
   if (a === "SPNG" || a === "SUPERPOSNG") return "SPNG";
   if (a === "RMP" || a === "REPAIRMASTERPRO") return "RMP";
-  if (a === "STMN" || a === "STMN" || a === "SMTN" || a === "STAYMASTER" || a === "STAYMASTERNG" || a === "STMNG") return "STMN";
-  if (a === "CPNG" || a === "CLP" || a === "CLINICPRONG" || a === "CLINICPRO" || a === "CLINIC_PRO_NG") return "CPNG";
+  if (a === "STMN" || a === "STAYMASTER" || a === "STAYMASTERNG" || a === "STMNG") return "STMN";
   return "";
 }
 
@@ -74,22 +73,10 @@ function requireDevKey(req, res, next) {
   return res.status(403).json({ ok: false, error: "Forbidden" });
 }
 
-function toCsv(rows, headers) {
-  const esc = (v) => {
-    const s = String(v ?? "");
-    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const head = headers.map(esc).join(",");
-  const body = rows.map((r) => headers.map((h) => esc(r[h])).join(",")).join("\n");
-  return head + "\n" + body + "\n";
-}
-
 function ensureTrialCollections(db) {
   db.trials = Array.isArray(db.trials) ? db.trials : [];
   db.trialAuditLogs = Array.isArray(db.trialAuditLogs) ? db.trialAuditLogs : [];
   db.trialBlocks = Array.isArray(db.trialBlocks) ? db.trialBlocks : [];
-  db.trialConsumedKeys = Array.isArray(db.trialConsumedKeys) ? db.trialConsumedKeys : [];
 }
 
 function parseIdentity(req) {
@@ -137,56 +124,6 @@ function getIdentityValues(ids) {
   return [ids.fpHash, ids.androidId, ids.deviceId, ids.installId].map(normalizeId).filter(Boolean);
 }
 
-function trialIdentityKey(app, kind, value) {
-  const v = normalizeId(value);
-  if (!app || !kind || !v) return "";
-  return `${app}|${String(kind).toUpperCase()}|${v}`;
-}
-
-function consumedKeysForIds(ids) {
-  return [
-    trialIdentityKey(ids.app, "FP", ids.fpHash),
-    trialIdentityKey(ids.app, "ANDROID", ids.androidId),
-    trialIdentityKey(ids.app, "DEVICE", ids.deviceId),
-    trialIdentityKey(ids.app, "INSTALL", ids.installId),
-  ].filter(Boolean);
-}
-
-function ensureConsumedKeys(db, ids, trial, statusHint = "") {
-  ensureTrialCollections(db);
-  const status = normalizeId(statusHint).toUpperCase() || computeStatus(ymdFromDate(new Date()), trial);
-  const keys = consumedKeysForIds({
-    app: ids?.app || trial?.app || "",
-    fpHash: ids?.fpHash || trial?.fpHash || "",
-    androidId: ids?.androidId || trial?.androidId || "",
-    deviceId: ids?.deviceId || trial?.deviceId || "",
-    installId: ids?.installId || trial?.installId || "",
-  });
-  for (const key of keys) {
-    const existing = db.trialConsumedKeys.find((x) => x && x.key === key);
-    if (existing) {
-      existing.status = status || existing.status || "CONSUMED";
-      existing.updatedAt = nowTs();
-      if (trial?.id) existing.trialId = existing.trialId || trial.id;
-      continue;
-    }
-    db.trialConsumedKeys.unshift({
-      key,
-      app: ids?.app || trial?.app || "",
-      trialId: trial?.id || "",
-      status: status || "CONSUMED",
-      createdAt: nowTs(),
-      updatedAt: nowTs(),
-    });
-  }
-}
-
-function findConsumedKeyReuse(db, ids) {
-  ensureTrialCollections(db);
-  const keys = consumedKeysForIds(ids);
-  return db.trialConsumedKeys.find((x) => x && keys.includes(x.key)) || null;
-}
-
 function trialMatchesIdentity(t, ids) {
   return scoreTrialMatch(t, ids) > 0;
 }
@@ -201,7 +138,7 @@ function findActivatedLicense(db, ids) {
   const androidId = normalizeId(ids.androidId || ids.deviceId);
   const fpHash = normalizeId(ids.fpHash);
   const collections = [];
-  collections.push(...(Array.isArray(db.licenses) ? db.licenses.flatMap((x) => ([{ kind: "SPNG", row: x }, { kind: "CPNG", row: x }])) : []));
+  collections.push(...(Array.isArray(db.licenses) ? db.licenses.map((x) => ({ kind: "SPNG", row: x })) : []));
   collections.push(...(Array.isArray(db.rmpLicenses) ? db.rmpLicenses.map((x) => ({ kind: "RMP", row: x })) : []));
   collections.push(...(Array.isArray(db.stmnLicenses) ? db.stmnLicenses.map((x) => ({ kind: "STMN", row: x })) : []));
 
@@ -340,7 +277,6 @@ function antiAbuseCleanup(db, app) {
   ensureTrialCollections(db);
   const beforeTrials = db.trials.length;
   const beforeBlocks = db.trialBlocks.length;
-  const beforeConsumed = db.trialConsumedKeys.length;
   const keep = [];
   const dupRevoked = [];
   const byCanonical = new Map();
@@ -434,17 +370,6 @@ function getAbuseState(db, ids, nowYmd, currentTrial) {
     };
   }
 
-  const consumedReuse = findConsumedKeyReuse(db, ids);
-  if (!currentTrial && consumedReuse) {
-    ensureBlock(db, ids, "trial-already-consumed", { nowYmd, key: consumedReuse.key, trialId: consumedReuse.trialId || "" });
-    logTrialEvent(db, "trial_force_block", ids, { reason: "trial-already-consumed", key: consumedReuse.key, trialId: consumedReuse.trialId || "" });
-    return {
-      blocked: true,
-      reason: "trial-already-consumed",
-      payload: blockPayload(ids.app, "trial-already-consumed", nowYmd)
-    };
-  }
-
   if (currentTrial) {
     const installMismatch = !!(ids.installId && currentTrial.installId && currentTrial.installId !== ids.installId);
     if (installMismatch) {
@@ -488,7 +413,7 @@ router.get("/claim", (req, res) => {
   const app = ids.app;
 
   if (!app) {
-    return res.status(400).json({ ok: false, message: "Missing/invalid app. Use app=SPNG, app=RMP, app=STMN or app=CPNG" });
+    return res.status(400).json({ ok: false, message: "Missing/invalid app. Use app=SPNG, app=RMP or app=STMN" });
   }
   if (!hasPrimaryIdentity(ids)) {
     return res.status(400).json({ ok: false, message: "Missing device identity (fpHash/androidId/deviceId)" });
@@ -538,7 +463,6 @@ router.get("/claim", (req, res) => {
       lastUserAgent: ids.userAgent
     };
     db.trials.push(t);
-    ensureConsumedKeys(db, ids, t, "ACTIVE");
     logTrialEvent(db, "trial_claim_created", ids, { trialId: t.id, startYmd, expiryYmd });
     writeDB(db);
     return res.json(responsePayload(nowYmd, app, t));
@@ -547,7 +471,6 @@ router.get("/claim", (req, res) => {
   enrichTrialRecord(t, ids);
   if (!t.firstClientDateYmd && ids.clientDateYmd) t.firstClientDateYmd = ids.clientDateYmd;
   db.trials[idx] = t;
-  ensureConsumedKeys(db, ids, t);
 
   const payload = responsePayload(nowYmd, app, t);
   if (payload.status === "EXPIRED" || payload.status === "REVOKED" || payload.status === "BLOCKED") {
@@ -593,7 +516,6 @@ router.get("/status", (req, res) => {
 
   enrichTrialRecord(t, ids);
   db.trials[hit.idx] = t;
-  ensureConsumedKeys(db, ids, t);
 
   const payload = responsePayload(nowYmd, app, t);
   logTrialEvent(db, "trial_status_checked", ids, { trialId: t.id, status: payload.status });
@@ -603,41 +525,6 @@ router.get("/status", (req, res) => {
     return res.status(403).json(payload);
   }
   return res.json(payload);
-});
-
-
-router.get("/admin/summary", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const app = normalizeApp(req.query.app);
-  const nowYmd = ymdFromDate(new Date());
-  let items = db.trials.map((t) => ({ ...t, status: computeStatus(nowYmd, t) }));
-  if (app) items = items.filter((t) => t.app === app);
-
-  const stats = {
-    total: items.length,
-    active: 0,
-    expired: 0,
-    revoked: 0,
-    blocked: 0,
-    todayConsumed: 0,
-    blocks: 0,
-    audits: 0,
-  };
-
-  for (const t of items) {
-    const st = String(t.status || '').toUpperCase();
-    if (st === 'ACTIVE') stats.active += 1;
-    else if (st === 'EXPIRED') stats.expired += 1;
-    else if (st === 'REVOKED') stats.revoked += 1;
-    else if (st === 'BLOCKED') stats.blocked += 1;
-    if (Number(t.createdAt || 0) >= (Date.now() - 24 * 60 * 60 * 1000)) stats.todayConsumed += 1;
-  }
-
-  stats.blocks = [...db.trialBlocks].filter((x) => x && x.active !== false && (!app || x.app === app)).length;
-  stats.audits = [...db.trialAuditLogs].filter((x) => !app || x.app === app).length;
-
-  return res.json({ ok: true, app: app || '', stats, serverTime: nowTs() });
 });
 
 router.get("/admin/consumed", requireDevKey, (req, res) => {
@@ -678,197 +565,6 @@ router.get("/admin/audit", requireDevKey, (req, res) => {
   const total = items.length;
   return res.json({ ok: true, total, offset, limit, items: items.slice(offset, offset + limit), serverTime: nowTs() });
 });
-
-router.get("/admin/blocks", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const app = normalizeApp(req.query.app);
-  const q = normalizeId(req.query.q).toLowerCase();
-  const limit = Math.max(1, Math.min(500, Number(req.query.limit || 100)));
-  const offset = Math.max(0, Number(req.query.offset || 0));
-  let items = [...db.trialBlocks].filter((x) => x && x.active !== false);
-  if (app) items = items.filter((x) => x.app === app);
-  if (q) items = items.filter((x) => [x.reason, x.fpHash, x.androidId, x.deviceId, x.installId].map((v) => String(v || "").toLowerCase()).some((v) => v.includes(q)));
-  const total = items.length;
-  return res.json({ ok: true, total, offset, limit, items: items.slice(offset, offset + limit), serverTime: nowTs() });
-});
-
-
-router.get("/admin/consumed-export", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const app = normalizeApp(req.query.app);
-  const statusFilter = normalizeId(req.query.status).toUpperCase();
-  const q = normalizeId(req.query.q).toLowerCase();
-  const nowYmd = ymdFromDate(new Date());
-  let items = db.trials.map((t) => ({ ...t, status: computeStatus(nowYmd, t) }));
-  if (app) items = items.filter((t) => t.app === app);
-  if (statusFilter) items = items.filter((t) => t.status === statusFilter);
-  if (q) items = items.filter((t) => [t.id, t.fpHash, t.androidId, t.deviceId, t.installId, t.revokeReason, t.blockReason].map((x) => String(x || "").toLowerCase()).some((x) => x.includes(q)));
-  items.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
-  const rows = items.map((t) => ({
-    id: t.id || "",
-    app: t.app || "",
-    status: t.status || "",
-    deviceId: t.deviceId || "",
-    androidId: t.androidId || "",
-    fpHash: t.fpHash || "",
-    installId: t.installId || "",
-    startYmd: t.startYmd || 0,
-    expiryYmd: t.expiryYmd || 0,
-    consumed: !!t.consumed,
-    revoked: !!t.revoked,
-    blocked: !!t.blocked,
-    revokeReason: t.revokeReason || "",
-    blockReason: t.blockReason || "",
-    createdAt: t.createdAt || 0,
-    updatedAt: t.updatedAt || 0,
-    lastSeenAt: t.lastSeenAt || 0,
-  }));
-  const csv = toCsv(rows, ["id", "app", "status", "deviceId", "androidId", "fpHash", "installId", "startYmd", "expiryYmd", "consumed", "revoked", "blocked", "revokeReason", "blockReason", "createdAt", "updatedAt", "lastSeenAt"]);
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${app ? app.toLowerCase() : 'trial'}_trials_${nowTs()}.csv"`);
-  return res.send(csv);
-});
-
-router.get("/admin/audit-export", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const app = normalizeApp(req.query.app);
-  const type = normalizeId(req.query.type);
-  let items = [...db.trialAuditLogs];
-  if (app) items = items.filter((x) => x.app === app);
-  if (type) items = items.filter((x) => x.type === type);
-  const rows = items.map((x) => ({
-    id: x.id || "",
-    app: x.app || "",
-    type: x.type || "",
-    deviceId: x.deviceId || "",
-    androidId: x.androidId || "",
-    fpHash: x.fpHash || "",
-    installId: x.installId || "",
-    clientDateYmd: x.clientDateYmd || 0,
-    ip: x.ip || "",
-    createdAt: x.createdAt || 0,
-    meta: JSON.stringify(x.meta || {}),
-  }));
-  const csv = toCsv(rows, ["id", "app", "type", "deviceId", "androidId", "fpHash", "installId", "clientDateYmd", "ip", "createdAt", "meta"]);
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${app ? app.toLowerCase() : 'trial'}_audit_${nowTs()}.csv"`);
-  return res.send(csv);
-});
-
-router.get("/admin/blocks-export", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const app = normalizeApp(req.query.app);
-  const q = normalizeId(req.query.q).toLowerCase();
-  let items = [...db.trialBlocks];
-  if (app) items = items.filter((x) => x.app === app);
-  if (q) items = items.filter((x) => [x.reason, x.fpHash, x.androidId, x.deviceId, x.installId].map((v) => String(v || "").toLowerCase()).some((v) => v.includes(q)));
-  const rows = items.map((x) => ({
-    id: x.id || "",
-    app: x.app || "",
-    active: x.active !== false,
-    reason: x.reason || "",
-    deviceId: x.deviceId || "",
-    androidId: x.androidId || "",
-    fpHash: x.fpHash || "",
-    installId: x.installId || "",
-    createdAt: x.createdAt || 0,
-    updatedAt: x.updatedAt || 0,
-    meta: JSON.stringify(x.meta || {}),
-  }));
-  const csv = toCsv(rows, ["id", "app", "active", "reason", "deviceId", "androidId", "fpHash", "installId", "createdAt", "updatedAt", "meta"]);
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${app ? app.toLowerCase() : 'trial'}_blocks_${nowTs()}.csv"`);
-  return res.send(csv);
-});
-
-router.post("/admin/revoke", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const ids = {
-    app: normalizeApp(req.body?.app || req.query.app),
-    deviceId: normalizeId(req.body?.deviceId),
-    fpHash: normalizeId(req.body?.fpHash),
-    androidId: normalizeId(req.body?.androidId),
-    installId: normalizeId(req.body?.installId),
-    clientDateYmd: 0,
-    ip: normalizeId(req.ip),
-    userAgent: normalizeId(req.header("user-agent")),
-  };
-  const reason = normalizeId(req.body?.reason) || "manual-revoke";
-  if (!ids.app) return res.status(400).json({ ok: false, error: "app required" });
-  const hit = selectExistingTrial(db.trials, ids.app, ids);
-  if (!hit || !hit.t) return res.status(404).json({ ok: false, error: "trial not found" });
-  const nowYmd = ymdFromDate(new Date());
-  const t = hit.t;
-  markRevoked(t, reason, nowYmd);
-  ensureConsumedKeys(db, ids, t, "REVOKED");
-  ensureBlock(db, ids, reason, { nowYmd, action: "manual-revoke", trialId: t.id || "" });
-  logTrialEvent(db, "trial_admin_revoke", ids, { reason, trialId: t.id || "" });
-  writeDB(db);
-  return res.json({ ok: true, trial: { ...t, status: computeStatus(nowYmd, t) }, serverTime: nowTs() });
-});
-
-router.post("/admin/blacklist", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const ids = {
-    app: normalizeApp(req.body?.app || req.query.app),
-    deviceId: normalizeId(req.body?.deviceId),
-    fpHash: normalizeId(req.body?.fpHash),
-    androidId: normalizeId(req.body?.androidId),
-    installId: normalizeId(req.body?.installId),
-    clientDateYmd: 0,
-    ip: normalizeId(req.ip),
-    userAgent: normalizeId(req.header("user-agent")),
-  };
-  const reason = normalizeId(req.body?.reason) || "manual-blacklist";
-  if (!ids.app) return res.status(400).json({ ok: false, error: "app required" });
-  if (!hasPrimaryIdentity(ids) && !ids.installId) return res.status(400).json({ ok: false, error: "identity required" });
-  const row = ensureBlock(db, ids, reason, { source: "admin-blacklist" });
-  const hit = selectExistingTrial(db.trials, ids.app, ids);
-  if (hit && hit.t) {
-    markBlocked(hit.t, reason, ymdFromDate(new Date()));
-    ensureConsumedKeys(db, ids, hit.t, "BLOCKED");
-  }
-  logTrialEvent(db, "trial_admin_blacklist", ids, { reason, blockId: row?.id || "", trialId: hit?.t?.id || "" });
-  writeDB(db);
-  return res.json({ ok: true, block: row || null, serverTime: nowTs() });
-});
-
-router.post("/admin/unblock", requireDevKey, (req, res) => {
-  const db = readDB();
-  ensureTrialCollections(db);
-  const ids = {
-    app: normalizeApp(req.body?.app || req.query.app),
-    deviceId: normalizeId(req.body?.deviceId),
-    fpHash: normalizeId(req.body?.fpHash),
-    androidId: normalizeId(req.body?.androidId),
-    installId: normalizeId(req.body?.installId),
-    clientDateYmd: 0,
-    ip: normalizeId(req.ip),
-    userAgent: normalizeId(req.header("user-agent")),
-  };
-  if (!ids.app) return res.status(400).json({ ok: false, error: "app required" });
-  const reason = normalizeId(req.body?.reason) || "manual-unblock";
-  let changed = 0;
-  for (const b of db.trialBlocks) {
-    if (!b || b.active === false) continue;
-    if (blockMatchesIdentity(b, ids)) {
-      b.active = false;
-      b.updatedAt = nowTs();
-      b.clearedReason = reason;
-      changed += 1;
-    }
-  }
-  logTrialEvent(db, "trial_admin_unblock", ids, { reason, changed });
-  writeDB(db);
-  return res.json({ ok: true, changed, note: "Existing consumed-trial ledger remains intact.", serverTime: nowTs() });
-});
-
 
 router.post("/admin/cleanup", requireDevKey, (req, res) => {
   const db = readDB();

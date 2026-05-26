@@ -1,35 +1,7 @@
 import { Router } from "express";
-import * as Fcm from "../fcm.js";
-const upsertSpngDeviceToken = Fcm.upsertSpngDeviceToken || ((shopId, deviceId, role, token) => ({ ok: false, error: "upsertSpngDeviceToken unavailable" }));
-const removeSpngDeviceToken = Fcm.removeSpngDeviceToken || ((shopId, deviceId) => ({ ok: true, removed: 0, reason: "removeSpngDeviceToken unavailable" }));
-const ensureFcm = Fcm.ensureFcm || (() => ({ ok: true, disabled: true, reason: "FCM helper unavailable" }));
+import { upsertSpngDeviceToken, removeSpngDeviceToken, ensureFcm } from "../fcm.js";
 
 const r = Router();
-
-function enterpriseRouteGuard(handler) {
-  if (typeof handler !== 'function') return handler;
-  return function guardedRoute(req, res, next) {
-    try {
-      const out = handler(req, res, next);
-      if (out && typeof out.then === 'function') {
-        out.catch((err) => {
-          try { console.error('[route-error]', req?.method, req?.originalUrl || req?.url, err?.stack || err); } catch {}
-          if (res.headersSent) return next(err);
-          return res.status(500).json({ ok:false, error:'Server error', detail:String(err?.message || err || 'Unknown error') });
-        });
-      }
-      return out;
-    } catch (err) {
-      try { console.error('[route-error]', req?.method, req?.originalUrl || req?.url, err?.stack || err); } catch {}
-      if (res.headersSent) return next(err);
-      return res.status(500).json({ ok:false, error:'Server error', detail:String(err?.message || err || 'Unknown error') });
-    }
-  };
-}
-for (const method of ['get','post','put','patch','delete']) {
-  const original = r[method].bind(r);
-  r[method] = (path, ...handlers) => original(path, ...handlers.map(enterpriseRouteGuard));
-}
 
 function requireShop(req, res) {
   const raw = req.auth?.shopId ? String(req.auth.shopId) : "";

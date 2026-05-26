@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { readDB, writeDB } from "../db.js";
-import * as Fcm from "../fcm.js";
-const pushSpngShopChange = Fcm.pushSpngShopChange || (async () => ({ ok: true, skipped: true, reason: "FCM helper unavailable" }));
+import { pushSpngShopChange } from "../fcm.js";
 
 const r = Router();
 
@@ -74,12 +73,6 @@ function spngPing(shopId, payload) {
     pushSpngShopChange(shopId, payload || { type: "SPNG_SYNC" }).catch(() => {});
   } catch (_e) {}
 }
-
-function sendJsonOnce(res, status, body) {
-  if (res.headersSent) return null;
-  return status ? res.status(status).json(body) : res.json(body);
-}
-
 // Identify acting cashier (if this request is made with a cashier token)
 function getActor(req){
   const a = req && req.auth ? req.auth : {};
@@ -539,7 +532,7 @@ r.post(SALE_PATHS, (req, res) => {
     if (!shopId) return;
 
     const sale = extractSaleFromBody(req.body);
-    if (!sale) return sendJsonOnce(res, 400, { ok: false, error: "sale required" });
+    if (!sale) return res.status(400).json({ ok: false, error: "sale required" });
 
     const db = readDB();
     ensureDbArrays(db);
@@ -606,7 +599,7 @@ r.post(SALE_PATHS, (req, res) => {
     }
 
     if (expiredItems.length > 0) {
-      return sendJsonOnce(res, 409, {
+      return res.status(409).json({
         ok: false,
         code: "EXPIRED_BLOCK",
         messageEn:
@@ -621,7 +614,7 @@ r.post(SALE_PATHS, (req, res) => {
     // If duplicate sale: do NOT deduct stock or add debtor again
     if (exists) {
       spngPing(shopId, { type: "SPNG_SYNC", module: "sales" });
-      return sendJsonOnce(res, 0, {
+  res.json({
         ok: true,
         saved: false,
         duplicate: true,
@@ -723,7 +716,7 @@ r.post(SALE_PATHS, (req, res) => {
     } catch (_e) {}
 
     writeDB(db);
-    return sendJsonOnce(res, 0, {
+    return res.json({
       ok: true,
       saved: true,
       receiptNo,
@@ -735,12 +728,8 @@ r.post(SALE_PATHS, (req, res) => {
       },
     });
   } catch (e) {
-    if (e?.code === "ERR_HTTP_HEADERS_SENT" || res.headersSent || res.writableEnded) {
-      console.error("POST /sales duplicate response ignored", e?.code || e?.message || e);
-      return;
-    }
     console.error("POST /sales error", e);
-    return sendJsonOnce(res, 500, { ok: false, error: "sale_push_failed" });
+    return res.status(500).json({ ok: false, error: "sale_push_failed" });
   }
 });
 
