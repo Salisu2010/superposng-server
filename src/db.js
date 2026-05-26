@@ -19,16 +19,11 @@ function buildInitialDB() {
     trials: [], trialAuditLogs: [], trialBlocks: [],
     tgOrgs: [], tgDevices: [], tgEnrollTokens: [], tgCommands: [], tgLocations: [], tgHeartbeats: [], tgPairCodes: [],
     stmnLicenses: [], stmnFcmTokens: [], stmnChatMessages: [], stmnChatSeen: [],
-    spngFcmTokens: [], stmnRooms: [], stmnBookings: [], stmnReminderLog: [],
     clinics: [], clinicDevices: [], clinicUsers: [], clinicSnapshots: [], clinicBackups: [], clinicNotifications: [], clinicEvents: [],
     clinicBranches: [], clinicSyncCursor: [], clinicPatients: [], clinicBills: [], clinicVisits: [], clinicAdmissions: [],
     clinicAppointments: [], clinicPharmacyDispenses: [], clinicPharmacyItems: [], clinicPharmacyReceipts: [], clinicStockMovements: [],
     clinicSuppliers: [], clinicLabRequests: [], clinicPrescriptions: [], clinicNurseDesk: [], clinicDoctorQueue: [], clinicPairCodes: [],
-    clinicChangeLog: [], clinicLabOrders: [], clinicProfiles: [], clinicAuditLogs: [], clinicVitals: [],
-    clinicInpatientTreatment: [], clinicTreatmentNotes: [], clinicMedicationSchedule: [], clinicMedicationLogs: [],
-    clinicLabSamples: [], clinicDischargeSummary: [], clinicNurseTasks: [], clinicCashierShifts: [],
-    clinicPaymentRefunds: [], clinicTheatreSchedules: [], clinicCloudPrintJobs: [], clinicCloudPrintHosts: [],
-    tgIntruders: []
+    clinicChangeLog: [], clinicLabOrders: []
   }
 }
 
@@ -116,10 +111,6 @@ function normalizeDB(db) {
     if (!Array.isArray(db.stmnFcmTokens)) db.stmnFcmTokens = []
     if (!Array.isArray(db.stmnChatMessages)) db.stmnChatMessages = []
     if (!Array.isArray(db.stmnChatSeen)) db.stmnChatSeen = []
-    if (!Array.isArray(db.spngFcmTokens)) db.spngFcmTokens = []
-    if (!Array.isArray(db.stmnRooms)) db.stmnRooms = []
-    if (!Array.isArray(db.stmnBookings)) db.stmnBookings = []
-    if (!Array.isArray(db.stmnReminderLog)) db.stmnReminderLog = []
     if (!Array.isArray(db.clinics)) db.clinics = []
     if (!Array.isArray(db.clinicDevices)) db.clinicDevices = []
     if (!Array.isArray(db.clinicUsers)) db.clinicUsers = []
@@ -146,22 +137,6 @@ function normalizeDB(db) {
     if (!Array.isArray(db.clinicPairCodes)) db.clinicPairCodes = []
     if (!Array.isArray(db.clinicChangeLog)) db.clinicChangeLog = []
     if (!Array.isArray(db.clinicLabOrders)) db.clinicLabOrders = []
-    if (!Array.isArray(db.clinicProfiles)) db.clinicProfiles = []
-    if (!Array.isArray(db.clinicAuditLogs)) db.clinicAuditLogs = []
-    if (!Array.isArray(db.clinicVitals)) db.clinicVitals = []
-    if (!Array.isArray(db.clinicInpatientTreatment)) db.clinicInpatientTreatment = []
-    if (!Array.isArray(db.clinicTreatmentNotes)) db.clinicTreatmentNotes = []
-    if (!Array.isArray(db.clinicMedicationSchedule)) db.clinicMedicationSchedule = []
-    if (!Array.isArray(db.clinicMedicationLogs)) db.clinicMedicationLogs = []
-    if (!Array.isArray(db.clinicLabSamples)) db.clinicLabSamples = []
-    if (!Array.isArray(db.clinicDischargeSummary)) db.clinicDischargeSummary = []
-    if (!Array.isArray(db.clinicNurseTasks)) db.clinicNurseTasks = []
-    if (!Array.isArray(db.clinicCashierShifts)) db.clinicCashierShifts = []
-    if (!Array.isArray(db.clinicPaymentRefunds)) db.clinicPaymentRefunds = []
-    if (!Array.isArray(db.clinicTheatreSchedules)) db.clinicTheatreSchedules = []
-    if (!Array.isArray(db.clinicCloudPrintJobs)) db.clinicCloudPrintJobs = []
-    if (!Array.isArray(db.clinicCloudPrintHosts)) db.clinicCloudPrintHosts = []
-    if (!Array.isArray(db.tgIntruders)) db.tgIntruders = []
     return db
 }
 
@@ -187,7 +162,7 @@ function readDB() {
     }
   } catch {}
 
-  const data = fs.readFileSync(DB_FILE, 'utf-8')
+  const data = fs.readFileSync(DB_FILE, 'utf-8') || '{}'
   try {
     const db = normalizeDB(JSON.parse(data))
     cachedDb = db
@@ -205,13 +180,37 @@ function readDB() {
   }
 }
 
+let writeQueue = Promise.resolve()
+
 function writeDB(data) {
-  const dir = path.dirname(DB_FILE)
-  const tmp = path.join(dir, `.${path.basename(DB_FILE)}.${process.pid}.${Date.now()}.tmp`)
-  const payload = JSON.stringify(data || buildInitialDB(), null, 2)
-  fs.writeFileSync(tmp, payload)
-  fs.renameSync(tmp, DB_FILE)
-  updateCache(data || buildInitialDB())
+  const safeData = data || buildInitialDB()
+
+  writeQueue = writeQueue.then(async () => {
+    const dir = path.dirname(DB_FILE)
+    const tmp = path.join(
+      dir,
+      `.${path.basename(DB_FILE)}.${process.pid}.${Date.now()}.tmp`
+    )
+
+    const payload = JSON.stringify(safeData, null, 2)
+
+    try {
+      fs.writeFileSync(tmp, payload, 'utf-8')
+      fs.renameSync(tmp, DB_FILE)
+      updateCache(safeData)
+    } catch (e) {
+      try {
+        if (fs.existsSync(tmp)) fs.unlinkSync(tmp)
+      } catch {}
+
+      console.error('[db] writeDB failed:', e?.stack || e)
+      throw e
+    }
+  }).catch((err) => {
+    console.error('[db] queued write failure:', err?.stack || err)
+  })
+
+  return writeQueue
 }
 
 export { readDB, writeDB }
