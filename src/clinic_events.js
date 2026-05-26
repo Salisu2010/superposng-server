@@ -2,18 +2,34 @@ const clientsByClinic = new Map();
 
 function now(){ return Date.now(); }
 
+function safeWriteSse(res, chunk){
+  try {
+    if (!res || res.destroyed || res.writableEnded) return false;
+    res.write(chunk);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function clinicSseHeaders(res){
-  res.status(200);
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  try {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+    return true;
+  } catch (e) {
+    try { console.error('[clinic-sse] header error', e?.message || e); } catch {}
+    return false;
+  }
 }
 
 export function clinicSendSse(res, event, data){
-  res.write(`event: ${String(event || 'message')}\n`);
-  res.write(`data: ${JSON.stringify(data ?? {})}\n\n`);
+  const chunk = `event: ${String(event || 'message')}\ndata: ${JSON.stringify(data ?? {})}\n\n`;
+  return safeWriteSse(res, chunk);
 }
 
 export function clinicAddClient(clinicId, res){

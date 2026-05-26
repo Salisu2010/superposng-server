@@ -22,6 +22,109 @@
   </header>
 
   <main class="wrap">
+
+    <section class="card">
+      <div class="cardHead">
+        <div>
+          <h2 style="margin:0">Global License & Trial Command Center</h2>
+          <p class="muted" style="margin-top:6px">One dashboard for SPNG, CPNG/CLP, STMN/SMTN, and RMP.</p>
+        </div>
+        <div class="row" style="flex-wrap:wrap">
+          <button id="btnGlobalRefresh" class="btn primary">Refresh Global Dashboard</button>
+          <button id="btnGlobalOpenHistory" class="btn">Open History</button>
+          <button id="btnGlobalExportCsv" class="btn">Export Global CSV</button>
+          <button id="btnGlobalExportPdf" class="btn">Export Global PDF</button>
+          <label class="autoRefreshBox" title="Auto refresh global dashboard and history counts">
+            <input id="autoRefreshToggle" type="checkbox" checked />
+            <span>Live counts</span>
+          </label>
+          <select id="autoRefreshEvery" style="width:auto;min-width:120px">
+            <option value="15000">15s</option>
+            <option value="30000" selected>30s</option>
+            <option value="60000">60s</option>
+            <option value="120000">120s</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid4" style="margin-top:12px">
+        <div>
+          <label>App Filter</label>
+          <select id="globalAppFilter">
+            <option value="ALL" selected>ALL APPS</option>
+            <option value="CPNG">CLP / CPNG</option>
+            <option value="SPNG">SPNG</option>
+            <option value="STMN">SMTN / STMN</option>
+            <option value="RMP">RMP</option>
+          </select>
+        </div>
+        <div>
+          <label>Action Filter</label>
+          <select id="globalActionFilter">
+            <option value="ALL" selected>ALL ACTIONS</option>
+            <option value="ACTIVATIONS">ACTIVATIONS</option>
+            <option value="REVOKES">REVOKES / RESETS</option>
+            <option value="ABUSE">TRIAL ABUSE</option>
+          </select>
+        </div>
+        <div>
+          <label>From</label>
+          <input id="globalFrom" type="date" />
+        </div>
+        <div>
+          <label>To</label>
+          <input id="globalTo" type="date" />
+        </div>
+      </div>
+      <div id="globalMeta" class="muted" style="margin-top:10px"></div>
+      <div id="liveRefreshMeta" class="muted" style="margin-top:6px"></div>
+      <div id="globalOverview" class="kpiGrid"></div>
+      <h3 style="margin-top:16px;">By App</h3>
+      <div id="globalAppCards" class="kpiGrid"></div>
+      <div class="grid2" style="margin-top:16px;">
+        <div class="subCard">
+          <div class="subTitle">6-Month Activation / Abuse Trend</div>
+          <div id="globalTrend" class="trendGrid"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="globalReasonsTitle">Top Revoke / Block Reasons (0)</div>
+          <div id="globalReasons" class="stackList"></div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px;">
+        <div class="subCard">
+          <div class="subTitle" id="globalExpiringTitle">Expiring Soon (0)</div>
+          <div id="globalExpiring" class="results"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="globalAbuseTitle">Top Abused Identities (0)</div>
+          <div id="globalAbuse" class="stackList"></div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px;">
+        <div class="subCard">
+          <div class="subTitle" id="globalClustersTitle">Device Fingerprint Clusters (0)</div>
+          <div id="globalClusters" class="stackList"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="globalSuspiciousTitle">Suspicious Devices (0)</div>
+          <div id="globalSuspicious" class="stackList"></div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px;">
+        <div class="subCard">
+          <div class="subTitle" id="globalMultiAccountTitle">Multi-Account Devices (0)</div>
+          <div id="globalMultiAccount" class="stackList"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="globalFraudTitle">Fraud Score Per Device (0)</div>
+          <div id="globalFraud" class="results"></div>
+        </div>
+      </div>
+      <div class="subCard" style="margin-top:16px;">
+        <div class="subTitle" id="globalRevokesTitle">Recent Revokes / Binding Resets (0)</div>
+        <div id="globalRevokes" class="results"></div>
+      </div>
+    </section>
         <section class="card">
       <h2>Token Generator</h2>
       <div class="grid2">
@@ -69,6 +172,204 @@
         </div>
       </div>
       <p class="hint">Formats: <code>SPNG1|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (legacy) or <code>SPNG2|PLAN|YYYYMMDD|DEVHASH16|SIG12</code> (Anti-Clone with Device Code).</p>
+    </section>
+
+
+    <section class="card">
+      <h2>ClinicProNG Token Generator (CPNG)</h2>
+      <div class="grid2">
+        <div>
+          <label>Plan</label>
+          <select id="cpngPlan">
+            <option value="MONTHLY" selected>MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+          </select>
+        </div>
+        <div>
+          <label>ANDROID_ID / Device ID (required)</label>
+          <input id="cpngDeviceId" placeholder="paste ANDROID_ID from ClinicProNG" />
+        </div>
+        <div>
+          <label>Anti-Clone (Recommended)</label>
+          <div class="switchRow">
+            <label class="switch">
+              <input id="cpngUseSpng2" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+            <div class="switchText">
+              <div class="switchTitle">Use Device Code</div>
+              <div class="hint" style="margin:0">From app: Activation -> copy Device Code</div>
+            </div>
+          </div>
+        </div>
+        <div id="cpngFpWrap">
+          <label>Device Code</label>
+          <input id="cpngFpHash" placeholder="paste device code from ClinicProNG" />
+        </div>
+        <div class="row">
+          <button id="btnCpngGenerate" class="btn primary">Generate CPNG Token</button>
+          <button id="btnCpngAssignOnline" class="btn">Activate Online</button>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px;">
+        <div>
+          <label>CPNG Token</label>
+          <input id="cpngToken" placeholder="Generated token appears here" />
+        </div>
+        <div class="row">
+          <button id="btnCpngCopy" class="btn">Copy CPNG Token</button>
+        </div>
+      </div>
+      <p class="hint">ClinicProNG uses the same hardened SPNG-style token engine, but licenses are stored under <b>CPNG</b> so you can manage them separately.</p>
+    </section>
+
+    <section class="card">
+      <h2>ClinicProNG License Dashboard</h2>
+      <div id="cpngStats" class="kpiGrid"></div>
+      <div class="grid3" style="margin-top:12px;">
+        <div>
+          <label>Search (token/license/device/devHash/notes)</label>
+          <input id="cpngTblQ" placeholder="type to filter CPNG licenses" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="cpngTblStatus">
+            <option value="">All</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="REVOKED">REVOKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="cpngTblPlan">
+            <option value="">All</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+            <option value="TRIAL">TRIAL</option>
+            <option value="LEGACY">LEGACY</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnCpngTblRefresh" class="btn primary">Refresh CPNG</button>
+        <button id="btnCpngTblPrev" class="btn">Prev</button>
+        <button id="btnCpngTblNext" class="btn">Next</button>
+        <span id="cpngTblMeta" class="hint" style="margin-left:auto;"></span>
+      </div>
+      <div id="cpngTokenTable" class="results"></div>
+      <p class="hint">Quick actions: Copy token, set as Target, +1 month, +12 months, Reset binding, or Revoke.</p>
+    </section>
+
+    <section class="card">
+      <h2>ClinicProNG Activation / License Action Center</h2>
+      <div class="grid4">
+        <div>
+          <label>Target License ID</label>
+          <input id="cpngActionLicenseId" placeholder="paste or use Target from table" />
+        </div>
+        <div>
+          <label>Target Device ID</label>
+          <input id="cpngActionDeviceId" placeholder="optional if already bound" />
+        </div>
+        <div>
+          <label>Current Token (optional)</label>
+          <input id="cpngActionToken" placeholder="optional" />
+        </div>
+        <div>
+          <label>Custom Extend Months</label>
+          <input id="cpngActionMonths" type="number" min="1" step="1" value="1" />
+        </div>
+        <div>
+          <label>Revoke / Extend Reason</label>
+          <input id="cpngActionReason" placeholder="e.g. customer renewal / abuse / refund" />
+        </div>
+        <div>
+          <label>Export</label>
+          <div class="row">
+            <button id="btnCpngExportLicenses" class="btn">Export Licenses CSV</button>
+            <button id="btnCpngExportTrials" class="btn">Export Trials CSV</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px; flex-wrap:wrap;">
+        <button id="btnCpngCustomExtend" class="btn primary">Extend Custom Months</button>
+        <button id="btnCpngResendOnline" class="btn">Resend Online Activation</button>
+        <button id="btnCpngManualRevoke" class="btn danger">Manual Revoke</button>
+        <button id="btnCpngResetBinding" class="btn warn">Reset Binding</button>
+      </div>
+      <p class="hint">Use <b>Target</b> from the license table to auto-fill the license ID, then add a reason for revoke/extend actions.</p>
+      <h3 style="margin-top:16px;">Recent CPNG License Audit</h3>
+      <div id="cpngLicenseAuditTable" class="results"></div>
+    </section>
+
+    <section class="card">
+      <h2>ClinicProNG Trial Control</h2>
+      <div id="cpngTrialStats" class="kpiGrid"></div>
+      <div class="grid3" style="margin-top:12px;">
+        <div>
+          <label>Search Trials</label>
+          <input id="cpngTrialQ" placeholder="deviceId / androidId / installId / reason" />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="cpngTrialStatus">
+            <option value="">All</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="REVOKED">REVOKED</option>
+            <option value="BLOCKED">BLOCKED</option>
+          </select>
+        </div>
+        <div>
+          <label>Actions</label>
+          <div class="row">
+            <button id="btnCpngTrialRefresh" class="btn primary">Refresh Trials</button>
+            <button id="btnCpngTrialCleanup" class="btn danger">Run Cleanup</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <span id="cpngTrialMeta" class="hint"></span>
+      </div>
+      <div class="grid3" style="margin-top:12px;">
+        <div>
+          <label>Trial Device ID</label>
+          <input id="cpngTrialActionDeviceId" placeholder="paste deviceId from trial row" />
+        </div>
+        <div>
+          <label>Trial Android ID</label>
+          <input id="cpngTrialActionAndroidId" placeholder="optional androidId" />
+        </div>
+        <div>
+          <label>Trial Install ID</label>
+          <input id="cpngTrialActionInstallId" placeholder="optional installId" />
+        </div>
+        <div>
+          <label>Trial FP Hash</label>
+          <input id="cpngTrialActionFpHash" placeholder="optional fpHash" />
+        </div>
+        <div>
+          <label>Admin Reason</label>
+          <input id="cpngTrialActionReason" placeholder="e.g. abuse / fraud / mistaken block" />
+        </div>
+        <div>
+          <label>Exports</label>
+          <div class="row">
+            <button id="btnCpngTrialExportAudit" class="btn">Export Audit CSV</button>
+            <button id="btnCpngTrialExportBlocks" class="btn">Export Blocks CSV</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px; flex-wrap:wrap;">
+        <button id="btnCpngTrialRevoke" class="btn danger">Manual Revoke Trial</button>
+        <button id="btnCpngTrialBlacklist" class="btn danger">Permanent Blacklist</button>
+        <button id="btnCpngTrialUnblock" class="btn warn">Unblock Device</button>
+      </div>
+      <p class="hint">Unblock only removes active block entries. It does not clear the once-used trial ledger.</p>
+      <div id="cpngTrialTable" class="results"></div>
+      <h3 style="margin-top:16px;">Recent Trial Audit</h3>
+      <div id="cpngAuditTable" class="results"></div>
     </section>
 
     <section class="card">
@@ -661,6 +962,162 @@
           </table>
         </div>
         <div id="bulkRmpErr" class="muted" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+
+
+    <section class="card" id="historyPage">
+      <div class="cardHead">
+        <div>
+          <h2>Full License / Trial History</h2>
+          <p class="muted">Unified history and abuse analytics for CLP, SPNG, SMTN and RMP.</p>
+        </div>
+        <span class="pill">History Center</span>
+      </div>
+
+      <div class="grid3">
+        <div>
+          <label>App</label>
+          <select id="histApp">
+            <option value="ALL" selected>ALL APPS</option>
+            <option value="CLP">CLP / CPNG</option>
+            <option value="SPNG">SPNG</option>
+            <option value="SMTN">SMTN / STMN</option>
+            <option value="RMP">RMP</option>
+          </select>
+        </div>
+        <div>
+          <label>Search</label>
+          <input id="histQ" placeholder="license id, token, device, fpHash, installId, notes" />
+        </div>
+        <div>
+          <label>Reason Contains</label>
+          <input id="histReason" placeholder="revoke reason, block reason, abuse reason" />
+        </div>
+      </div>
+
+      <div class="grid4" style="margin-top:12px">
+        <div>
+          <label>Status</label>
+          <select id="histStatus">
+            <option value="">ALL</option>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="ISSUED">ISSUED</option>
+            <option value="REVOKED">REVOKED</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="BLOCKED">BLOCKED</option>
+            <option value="PENDING">PENDING</option>
+          </select>
+        </div>
+        <div>
+          <label>Plan</label>
+          <select id="histPlan">
+            <option value="">ALL</option>
+            <option value="MONTHLY">MONTHLY</option>
+            <option value="YEARLY">YEARLY</option>
+            <option value="LIFETIME">LIFETIME</option>
+            <option value="TRIAL">TRIAL</option>
+          </select>
+        </div>
+        <div>
+          <label>Page Size</label>
+          <select id="histPageSize">
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div>
+          <label>From</label>
+          <input id="histFrom" type="date" />
+        </div>
+        <div>
+          <label>To</label>
+          <input id="histTo" type="date" />
+        </div>
+      </div>
+
+      <div class="historyTabs" style="margin-top:12px">
+        <button class="tabBtn active" data-hist-tab="licenses">Licenses <span class="pill" id="histCount_licenses">0</span></button>
+        <button class="tabBtn" data-hist-tab="licenseAudit">License Audit <span class="pill" id="histCount_licenseAudit">0</span></button>
+        <button class="tabBtn" data-hist-tab="trials">Trials <span class="pill" id="histCount_trials">0</span></button>
+        <button class="tabBtn" data-hist-tab="trialAudit">Trial Audit <span class="pill" id="histCount_trialAudit">0</span></button>
+        <button class="tabBtn" data-hist-tab="blocks">Blocks <span class="pill" id="histCount_blocks">0</span></button>
+        <button class="tabBtn" data-hist-tab="restores">Restores <span class="pill" id="histCount_restores">0</span></button>
+      </div>
+
+      <div id="histStats" class="kpiGrid" style="margin-top:14px"></div>
+
+      <div class="grid2" style="margin-top:14px">
+        <div class="subCard">
+          <div class="subTitle" id="histReasonsTitle">Revoke / Block Reasons Dashboard (0)</div>
+          <div id="histReasons" class="stackList"></div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle" id="histAbuseTitle">Abuse Analytics (0)</div>
+          <div id="histAbuse" class="stackList"></div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:space-between; margin-top:14px; flex-wrap:wrap">
+        <div><div id="histMeta" class="muted">No data loaded yet</div><div id="histLiveMeta" class="muted" style="margin-top:4px"></div></div>
+        <div class="row" style="margin-top:0">
+          <button id="btnHistRefresh" class="btn primary">Refresh History</button>
+          <button id="btnHistExport" class="btn">Export Current View CSV</button>
+          <button id="btnHistPdf" class="btn">Export Current View PDF</button>
+          <button id="btnHistPrev" class="btn">Prev</button>
+          <button id="btnHistNext" class="btn">Next</button>
+        </div>
+      </div>
+
+      <div id="histTableWrap" style="margin-top:14px"></div>
+    </section>
+
+    <section class="card" id="deviceDetailSection">
+      <h2>Device Detail Drill-Down</h2>
+      <div class="grid4">
+        <div>
+          <label>App</label>
+          <select id="deviceDetailApp">
+            <option value="CPNG">CLP / CPNG</option>
+            <option value="SPNG">SPNG</option>
+            <option value="STMN">SMTN / STMN</option>
+            <option value="RMP">RMP</option>
+          </select>
+        </div>
+        <div style="grid-column:span 2">
+          <label>Device Key</label>
+          <input id="deviceDetailKey" placeholder="paste deviceKey / deviceId / androidId / installId / fpHash" />
+        </div>
+        <div style="display:flex;align-items:end;gap:8px">
+          <button id="btnDeviceDetailLoad" class="btn primary">Load Device</button>
+        </div>
+      </div>
+      <div id="deviceDetailMeta" class="muted" style="margin-top:8px">No device selected yet.</div>
+      <div id="deviceDetailStats" class="kpiGrid" style="margin-top:12px"></div>
+      <div class="grid2" style="margin-top:16px">
+        <div class="subCard">
+          <div class="subTitle">Actions</div>
+          <div class="grid2">
+            <div><label>Reason</label><input id="deviceActionReason" placeholder="e.g. abuse / manual review / customer request" /></div>
+            <div><label>Months</label><input id="deviceActionMonths" type="number" min="1" value="1" /></div>
+          </div>
+          <div class="row" style="margin-top:10px;flex-wrap:wrap">
+            <button id="btnDeviceBlacklist" class="btn danger">Blacklist Trial</button>
+            <button id="btnDeviceUnblock" class="btn">Unblock Trial</button>
+            <button id="btnDeviceRevoke" class="btn danger">Revoke License</button>
+            <button id="btnDeviceReset" class="btn">Reset Binding</button>
+          </div>
+        </div>
+        <div class="subCard">
+          <div class="subTitle">Identities / Related</div>
+          <div id="deviceIdentityList" class="stackList"></div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:16px">
+        <div class="subCard"><div class="subTitle">Related Licenses / Blocks</div><div id="deviceRelatedTable" class="results"></div></div>
+        <div class="subCard"><div class="subTitle">Full Event Timeline</div><div id="deviceTimeline" class="results"></div></div>
       </div>
     </section>
 

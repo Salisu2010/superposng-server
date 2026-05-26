@@ -9,21 +9,36 @@ const clientsByShop = new Map(); // shopId -> Set<res>
 
 function now(){ return Date.now(); }
 
+function safeWriteSse(res, chunk){
+  try {
+    if (!res || res.destroyed || res.writableEnded) return false;
+    res.write(chunk);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function stmnSseHeaders(res){
-  res.status(200);
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no"); // nginx: disable buffering for SSE
-  if (typeof res.flushHeaders === "function") res.flushHeaders();
+  try {
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no"); // nginx: disable buffering for SSE
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+    return true;
+  } catch (e) {
+    try { console.error('[stmn-sse] header error', e?.message || e); } catch {}
+    return false;
+  }
 }
 
 /** Write an SSE event to a single response stream. */
 export function stmnSendSse(res, event, data){
   const payload = JSON.stringify(data ?? {});
-  // EventSource supports: event, data, id, retry
-  res.write(`event: ${String(event || "message")}\n`);
-  res.write(`data: ${payload}\n\n`);
+  const chunk = `event: ${String(event || "message")}\ndata: ${payload}\n\n`;
+  return safeWriteSse(res, chunk);
 }
 
 /** Add an SSE client for a shopId and auto-clean on close. */

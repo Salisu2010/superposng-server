@@ -26,6 +26,7 @@ function setKey(v) {
 let _lastGenerated = null; // { licenseId, token }
 let _lastRmpGenerated = null; // { licenseId, token }
 let _lastStmnGenerated = null; // { licenseId, token }
+let _lastCpngGenerated = null; // { licenseId, token }
 let _tblOffset = 0;
 const _tblLimit = 50;
 
@@ -296,6 +297,38 @@ async function doRegisterExistingToken() {
   return out;
 }
 
+
+async function doGenerateCpngToken() {
+  const plan = ($("cpngPlan")?.value || "MONTHLY").trim();
+  const deviceId = ($("cpngDeviceId")?.value || "").trim();
+  const use2 = $("cpngUseSpng2") ? !!$("cpngUseSpng2").checked : false;
+  const fpHash = use2 ? ($("cpngFpHash")?.value || "").trim() : "";
+  if (!deviceId) { toast("ANDROID_ID/Device ID is required"); return; }
+  if (use2 && !fpHash) { toast("Paste Device Code"); return; }
+  const payload = { app: "CPNG", plan, deviceId, fpHash: use2 ? fpHash : "" };
+  const out = await api("/api/dev/generate-token", { method: "POST", body: JSON.stringify(payload) });
+  _lastCpngGenerated = out?.license ? { licenseId: out.license.licenseId, token: out.license.token } : null;
+  if ($("cpngToken")) $("cpngToken").value = _lastCpngGenerated?.token || "";
+  toast("CPNG token generated");
+  return out;
+}
+
+async function doAssignCpngOnline() {
+  const deviceId = ($("cpngDeviceId")?.value || "").trim();
+  const token = ($("cpngToken")?.value || _lastCpngGenerated?.token || "").trim();
+  if (!deviceId) { toast("ANDROID_ID/Device ID is required"); return; }
+  if (!token) { toast("Generate or paste token first"); return; }
+  const out = await api("/api/dev/assign-token", { method: "POST", body: JSON.stringify({ app: "CPNG", deviceId, token }) });
+  toast("ClinicProNG device activated online ✅");
+  return out;
+}
+
+function updateCpngUi() {
+  const use = $("cpngUseSpng2") ? !!$("cpngUseSpng2").checked : false;
+  if ($("cpngFpWrap")) $("cpngFpWrap").style.display = use ? "block" : "none";
+  if (!use && $("cpngFpHash")) $("cpngFpHash").value = "";
+}
+
 // ------------------------------
 // RepairMasterPro token generator
 // ------------------------------
@@ -527,6 +560,252 @@ function renderTokenTable(out) {
   });
 }
 
+
+let _cpngTblOffset = 0;
+const _cpngTblLimit = 50;
+
+function renderKpiCards(elId, cards) {
+  const box = $(elId);
+  if (!box) return;
+  const items = Array.isArray(cards) ? cards : [];
+  box.innerHTML = items.map((c) => `
+    <div class="kpiCard">
+      <div class="kpiLabel">${c.label || ""}</div>
+      <div class="kpiValue">${c.value ?? 0}</div>
+      <div class="kpiSub">${c.sub || ""}</div>
+      ${c.chips ? `<div class="kpiChipRow">${c.chips}</div>` : ''}
+    </div>
+  `).join("");
+}
+
+function cpngTableParams() {
+  return {
+    q: ($("cpngTblQ")?.value || "").trim(),
+    status: ($("cpngTblStatus")?.value || "").trim(),
+    plan: ($("cpngTblPlan")?.value || "").trim(),
+  };
+}
+
+async function refreshCpngStats() {
+  const out = await api(`/api/dev/licenses-summary?app=CPNG`, { method: "GET" });
+  const s = out?.stats || {};
+  renderKpiCards("cpngStats", [
+    { label: "Total Licenses", value: s.total || 0, sub: `Pending ${s.pending || 0}` },
+    { label: "Active", value: s.active || 0, sub: `Expiring soon ${s.expiringSoon || 0}` },
+    { label: "Issued", value: s.issued || 0, sub: `Revoked ${s.revoked || 0}` },
+    { label: "Plans", value: `${s.monthly || 0}/${s.yearly || 0}`, sub: `Monthly / Yearly` },
+  ]);
+  return out;
+}
+
+async function refreshCpngTokenTable(resetOffset) {
+  if (resetOffset) _cpngTblOffset = 0;
+  const { q, status, plan } = cpngTableParams();
+  const qs = new URLSearchParams();
+  qs.set("app", "CPNG");
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  if (plan) qs.set("plan", plan);
+  qs.set("limit", String(_cpngTblLimit));
+  qs.set("offset", String(_cpngTblOffset));
+  const out = await api(`/api/dev/licenses?${qs.toString()}`, { method: "GET" });
+  renderCpngTokenTable(out);
+  return out;
+}
+
+function renderCpngTokenTable(out) {
+  const box = $("cpngTokenTable");
+  const meta = $("cpngTblMeta");
+  if (!box) return;
+
+  const items = Array.isArray(out?.items) ? out.items : [];
+  const total = Number(out?.total || 0);
+  const start = total === 0 ? 0 : (_cpngTblOffset + 1);
+  const end = Math.min(_cpngTblOffset + _cpngTblLimit, total);
+  if (meta) meta.textContent = `Showing ${start}-${end} of ${total}`;
+
+  const rows = items.map((m) => {
+    const id = m.licenseId || "";
+    const token = m.token || "";
+    const status = m.status || "";
+    const plan = m.plan || "";
+    const exp = fmtTs(m.expiresAt);
+    const dev = m.boundDeviceId || "-";
+    const notes = m.notes || "-";
+    return `
+      <tr>
+        <td><code>${id}</code></td>
+        <td><code>${token}</code></td>
+        <td>${status}</td>
+        <td>${plan}</td>
+        <td>${exp}</td>
+        <td><code>${dev}</code></td>
+        <td>${notes}</td>
+        <td style="white-space:nowrap">
+          ${actionBtn("Copy", "", { act: "cpng_copy", token })}
+          ${actionBtn("Target", "", { act: "cpng_target", id })}
+          ${actionBtn("+1M", "", { act: "cpng_add", id, months: 1 })}
+          ${actionBtn("+12M", "", { act: "cpng_add", id, months: 12 })}
+          ${actionBtn("Reset", "warn", { act: "cpng_reset", id })}
+          ${actionBtn("Revoke", "danger", { act: "cpng_revoke", id })}
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  box.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>License ID</th>
+          <th>Token</th>
+          <th>Status</th>
+          <th>Plan</th>
+          <th>Expiry</th>
+          <th>Device</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || `<tr><td colspan="8" style="color:var(--muted)">No CPNG licenses found</td></tr>`}
+      </tbody>
+    </table>
+  `;
+
+  box.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const act = btn.getAttribute("data-act");
+      const id = btn.getAttribute("data-id") || "";
+      const token = btn.getAttribute("data-token") || "";
+      const months = Number(btn.getAttribute("data-months") || 0);
+      try {
+        if (act === "cpng_copy") {
+          copyText(token);
+          toast("Copied CPNG token");
+          return;
+        }
+        if (act === "cpng_target") {
+          if ($("target")) $("target").value = id;
+          copyText(id);
+          toast("Target set");
+          return;
+        }
+        if (act === "cpng_add") {
+          await api("/api/dev/extend", { method: "POST", body: JSON.stringify({ licenseId: id, months, app: "CPNG" }) });
+          toast("CPNG license extended");
+        } else if (act === "cpng_reset") {
+          await api("/api/dev/revoke", { method: "POST", body: JSON.stringify({ licenseId: id, resetOnly: true, reason: "Portal reset" }) });
+          toast("CPNG binding reset");
+        } else if (act === "cpng_revoke") {
+          await api("/api/dev/revoke", { method: "POST", body: JSON.stringify({ licenseId: id, reason: "Portal revoke" }) });
+          toast("CPNG license revoked");
+        }
+        await Promise.all([refreshCpngStats(), refreshCpngTokenTable(false)]);
+      } catch (e) {
+        toast(e.message || "Action failed");
+      }
+    });
+  });
+}
+
+async function refreshCpngTrialDashboard() {
+  const q = ($("cpngTrialQ")?.value || "").trim();
+  const status = ($("cpngTrialStatus")?.value || "").trim();
+
+  const sum = await api(`/api/trial/admin/summary?app=CPNG`, { method: "GET" });
+  const s = sum?.stats || {};
+  renderKpiCards("cpngTrialStats", [
+    { label: "Trials Used", value: s.total || 0, sub: `Today ${s.todayConsumed || 0}` },
+    { label: "Active", value: s.active || 0, sub: `Expired ${s.expired || 0}` },
+    { label: "Blocked", value: s.blocked || 0, sub: `Revoked ${s.revoked || 0}` },
+    { label: "Security", value: s.blocks || 0, sub: `Audit logs ${s.audits || 0}` },
+  ]);
+
+  const qs = new URLSearchParams({ app: "CPNG", limit: "50", offset: "0" });
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  const consumed = await api(`/api/trial/admin/consumed?${qs.toString()}`, { method: "GET" });
+  const items = Array.isArray(consumed?.items) ? consumed.items : [];
+  if ($("cpngTrialMeta")) $("cpngTrialMeta").textContent = `Showing ${items.length} of ${consumed?.total || 0} trials`;
+  $("cpngTrialTable").innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Device ID</th>
+          <th>Android ID</th>
+          <th>Install ID</th>
+          <th>FP Hash</th>
+          <th>Start</th>
+          <th>Expiry</th>
+          <th>Reason</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((t) => `
+          <tr>
+            <td>${escHtml(t.status || "")}</td>
+            <td><code>${escHtml(t.deviceId || "-")}</code></td>
+            <td><code>${escHtml(t.androidId || "-")}</code></td>
+            <td><code>${escHtml(t.installId || "-")}</code></td>
+            <td><code>${escHtml(t.fpHash || "-")}</code></td>
+            <td>${escHtml(t.startYmd || "-")}</td>
+            <td>${escHtml(t.expiryYmd || "-")}</td>
+            <td>${escHtml(t.revokeReason || t.blockReason || "-")}</td>
+            <td>${actionBtn("Load", "", { act: "cpng_trial_load", device: t.deviceId || "", android: t.androidId || "", install: t.installId || "", fp: t.fpHash || "" })}</td>
+          </tr>
+        `).join("") || `<tr><td colspan="9" style="color:var(--muted)">No trial records</td></tr>`}
+      </tbody>
+    </table>
+  `;
+  $("cpngTrialTable").querySelectorAll("button[data-act='cpng_trial_load']").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      fillCpngTrialActionFields({
+        deviceId: btn.getAttribute("data-device") || "",
+        androidId: btn.getAttribute("data-android") || "",
+        installId: btn.getAttribute("data-install") || "",
+        fpHash: btn.getAttribute("data-fp") || "",
+      });
+      toast("Loaded trial identity into action center");
+    });
+  });
+
+  const audit = await api(`/api/trial/admin/audit?app=CPNG&limit=30&offset=0`, { method: "GET" });
+  const audits = Array.isArray(audit?.items) ? audit.items : [];
+  $("cpngAuditTable").innerHTML = `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Type</th>
+          <th>Device ID</th>
+          <th>Android ID</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${audits.map((a) => `
+          <tr>
+            <td>${fmtTs(a.createdAt)}</td>
+            <td>${a.type || "-"}</td>
+            <td><code>${a.deviceId || "-"}</code></td>
+            <td><code>${a.androidId || "-"}</code></td>
+            <td>${JSON.stringify(a.meta || {}).slice(0, 180) || "-"}</td>
+          </tr>
+        `).join("") || `<tr><td colspan="5" style="color:var(--muted)">No audit logs</td></tr>`}
+      </tbody>
+    </table>
+  `;
+}
+
+async function doCpngTrialCleanup() {
+  await api("/api/trial/admin/cleanup", { method: "POST", body: JSON.stringify({ app: "CPNG" }) });
+  toast("CPNG anti-abuse cleanup complete");
+  await refreshCpngTrialDashboard();
+}
+
 // ------------------------------
 // RepairMasterPro license table (listing)
 // ------------------------------
@@ -635,6 +914,12 @@ $("btnSaveKey").addEventListener("click", () => {
   const v = $("devKey").value.trim();
   setKey(v);
   toast("DEV KEY saved");
+  Promise.all([
+    refreshGlobalDashboard().catch(() => {}),
+    refreshCpngStats().catch(() => {}),
+    refreshCpngTokenTable(true).catch(() => {}),
+    refreshCpngTrialDashboard().catch(() => {}),
+  ]);
 });
 
 // Generator
@@ -670,6 +955,238 @@ if ($("btnCopyId")) {
     copyText(_lastGenerated?.licenseId || "");
     toast("Copied license ID");
   });
+}
+
+
+if ($("cpngUseSpng2")) {
+  $("cpngUseSpng2").addEventListener("change", updateCpngUi);
+  updateCpngUi();
+}
+if ($("btnCpngGenerate")) {
+  $("btnCpngGenerate").addEventListener("click", () => doGenerateCpngToken().catch((e) => toast(e.message)));
+}
+if ($("btnCpngAssignOnline")) {
+  $("btnCpngAssignOnline").addEventListener("click", () => doAssignCpngOnline().catch((e) => toast(e.message)));
+}
+if ($("btnCpngCopy")) {
+  $("btnCpngCopy").addEventListener("click", () => { copyText($("cpngToken")?.value || ""); toast("Copied CPNG token"); });
+}
+if ($("btnCpngTblRefresh")) {
+  $("btnCpngTblRefresh").addEventListener("click", () => Promise.all([refreshCpngStats(), refreshCpngTokenTable(true), refreshCpngLicenseAudit()]).catch((e) => toast(e.message)));
+}
+if ($("btnCpngTblPrev")) {
+  $("btnCpngTblPrev").addEventListener("click", () => { if (_cpngTblOffset >= _cpngTblLimit) { _cpngTblOffset -= _cpngTblLimit; refreshCpngTokenTable(false).catch((e) => toast(e.message)); } });
+}
+if ($("btnCpngTblNext")) {
+  $("btnCpngTblNext").addEventListener("click", () => { _cpngTblOffset += _cpngTblLimit; refreshCpngTokenTable(false).catch((e) => toast(e.message)); });
+}
+if ($("cpngTblQ")) {
+  $("cpngTblQ").addEventListener("input", () => refreshCpngTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("cpngTblStatus")) {
+  $("cpngTblStatus").addEventListener("change", () => refreshCpngTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("cpngTblPlan")) {
+  $("cpngTblPlan").addEventListener("change", () => refreshCpngTokenTable(true).catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialRefresh")) {
+  $("btnCpngTrialRefresh").addEventListener("click", () => refreshCpngTrialDashboard().catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialCleanup")) {
+  $("btnCpngTrialCleanup").addEventListener("click", () => doCpngTrialCleanup().catch((e) => toast(e.message)));
+}
+if ($("cpngTrialQ")) {
+  $("cpngTrialQ").addEventListener("input", () => refreshCpngTrialDashboard().catch((e) => toast(e.message)));
+}
+if ($("cpngTrialStatus")) {
+  $("cpngTrialStatus").addEventListener("change", () => refreshCpngTrialDashboard().catch((e) => toast(e.message)));
+}
+if ($("btnCpngCustomExtend")) {
+  $("btnCpngCustomExtend").addEventListener("click", () => doCpngCustomExtend().catch((e) => toast(e.message)));
+}
+if ($("btnCpngResendOnline")) {
+  $("btnCpngResendOnline").addEventListener("click", () => doCpngResendOnlineActivation().catch((e) => toast(e.message)));
+}
+if ($("btnCpngManualRevoke")) {
+  $("btnCpngManualRevoke").addEventListener("click", () => doCpngManualRevoke().catch((e) => toast(e.message)));
+}
+if ($("btnCpngResetBinding")) {
+  $("btnCpngResetBinding").addEventListener("click", () => doCpngResetBinding().catch((e) => toast(e.message)));
+}
+if ($("btnCpngExportLicenses")) {
+  $("btnCpngExportLicenses").addEventListener("click", () => exportCpngLicensesCsv().catch((e) => toast(e.message)));
+}
+if ($("btnCpngExportTrials")) {
+  $("btnCpngExportTrials").addEventListener("click", () => exportCpngTrialsCsv().catch((e) => toast(e.message)));
+}
+
+if ($("btnCpngTrialRevoke")) {
+  $("btnCpngTrialRevoke").addEventListener("click", () => doCpngTrialRevoke().catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialBlacklist")) {
+  $("btnCpngTrialBlacklist").addEventListener("click", () => doCpngTrialBlacklist().catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialUnblock")) {
+  $("btnCpngTrialUnblock").addEventListener("click", () => doCpngTrialUnblock().catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialExportAudit")) {
+  $("btnCpngTrialExportAudit").addEventListener("click", () => exportCpngTrialAuditCsv().catch((e) => toast(e.message)));
+}
+if ($("btnCpngTrialExportBlocks")) {
+  $("btnCpngTrialExportBlocks").addEventListener("click", () => exportCpngTrialBlocksCsv().catch((e) => toast(e.message)));
+}
+
+
+function cpngActionPayload() {
+  return {
+    app: "CPNG",
+    licenseId: ($("cpngActionLicenseId")?.value || "").trim(),
+    deviceId: ($("cpngActionDeviceId")?.value || "").trim(),
+    token: ($("cpngActionToken")?.value || "").trim(),
+    months: Number((($("cpngActionMonths")?.value || "1").trim())) || 1,
+    reason: ($("cpngActionReason")?.value || "").trim(),
+  };
+}
+
+async function refreshCpngLicenseAudit() {
+  const out = await api(`/api/dev/audit?app=CPNG&limit=20&offset=0`, { method: "GET" });
+  const items = Array.isArray(out?.items) ? out.items : [];
+  const box = $("cpngLicenseAuditTable");
+  if (!box) return out;
+  box.innerHTML = `
+    <table class="table">
+      <thead>
+        <tr><th>Time</th><th>Action</th><th>License</th><th>Device</th><th>Details</th></tr>
+      </thead>
+      <tbody>
+        ${items.map((x) => `
+          <tr>
+            <td>${fmtTs(x.createdAt)}</td>
+            <td>${escHtml(x.action || "-")}</td>
+            <td><code>${escHtml(x.licenseId || "-")}</code></td>
+            <td><code>${escHtml(x.deviceId || "-")}</code></td>
+            <td>${escHtml([x.plan, x.token].filter(Boolean).join(" • ") || "-")}</td>
+          </tr>
+        `).join("") || `<tr><td colspan="5" style="color:var(--muted)">No license audit logs</td></tr>`}
+      </tbody>
+    </table>`;
+  return out;
+}
+
+async function doCpngCustomExtend() {
+  const p = cpngActionPayload();
+  if (!p.licenseId && !p.token) throw new Error("License ID or token is required");
+  await api("/api/dev/extend", { method: "POST", body: JSON.stringify({ app: "CPNG", licenseId: p.licenseId, token: p.token, months: p.months, reason: p.reason, androidId: p.deviceId, deviceId: p.deviceId }) });
+  toast(`CPNG license extended by ${p.months} month(s)`);
+  await Promise.all([refreshCpngStats(), refreshCpngTokenTable(false), refreshCpngLicenseAudit()]);
+}
+
+async function doCpngResendOnlineActivation() {
+  const p = cpngActionPayload();
+  if (!p.licenseId && !p.token) throw new Error("License ID or token is required");
+  await api("/api/dev/resend-activation", { method: "POST", body: JSON.stringify({ licenseId: p.licenseId, token: p.token, deviceId: p.deviceId }) });
+  toast("Online activation re-sent to target device");
+  await Promise.all([refreshCpngStats(), refreshCpngLicenseAudit()]);
+}
+
+async function doCpngManualRevoke() {
+  const p = cpngActionPayload();
+  if (!p.licenseId && !p.token) throw new Error("License ID or token is required");
+  await api("/api/dev/revoke", { method: "POST", body: JSON.stringify({ licenseId: p.licenseId, token: p.token, reason: p.reason || "Portal manual revoke" }) });
+  toast("CPNG license revoked");
+  await Promise.all([refreshCpngStats(), refreshCpngTokenTable(false), refreshCpngLicenseAudit()]);
+}
+
+async function doCpngResetBinding() {
+  const p = cpngActionPayload();
+  if (!p.licenseId && !p.token) throw new Error("License ID or token is required");
+  await api("/api/dev/revoke", { method: "POST", body: JSON.stringify({ licenseId: p.licenseId, token: p.token, resetOnly: true, reason: p.reason || "Portal reset binding" }) });
+  toast("CPNG binding reset complete");
+  await Promise.all([refreshCpngStats(), refreshCpngTokenTable(false), refreshCpngLicenseAudit()]);
+}
+
+async function exportCpngLicensesCsv() {
+  const { q, status, plan } = cpngTableParams();
+  const qs = new URLSearchParams({ app: "CPNG" });
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  if (plan) qs.set("plan", plan);
+  const res = await fetch(`/api/dev/licenses-export?${qs.toString()}`, { headers: { "X-DEV-KEY": getKey() || $("devKey")?.value || "" } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  downloadText(`cpng_licenses_${Date.now()}.csv`, text);
+  toast("CPNG licenses CSV downloaded");
+}
+
+async function exportCpngTrialsCsv() {
+  const q = ($("cpngTrialQ")?.value || "").trim();
+  const status = ($("cpngTrialStatus")?.value || "").trim();
+  const qs = new URLSearchParams({ app: "CPNG" });
+  if (q) qs.set("q", q);
+  if (status) qs.set("status", status);
+  const res = await fetch(`/api/trial/admin/consumed-export?${qs.toString()}`, { headers: { "X-DEV-KEY": getKey() || $("devKey")?.value || "" } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  downloadText(`cpng_trials_${Date.now()}.csv`, text);
+  toast("CPNG trials CSV downloaded");
+}
+
+function cpngTrialActionPayload() {
+  return {
+    app: "CPNG",
+    deviceId: ($("cpngTrialActionDeviceId")?.value || "").trim(),
+    androidId: ($("cpngTrialActionAndroidId")?.value || "").trim(),
+    installId: ($("cpngTrialActionInstallId")?.value || "").trim(),
+    fpHash: ($("cpngTrialActionFpHash")?.value || "").trim(),
+    reason: ($("cpngTrialActionReason")?.value || "").trim(),
+  };
+}
+
+function fillCpngTrialActionFields(row = {}) {
+  if ($("cpngTrialActionDeviceId")) $("cpngTrialActionDeviceId").value = row.deviceId || "";
+  if ($("cpngTrialActionAndroidId")) $("cpngTrialActionAndroidId").value = row.androidId || "";
+  if ($("cpngTrialActionInstallId")) $("cpngTrialActionInstallId").value = row.installId || "";
+  if ($("cpngTrialActionFpHash")) $("cpngTrialActionFpHash").value = row.fpHash || "";
+}
+
+async function doCpngTrialRevoke() {
+  const p = cpngTrialActionPayload();
+  if (!p.deviceId && !p.androidId && !p.installId && !p.fpHash) throw new Error("At least one trial identity is required");
+  await api("/api/trial/admin/revoke", { method: "POST", body: JSON.stringify(p) });
+  toast("Trial revoked and blocked");
+  await refreshCpngTrialDashboard();
+}
+
+async function doCpngTrialBlacklist() {
+  const p = cpngTrialActionPayload();
+  if (!p.deviceId && !p.androidId && !p.installId && !p.fpHash) throw new Error("At least one trial identity is required");
+  await api("/api/trial/admin/blacklist", { method: "POST", body: JSON.stringify(p) });
+  toast("Device blacklisted from trial");
+  await refreshCpngTrialDashboard();
+}
+
+async function doCpngTrialUnblock() {
+  const p = cpngTrialActionPayload();
+  if (!p.deviceId && !p.androidId && !p.installId && !p.fpHash) throw new Error("At least one trial identity is required");
+  const out = await api("/api/trial/admin/unblock", { method: "POST", body: JSON.stringify(p) });
+  toast(`Unblock complete (${out.changed || 0} block entries cleared)`);
+  await refreshCpngTrialDashboard();
+}
+
+async function exportCpngTrialAuditCsv() {
+  const res = await fetch(`/api/trial/admin/audit-export?app=CPNG`, { headers: { "X-DEV-KEY": getKey() || $("devKey")?.value || "" } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  downloadText(`cpng_trial_audit_${Date.now()}.csv`, text);
+  toast("Trial audit CSV downloaded");
+}
+
+async function exportCpngTrialBlocksCsv() {
+  const res = await fetch(`/api/trial/admin/blocks-export?app=CPNG`, { headers: { "X-DEV-KEY": getKey() || $("devKey")?.value || "" } });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  downloadText(`cpng_trial_blocks_${Date.now()}.csv`, text);
+  toast("Trial blocks CSV downloaded");
 }
 
 // RMP Generator
@@ -1563,6 +2080,581 @@ function smDebouncedFetch() {
   clearTimeout(_smDebT);
   _smDebT = setTimeout(() => smFetch(1, { force: true }), 250);
 }
+
+const HISTORY_APPS = ["SPNG", "RMP", "STMN", "CPNG"];
+const HISTORY_APP_ALIASES = {
+  ALL: HISTORY_APPS,
+  CLP: ["CPNG"],
+  CPNG: ["CPNG"],
+  SPNG: ["SPNG"],
+  RMP: ["RMP"],
+  SMTN: ["STMN"],
+  STMN: ["STMN"],
+};
+const HISTORY_APP_LABELS = {
+  SPNG: "SPNG",
+  RMP: "RMP",
+  STMN: "SMTN/STMN",
+  CPNG: "CLP/CPNG",
+};
+let _histTab = "licenses";
+
+function setText(id, text) { const el = $(id); if (el) el.textContent = text; }
+function setHtml(id, html) { const el = $(id); if (el) el.innerHTML = html; }
+function chip(label, value) { return `<span class="countChip"><span>${escHtml(label)}</span><strong>${escHtml(String(value ?? 0))}</strong></span>`; }
+function appCountChips(rows, mapper) {
+  const counts = { SPNG: 0, CPNG: 0, STMN: 0, RMP: 0 };
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const app = String(row?.app || '').toUpperCase();
+    if (counts[app] != null) counts[app] += Number(mapper ? mapper(row) : 1) || 0;
+  });
+  return ['CPNG','SPNG','STMN','RMP'].map((app) => chip(histAppLabel(app), counts[app] || 0)).join('');
+}
+function fmtMs(ms) {
+  const sec = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const rem = sec % 60;
+  return rem ? `${min}m ${rem}s` : `${min}m`;
+}
+let _liveRefreshTimer = null;
+let _liveRefreshTickTimer = null;
+let _liveRefreshNextAt = 0;
+let _liveRefreshLastAt = 0;
+let _liveRefreshBusy = false;
+function autoRefreshEnabled() { return !!($('autoRefreshToggle')?.checked); }
+function autoRefreshEveryMs() { return Math.max(15000, Number($('autoRefreshEvery')?.value || 30000)); }
+function renderLiveRefreshMeta() {
+  const enabled = autoRefreshEnabled();
+  const every = autoRefreshEveryMs();
+  const nextIn = enabled && _liveRefreshNextAt ? Math.max(0, _liveRefreshNextAt - Date.now()) : 0;
+  const last = _liveRefreshLastAt ? `Last refresh ${fmtTs(_liveRefreshLastAt)}` : 'Last refresh -';
+  const state = enabled ? (_liveRefreshBusy ? 'Refreshing now' : `Auto refresh every ${fmtMs(every)}`) : 'Auto refresh paused';
+  setText('liveRefreshMeta', `${state} • ${last}${enabled ? ` • Next in ${fmtMs(nextIn)}` : ''}`);
+  setText('histLiveMeta', `${enabled ? 'Live counts enabled' : 'Live counts paused'}${enabled ? ` • Next sync ${fmtMs(nextIn)}` : ''}`);
+}
+async function runLiveRefreshCycle() {
+  if (!autoRefreshEnabled() || _liveRefreshBusy) { renderLiveRefreshMeta(); return; }
+  _liveRefreshBusy = true;
+  renderLiveRefreshMeta();
+  try {
+    await Promise.all([
+      refreshGlobalDashboard().catch(() => {}),
+      histRefresh(true).catch(() => {}),
+    ]);
+    _liveRefreshLastAt = Date.now();
+  } finally {
+    _liveRefreshBusy = false;
+    _liveRefreshNextAt = Date.now() + autoRefreshEveryMs();
+    renderLiveRefreshMeta();
+  }
+}
+function scheduleLiveRefresh() {
+  if (_liveRefreshTimer) clearInterval(_liveRefreshTimer);
+  if (_liveRefreshTickTimer) clearInterval(_liveRefreshTickTimer);
+  if (!autoRefreshEnabled()) { _liveRefreshNextAt = 0; renderLiveRefreshMeta(); return; }
+  const every = autoRefreshEveryMs();
+  _liveRefreshNextAt = Date.now() + every;
+  _liveRefreshTimer = setInterval(() => { runLiveRefreshCycle().catch(() => {}); }, every);
+  _liveRefreshTickTimer = setInterval(renderLiveRefreshMeta, 1000);
+  renderLiveRefreshMeta();
+}
+function histRenderTabCounts() {
+  ["licenses", "licenseAudit", "trials", "trialAudit", "blocks", "restores"].forEach((kind) => {
+    const el = $(`histCount_${kind}`);
+    if (el) el.textContent = String(histFiltered(kind).length);
+  });
+}
+function histRenderSectionCounts(reasonEntries = null, abuseEntries = null) {
+  const reasons = Array.isArray(reasonEntries) ? reasonEntries : histCountReasons();
+  const abuse = Array.isArray(abuseEntries) ? abuseEntries : histAbuseStats();
+  setHtml('histReasonsTitle', `<div class="sectionHeadRow"><span>Revoke / Block Reasons Dashboard (${reasons.length})</span><span class="sectionChipRow">${appCountChips(histFiltered('licenseAudit').filter((x) => String(x.type || '') === 'revoke_license' || String(x.type || '') === 'reset_binding'))}${appCountChips(histFiltered('blocks'))}</span></div>`);
+  setHtml('histAbuseTitle', `<div class="sectionHeadRow"><span>Abuse Analytics (${abuse.length})</span><span class="sectionChipRow">${appCountChips(histFiltered('trialAudit'))}</span></div>`);
+}
+function globalRenderSectionCounts(data) {
+  const reasons = Array.isArray(data?.topReasons) ? data.topReasons : [];
+  const expiring = Array.isArray(data?.expiringSoonRows) ? data.expiringSoonRows : [];
+  const abuse = Array.isArray(data?.topAbuse) ? data.topAbuse : [];
+  const revokes = Array.isArray(data?.recentRevokes) ? data.recentRevokes : [];
+  const intel = data?.deviceIntelligence || {};
+  const clusters = Array.isArray(intel?.fingerprintClusters) ? intel.fingerprintClusters : [];
+  const suspicious = Array.isArray(intel?.suspiciousDevices) ? intel.suspiciousDevices : [];
+  const multi = Array.isArray(intel?.multiAccountDevices) ? intel.multiAccountDevices : [];
+  const fraud = Array.isArray(intel?.fraudScores) ? intel.fraudScores : [];
+  setHtml('globalReasonsTitle', `<div class="sectionHeadRow"><span>Top Revoke / Block Reasons (${reasons.length})</span><span class="sectionChipRow">${appCountChips(reasons, (r) => Number(r.count || 0))}</span></div>`);
+  setHtml('globalExpiringTitle', `<div class="sectionHeadRow"><span>Expiring Soon (${expiring.length})</span><span class="sectionChipRow">${appCountChips(expiring)}</span></div>`);
+  setHtml('globalAbuseTitle', `<div class="sectionHeadRow"><span>Top Abused Identities (${abuse.length})</span><span class="sectionChipRow">${appCountChips(abuse, (r) => Number(r.count || 0))}</span></div>`);
+  setHtml('globalClustersTitle', `<div class="sectionHeadRow"><span>Device Fingerprint Clusters (${clusters.length})</span><span class="sectionChipRow">${appCountChips(clusters)}</span></div>`);
+  setHtml('globalSuspiciousTitle', `<div class="sectionHeadRow"><span>Suspicious Devices (${suspicious.length})</span><span class="sectionChipRow">${appCountChips(suspicious)}</span></div>`);
+  setHtml('globalMultiAccountTitle', `<div class="sectionHeadRow"><span>Multi-Account Devices (${multi.length})</span><span class="sectionChipRow">${appCountChips(multi)}</span></div>`);
+  setHtml('globalFraudTitle', `<div class="sectionHeadRow"><span>Fraud Score Per Device (${fraud.length})</span><span class="sectionChipRow">${appCountChips(fraud)}</span></div>`);
+  setHtml('globalRevokesTitle', `<div class="sectionHeadRow"><span>Recent Revokes / Binding Resets (${revokes.length})</span><span class="sectionChipRow">${appCountChips(revokes)}</span></div>`);
+}
+let _histPage = 1;
+let _histPageSize = 50;
+let _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [], restores: [] };
+
+function histResolveApps(v) {
+  const key = String(v || "ALL").toUpperCase();
+  return HISTORY_APP_ALIASES[key] || HISTORY_APPS;
+}
+function histAppLabel(v) {
+  return HISTORY_APP_LABELS[v] || String(v || "-");
+}
+function histNeedle(parts) {
+  return parts.map((x) => String(x || "").toLowerCase()).join(" ");
+}
+async function histFetchAllPages(urlBase) {
+  let offset = 0;
+  const limit = 500;
+  let all = [];
+  while (true) {
+    const sep = urlBase.includes("?") ? "&" : "?";
+    const out = await api(`${urlBase}${sep}limit=${limit}&offset=${offset}`, { method: "GET" });
+    const items = Array.isArray(out?.items) ? out.items : [];
+    all = all.concat(items);
+    const total = Number(out?.total || items.length || 0);
+    offset += items.length;
+    if (!items.length || offset >= total || items.length < limit) break;
+  }
+  return all;
+}
+async function histLoadData() {
+  const apps = histResolveApps($("histApp")?.value);
+  const jobs = [];
+  for (const app of apps) {
+    jobs.push(histFetchAllPages(`/api/dev/licenses?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
+    jobs.push(histFetchAllPages(`/api/dev/audit?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
+    jobs.push(histFetchAllPages(`/api/trial/admin/consumed?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
+    jobs.push(histFetchAllPages(`/api/trial/admin/audit?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
+    jobs.push(histFetchAllPages(`/api/trial/admin/blocks?app=${encodeURIComponent(app)}`).then((items) => items.map((x) => ({ ...x, app: x.app || app }))));
+    jobs.push(api(`/api/dev/account-restore/history?app=${encodeURIComponent(app)}&page=1&pageSize=500`, { method: 'GET' }).then((out) => (Array.isArray(out?.rows) ? out.rows : []).map((x) => ({ ...x, app: x.app || app }))));
+  }
+  const out = await Promise.all(jobs);
+  _histCache = { licenses: [], licenseAudit: [], trials: [], trialAudit: [], blocks: [], restores: [] };
+  for (let i = 0; i < out.length; i += 6) {
+    _histCache.licenses.push(...out[i]);
+    _histCache.licenseAudit.push(...out[i + 1]);
+    _histCache.trials.push(...out[i + 2]);
+    _histCache.trialAudit.push(...out[i + 3]);
+    _histCache.blocks.push(...out[i + 4]);
+    _histCache.restores.push(...out[i + 5]);
+  }
+}
+function histGetFilters() {
+  return {
+    q: String($("histQ")?.value || "").trim().toLowerCase(),
+    reason: String($("histReason")?.value || "").trim().toLowerCase(),
+    status: String($("histStatus")?.value || "").trim().toUpperCase(),
+    plan: String($("histPlan")?.value || "").trim().toUpperCase(),
+    from: String($("histFrom")?.value || "").trim(),
+    to: String($("histTo")?.value || "").trim(),
+  };
+}
+function histFiltered(kind) {
+  const f = histGetFilters();
+  const rows = Array.isArray(_histCache[kind]) ? _histCache[kind].slice() : [];
+  return rows.filter((row) => {
+    const status = String(row.status || "").toUpperCase();
+    const plan = String(row.plan || "").toUpperCase();
+    const reason = String(row.reason || row.revokeReason || row.blockReason || row.meta?.reason || "").toLowerCase();
+    const needle = histNeedle([
+      row.app, row.licenseId, row.fromLicenseId, row.token, row.deviceId, row.boundDeviceId,
+      row.androidId, row.installId, row.fpHash, row.devHash, row.notes, row.type, reason,
+      row.id, row.shopId, row.boundShopId, row.plan, row.status, row.entityId, row.entityCode, row.entityName, row.ownerPhone, row.ownerEmail, row.action, row.reuseReason, row.entityType,
+    ]);
+    if (f.q && !needle.includes(f.q)) return false;
+    if (f.reason && !reason.includes(f.reason)) return false;
+    if (f.status && status !== f.status) return false;
+    if (f.plan && plan !== f.plan) return false;
+    const ts = Number(row.createdAt || row.updatedAt || row.lastSeenAt || row.activatedAt || 0);
+    if (f.from && ts && ts < Date.parse(`${f.from}T00:00:00Z`)) return false;
+    if (f.to && ts && ts > Date.parse(`${f.to}T23:59:59Z`)) return false;
+    return true;
+  }).sort((a, b) => Number(b.createdAt || b.updatedAt || 0) - Number(a.createdAt || a.updatedAt || 0));
+}
+function histCountReasons() {
+  const reasonMap = new Map();
+  const pushReason = (app, reason) => {
+    const r = String(reason || "").trim();
+    if (!r) return;
+    const k = `${histAppLabel(app)}::${r}`;
+    reasonMap.set(k, (reasonMap.get(k) || 0) + 1);
+  };
+  histFiltered("licenseAudit").forEach((x) => {
+    if (String(x.type || "") === "revoke_license" || String(x.type || "") === "reset_binding") pushReason(x.app, x.reason || (x.resetOnly ? "reset-binding" : "revoke"));
+  });
+  histFiltered("trials").forEach((x) => pushReason(x.app, x.revokeReason || x.blockReason));
+  histFiltered("blocks").forEach((x) => pushReason(x.app, x.reason));
+  histFiltered('restores').forEach((x) => pushReason(x.app, x.reuseReason || x.action));
+  return [...reasonMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+}
+function histAbuseStats() {
+  const audits = histFiltered("trialAudit");
+  const blocks = histFiltered("blocks");
+  const offenders = new Map();
+  const bump = (k) => offenders.set(k, (offenders.get(k) || 0) + 1);
+  let dateTamper = 0, reinstall = 0, multiIdentity = 0, forceBlock = 0, manualBlacklist = 0;
+  audits.forEach((x) => {
+    const type = String(x.type || "");
+    if (type === "trial_date_tamper_block") dateTamper += 1;
+    if (type === "trial_reinstall_block") reinstall += 1;
+    if (type === "trial_multi_identity_block") multiIdentity += 1;
+    if (type === "trial_force_block") forceBlock += 1;
+    if (type === "trial_admin_blacklist") manualBlacklist += 1;
+    const id = x.deviceId || x.androidId || x.fpHash || x.installId;
+    if (id) bump(`${x.app}:${id}`);
+  });
+  blocks.forEach((x) => {
+    const id = x.deviceId || x.androidId || x.fpHash || x.installId;
+    if (id) bump(`${x.app}:${id}`);
+  });
+  const repeatOffenders = [...offenders.values()].filter((n) => n > 1).length;
+  return [
+    ["Date tamper", dateTamper],
+    ["Reinstall abuse", reinstall],
+    ["Multi-identity abuse", multiIdentity],
+    ["Force blocks", forceBlock],
+    ["Manual blacklists", manualBlacklist],
+    ["Repeat offenders", repeatOffenders],
+  ];
+}
+function histRenderStats() {
+  const licenses = histFiltered("licenses");
+  const trials = histFiltered("trials");
+  const blocks = histFiltered("blocks");
+  const activeLic = licenses.filter((x) => String(x.status || "").toUpperCase() === "ACTIVE").length;
+  const revokedLic = licenses.filter((x) => String(x.status || "").toUpperCase() === "REVOKED").length;
+  const activeTrials = trials.filter((x) => String(x.status || "").toUpperCase() === "ACTIVE").length;
+  const endedTrials = trials.filter((x) => ["EXPIRED","REVOKED","BLOCKED"].includes(String(x.status || "").toUpperCase())).length;
+  const restores = histFiltered('restores');
+  const restoredRows = restores.filter((x) => x.reused).length;
+  renderKpiCards("histStats", [
+    { label: "Licenses", value: licenses.length, sub: `Active ${activeLic} • Revoked ${revokedLic}`, chips: appCountChips(licenses) },
+    { label: "Trials", value: trials.length, sub: `Active ${activeTrials} • Ended ${endedTrials}`, chips: appCountChips(trials) },
+    { label: "Blocks", value: blocks.length, sub: `Audit ${histFiltered("trialAudit").length}`, chips: appCountChips(blocks) },
+    { label: "Restores", value: restores.length, sub: `Recovered ${restoredRows} • Fresh ${Math.max(0, restores.length-restoredRows)}`, chips: appCountChips(restores) },
+  ]);
+  const reasons = histCountReasons();
+  const abuse = histAbuseStats();
+  const rBox = $("histReasons");
+  if (rBox) rBox.innerHTML = reasons.length ? reasons.map(([key, count]) => {
+    const parts = key.split("::");
+    return `<div class="stackItem"><div><div><b>${escHtml(parts[1] || key)}</b></div><div class="muted">${escHtml(parts[0] || "")}</div></div><div class="pill">${count}</div></div>`;
+  }).join("") : '<div class="muted">No revoke/block reasons found for current filters.</div>';
+  const aBox = $("histAbuse");
+  if (aBox) aBox.innerHTML = abuse.map(([label, count]) => `<div class="stackItem"><span>${escHtml(label)}</span><div class="pill">${count}</div></div>`).join("");
+}
+function histPageRows(rows) {
+  _histPageSize = Math.max(1, Number($("histPageSize")?.value || 50));
+  const totalPages = Math.max(1, Math.ceil(rows.length / _histPageSize));
+  if (_histPage > totalPages) _histPage = totalPages;
+  const start = (_histPage - 1) * _histPageSize;
+  return { totalPages, start, page: rows.slice(start, start + _histPageSize) };
+}
+function histCsv(rows) {
+  if (!rows.length) return "";
+  const headers = [...new Set(rows.flatMap((row) => Object.keys(row || {})))];
+  const esc = (v) => {
+    const s = String(v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : v));
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return [headers.join(",")].concat(rows.map((row) => headers.map((h) => esc(row[h])).join(","))).join("\n");
+}
+function histRenderTable() {
+  const wrap = $("histTableWrap");
+  const meta = $("histMeta");
+  if (!wrap) return;
+  const rows = histFiltered(_histTab);
+  const { totalPages, start, page } = histPageRows(rows);
+  const showingFrom = rows.length ? (start + 1) : 0;
+  const showingTo = Math.min(start + page.length, rows.length);
+  if (meta) meta.innerHTML = `<div>View ${escHtml(_histTab)} • Total ${rows.length} • Showing ${showingFrom}-${showingTo} • Page ${_histPage} of ${totalPages}</div><div class="tableHeaderMeta">${appCountChips(rows.slice(start, start + page.length))}</div>`;
+  const noData = `<tr><td colspan="12" style="color:var(--muted)">No records found for current filters.</td></tr>`;
+  if (_histTab === "licenses") {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>License ID</th><th>Status</th><th>Plan</th><th>Expiry</th><th>Device</th><th>Token</th><th>Notes</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td><code>${escHtml(x.licenseId || "-")}</code></td><td>${escHtml(x.status || "")}</td><td>${escHtml(x.plan || "")}</td><td>${escHtml(fmtTs(x.expiresAt) || x.expiryYmd || "-")}</td><td><code>${escHtml(x.boundDeviceId || "-")}</code></td><td><code>${escHtml(x.token || "-")}</code></td><td>${escHtml(x.notes || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
+  } else if (_histTab === "licenseAudit") {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Type</th><th>License ID</th><th>From</th><th>Device</th><th>Reason</th><th>Time</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.type || "")}</td><td><code>${escHtml(x.licenseId || "-")}</code></td><td><code>${escHtml(x.fromLicenseId || "-")}</code></td><td><code>${escHtml(x.deviceId || "-")}</code></td><td>${escHtml(x.reason || "-")}</td><td>${escHtml(fmtTs(x.createdAt) || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
+  } else if (_histTab === "trials") {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Status</th><th>Device</th><th>Android ID</th><th>Install ID</th><th>FP Hash</th><th>Start</th><th>Expiry</th><th>Reason</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.status || "")}</td><td><code>${escHtml(x.deviceId || "-")}</code></td><td><code>${escHtml(x.androidId || "-")}</code></td><td><code>${escHtml(x.installId || "-")}</code></td><td><code>${escHtml(x.fpHash || "-")}</code></td><td>${escHtml(String(x.startYmd || "-"))}</td><td>${escHtml(String(x.expiryYmd || "-"))}</td><td>${escHtml(x.revokeReason || x.blockReason || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
+  } else if (_histTab === "trialAudit") {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Type</th><th>Device</th><th>Android ID</th><th>Install ID</th><th>FP Hash</th><th>IP</th><th>Time</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.type || "")}</td><td><code>${escHtml(x.deviceId || "-")}</code></td><td><code>${escHtml(x.androidId || "-")}</code></td><td><code>${escHtml(x.installId || "-")}</code></td><td><code>${escHtml(x.fpHash || "-")}</code></td><td><code>${escHtml(x.ip || "-")}</code></td><td>${escHtml(fmtTs(x.createdAt) || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
+  } else if (_histTab === 'restores') {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Entity</th><th>Action</th><th>Reuse</th><th>Reason</th><th>Name</th><th>Phone</th><th>Email</th><th>Device</th><th>Time</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td><code>${escHtml(x.entityId || '-')}</code><div class="muted">${escHtml(x.entityType || '-')}</div></td><td>${escHtml(x.action || '-')}</td><td>${x.reused ? 'YES' : 'NO'}</td><td>${escHtml(x.reuseReason || '-')}</td><td>${escHtml(x.entityName || '-')}</td><td><code>${escHtml(x.ownerPhone || '-')}</code></td><td><code>${escHtml(x.ownerEmail || '-')}</code></td><td><code>${escHtml(x.deviceId || '-')}</code></td><td>${escHtml(fmtTs(x.createdAt) || '-')}</td></tr>`).join('') || noData}</tbody></table>`;
+  } else {
+    wrap.innerHTML = `<table class="table"><thead><tr><th>App</th><th>Reason</th><th>Device</th><th>Android ID</th><th>Install ID</th><th>FP Hash</th><th>Active</th><th>Updated</th></tr></thead><tbody>${page.map((x) => `<tr><td>${escHtml(histAppLabel(x.app))}</td><td>${escHtml(x.reason || "-")}</td><td><code>${escHtml(x.deviceId || "-")}</code></td><td><code>${escHtml(x.androidId || "-")}</code></td><td><code>${escHtml(x.installId || "-")}</code></td><td><code>${escHtml(x.fpHash || "-")}</code></td><td>${x.active === false ? "No" : "Yes"}</td><td>${escHtml(fmtTs(x.updatedAt || x.createdAt) || "-")}</td></tr>`).join("") || noData}</tbody></table>`;
+  }
+}
+async function histRefresh(forceReload = true) {
+  try {
+    if (forceReload) await histLoadData();
+    histRenderStats();
+    histRenderTable();
+    renderLiveRefreshMeta();
+  } catch (e) {
+    toast(e?.message || "History refresh failed");
+  }
+}
+function histBind() {
+  document.querySelectorAll("button[data-hist-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("button[data-hist-tab]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      _histTab = btn.getAttribute("data-hist-tab") || "licenses";
+      _histPage = 1;
+      histRenderStats();
+      histRenderTable();
+    });
+  });
+  const instantReloadIds = ["histApp"];
+  instantReloadIds.forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(true); }); });
+  ["histQ", "histReason"].forEach((id) => { const el = $(id); if (el) el.addEventListener("input", () => { _histPage = 1; clearTimeout(histBind._t); histBind._t = setTimeout(() => histRefresh(false), 250); }); });
+  ["histStatus", "histPlan", "histPageSize", "histFrom", "histTo"].forEach((id) => { const el = $(id); if (el) el.addEventListener("change", () => { _histPage = 1; histRefresh(false); }); });
+  const rf = $("btnHistRefresh"); if (rf) rf.addEventListener("click", () => { _histPage = 1; histRefresh(true).then(() => { _liveRefreshLastAt = Date.now(); _liveRefreshNextAt = Date.now() + autoRefreshEveryMs(); renderLiveRefreshMeta(); }); });
+  const prev = $("btnHistPrev"); if (prev) prev.addEventListener("click", () => { if (_histPage > 1) { _histPage -= 1; histRenderTable(); } });
+  const next = $("btnHistNext"); if (next) next.addEventListener("click", () => {
+    const rows = histFiltered(_histTab);
+    const totalPages = Math.max(1, Math.ceil(rows.length / Math.max(1, Number($("histPageSize")?.value || 50))));
+    if (_histPage < totalPages) { _histPage += 1; histRenderTable(); } else toast("No more pages");
+  });
+  const ex = $("btnHistExport"); if (ex) ex.addEventListener("click", () => {
+    const rows = histFiltered(_histTab);
+    const csv = histCsv(rows);
+    if (!csv) return toast("No rows to export");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `history_${String($("histApp")?.value || "ALL").toLowerCase()}_${_histTab}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  const pdf = $("btnHistPdf"); if (pdf) pdf.addEventListener("click", () => {
+    const rows = histFiltered(_histTab);
+    const shown = rows.slice(0, 200);
+    const headers = shown.length ? Object.keys(shown[0]) : [];
+    const html = `<div class="muted">App ${escHtml(String($("histApp")?.value || 'ALL'))} • Tab ${escHtml(_histTab)} • Rows ${rows.length}</div>` + (shown.length ? `<table><thead><tr>${headers.map((h)=>`<th>${escHtml(h)}</th>`).join('')}</tr></thead><tbody>${shown.map((row)=>`<tr>${headers.map((h)=>`<td>${escHtml(typeof row[h] === 'object' ? JSON.stringify(row[h]) : String(row[h] ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="muted">No rows to export.</div>`);
+    printHtmlReport('License / Trial History Report', html);
+  });
+}
+
+
+
+let _globalDashboardCache = null;
+
+function badge(text) {
+  return `<span class="pill">${escHtml(text)}</span>`;
+}
+function globalFilters() {
+  return {
+    app: String($('globalAppFilter')?.value || 'ALL').trim().toUpperCase(),
+    action: String($('globalActionFilter')?.value || 'ALL').trim().toUpperCase(),
+    from: String($('globalFrom')?.value || '').trim(),
+    to: String($('globalTo')?.value || '').trim(),
+  };
+}
+function renderMiniTable(targetId, headers, rows, emptyText = "No data") {
+  const el = $(targetId);
+  if (!el) return;
+  if (!rows || !rows.length) {
+    el.innerHTML = `<div class="muted">${escHtml(emptyText)}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="tableHeaderMeta">${appCountChips(rows)}</div><table class="miniTable"><thead><tr>${headers.map((h) => `<th>${escHtml(h.label)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${headers.map((h) => `<td>${h.render ? h.render(row) : escHtml(row[h.key] ?? "-")}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+function renderGlobalTrend(rows, action = 'ALL') {
+  const box = $("globalTrend");
+  if (!box) return;
+  if (!rows || !rows.length) {
+    box.innerHTML = '<div class="muted">No trend data yet.</div>';
+    return;
+  }
+  box.innerHTML = rows.map((row) => {
+    const nums = action === 'ABUSE'
+      ? `<span>Blocked ${Number(row.blocked || 0)}</span>`
+      : action === 'REVOKES'
+        ? `<span>Revoke ${Number(row.revoke || 0)}</span>`
+        : `<span>SPNG ${Number(row.SPNG || 0)}</span><span>CPNG ${Number(row.CPNG || 0)}</span><span>STMN ${Number(row.STMN || 0)}</span><span>RMP ${Number(row.RMP || 0)}</span><span>Revoke ${Number(row.revoke || 0)}</span><span>Blocked ${Number(row.blocked || 0)}</span>`;
+    return `
+    <div class="trendRow">
+      <div class="trendLabel">${escHtml(row.label || row.month || '-')}</div>
+      <div class="trendBar">
+        <div class="trendHead">Activation / safety events</div>
+        <div class="trendNums">${nums}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+
+async function refreshGlobalDashboard() {
+  const f = globalFilters();
+  const data = await api(`/api/dev/global-dashboard${buildQuery({ app: f.app, from: f.from, to: f.to })}`, { method: 'GET' });
+  _globalDashboardCache = { ...(data || {}), uiFilters: f };
+  globalRenderSectionCounts(data || {});
+  renderLiveRefreshMeta();
+  const ov = data?.overview || {};
+  const action = f.action || 'ALL';
+  const meta = $('globalMeta');
+  if (meta) {
+    const rangeText = (f.from || f.to) ? `Range ${f.from || 'start'} → ${f.to || 'today'}` : 'Default 6-month view';
+    meta.textContent = `${f.app || 'ALL'} • ${action} • ${rangeText}`;
+  }
+  const overviewEl = $("globalOverview");
+  if (overviewEl) {
+    const revokeLabel = (f.from || f.to) ? 'Revoked in range' : 'Revoked today';
+    const blockedLabel = (f.from || f.to) ? 'Blocked in range' : 'Blocked today';
+    overviewEl.innerHTML = [
+      ["Total licenses", ov.totalLicenses, "Across selected app scope"],
+      ["Active licenses", ov.activeLicenses, "Valid + not expired"],
+      ["Tracked devices", Number(ov.totalDevices || 0) || (Array.isArray(data?.appCards) ? data.appCards.reduce((n,x)=>n+Number(x.deviceCount||0),0) : 0), "Unified device count"],
+      ["Expiring soon", ov.expiringSoon, "Next 14 days"],
+      [revokeLabel, ov.revokedToday, "License revokes + resets"],
+      [blockedLabel, ov.blockedToday, "Trial abuse / deny events"],
+      ["Suspicious devices", ov.suspiciousDevices, "Fraud score >= 40"],
+      ["Multi-account devices", ov.multiAccountDevices, "Same device across multiple accounts"],
+      ["Device clusters", ov.deviceClusters, "Fingerprint-linked groups"],
+      ["Trials tracked", ov.trialsTracked, "Historic records"],
+      ["Restores tracked", ov.restoresTracked, `Recovered ${Number(ov.restoredEntities || 0)}`],
+    ].map(([label, value, sub]) => `<div class="kpiCard"><div class="kpiLabel">${escHtml(label)}</div><div class="kpiValue">${escHtml(String(value ?? 0))}</div><div class="kpiSub">${escHtml(sub)}</div></div>`).join("");
+  }
+
+  const appCardsEl = $("globalAppCards");
+  if (appCardsEl) {
+    appCardsEl.innerHTML = (data?.appCards || []).map((x) => `
+      <div class="kpiCard">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:8px">
+          <div>
+            <div class="kpiLabel">${escHtml(x.app || '')}</div>
+            <div class="kpiValue">${Number(x.active || 0)}</div>
+          </div>
+          <button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'licenses')">Open History</button>
+        </div>
+        <div class="kpiSub">Active • Total ${Number(x.total || 0)} • Soon ${Number(x.expiringSoon || 0)} • Devices ${Number(x.deviceCount || 0)}</div>
+        <div class="kpiChipRow">${chip('Active', Number(x.active || 0))}${chip('Total', Number(x.total || 0))}${chip('Soon', Number(x.expiringSoon || 0))}${chip('Devices', Number(x.deviceCount || 0))}${chip('Blocked', Number(x.blockedToday || 0))}</div>
+        <div class="trendNums" style="margin-top:8px;">
+          <span>M ${Number(x.monthly || 0)}</span>
+          <span>Y ${Number(x.yearly || 0)}</span>
+          <span>Revoked ${Number(x.revokedToday || 0)}</span>
+          <span>Reset ${Number(x.resetToday || 0)}</span>
+          <span>Blocked ${Number(x.blockedToday || 0)}</span>
+          <span>Restore ${Number(x.restores || 0)}</span>
+          <span>Suspicious ${Number(x.suspiciousDevices || 0)}</span>
+          <span>Multi ${Number(x.multiAccountDevices || 0)}</span>
+          <span>Clusters ${Number(x.clusterCount || 0)}</span>
+          <span>Fraud ${Number(x.avgFraudScore || 0)}</span>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  renderGlobalTrend(data?.trend || [], action);
+
+  const reasons = $("globalReasons");
+  if (reasons) {
+    const list = (data?.topReasons || []).filter((x) => action !== 'ACTIVATIONS');
+    reasons.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.reason || 'unspecified')}</b><div class="muted">${escHtml(x.app || '')}</div></div><div class="row"><div class="pill">${Number(x.count || 0)}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'licenseAudit')">View</button></div></div>`).join("") : '<div class="muted">No revoke or block reasons yet for current filters.</div>';
+  }
+
+  renderMiniTable("globalExpiring", [
+    { label: 'App', key: 'app' },
+    { label: 'License', render: (r) => `<code>${escHtml(r.licenseId || '-')}</code>` },
+    { label: 'Plan', key: 'plan' },
+    { label: 'Expiry', render: (r) => escHtml(fmtTs(r.expiresAt) || '-') },
+    { label: 'Device', render: (r) => `<code>${escHtml(r.deviceId || '-')}</code>` },
+    { label: 'Action', render: (r) => `<button class="btn" onclick="openHistoryForApp('${escHtml(r.app || 'ALL')}', 'licenses')">History</button>` },
+  ], action === 'ABUSE' ? [] : (data?.expiringSoonRows || []), 'No active licenses expiring soon.');
+
+  const restoreBox = $('globalRestores');
+  if (restoreBox) {
+    const list = data?.recentRestores || [];
+    restoreBox.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.action || '')}</code><div class="muted">${escHtml(x.entityName || x.entityId || '')}</div></div><div class="row"><div class="pill">${x.reused ? 'RESTORE' : 'CREATE'}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'restores')">Open</button></div></div>`).join('') : '<div class="muted">No restore activity yet.</div>';
+  }
+
+  const abuseEl = $("globalAbuse");
+  if (abuseEl) {
+    const list = data?.topAbuse || [];
+    abuseEl.innerHTML = (action === 'ACTIVATIONS') ? '<div class="muted">Switch action filter to ABUSE to view device abuse hotspots.</div>' : (list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.kind || '')}</code><div class="muted"><code>${escHtml(x.value || '')}</code></div></div><div class="row"><div class="pill">${Number(x.count || 0)}</div><button class="btn" onclick="openHistoryForApp('${escHtml(x.app || 'ALL')}', 'trialAudit')">Open</button></div></div>`).join("") : '<div class="muted">No abuse hotspots yet.</div>');
+  }
+
+  const intel = data?.deviceIntelligence || {};
+  const clusterEl = $('globalClusters');
+  if (clusterEl) {
+    const list = intel?.fingerprintClusters || [];
+    clusterEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.clusterKey || '-')}</code><div class="muted">Devices ${Number(x.deviceCount || 0)} • Accounts ${Number(x.accountCount || 0)} • Licenses ${Number(x.licenseCount || 0)}</div></div><div class="row"><div class="pill">Fraud ${Number(x.fraudScore || 0)}</div><button class="btn" onclick="openDeviceDetail('${escHtml(x.app || 'CPNG')}', '${escHtml(x.clusterKey || x.deviceKey || '')}')">Open</button></div></div>`).join('') : '<div class="muted">No fingerprint clusters yet.</div>';
+  }
+  const suspiciousEl = $('globalSuspicious');
+  if (suspiciousEl) {
+    const list = intel?.suspiciousDevices || [];
+    suspiciousEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.deviceKey || x.deviceId || '-')}</code><div class="muted">${escHtml((x.suspiciousReasons || []).join(' • ') || 'High-risk activity')}</div></div><div class="row"><div class="pill">${escHtml(x.riskLevel || 'LOW')} ${Number(x.fraudScore || 0)}</div><button class="btn" onclick="openDeviceDetail('${escHtml(x.app || 'CPNG')}', '${escHtml(x.deviceKey || x.deviceId || '')}')">Open</button></div></div>`).join('') : '<div class="muted">No suspicious devices found.</div>';
+  }
+  const multiEl = $('globalMultiAccount');
+  if (multiEl) {
+    const list = intel?.multiAccountDevices || [];
+    multiEl.innerHTML = list.length ? list.map((x) => `<div class="stackItem"><div><b>${escHtml(x.app || '')}</b> <code>${escHtml(x.deviceKey || x.deviceId || '-')}</code><div class="muted">Accounts ${Number(x.accountCount || 0)} • Phones ${Number(x.phoneCount || 0)} • Emails ${Number(x.emailCount || 0)}</div></div><div class="row"><div class="pill">Fraud ${Number(x.fraudScore || 0)}</div><button class="btn" onclick="openDeviceDetail('${escHtml(x.app || 'CPNG')}', '${escHtml(x.deviceKey || x.deviceId || '')}')">Open</button></div></div>`).join('') : '<div class="muted">No multi-account devices yet.</div>';
+  }
+  renderMiniTable('globalFraud', [
+    { label: 'App', key: 'app' },
+    { label: 'Device', render: (r) => `<code>${escHtml(r.deviceKey || r.deviceId || '-')}</code>` },
+    { label: 'Fraud', render: (r) => `${Number(r.fraudScore || 0)} <span class="muted">${escHtml(r.riskLevel || 'LOW')}</span>` },
+    { label: 'Accounts', render: (r) => Number(r.accountCount || 0) },
+    { label: 'Blocked', render: (r) => Number(r.blockedHits || 0) },
+    { label: 'Tamper', render: (r) => Number(r.tamperHits || 0) },
+    { label: 'Last Seen', render: (r) => escHtml(fmtTs(r.lastSeenAt) || '-') },
+  ], intel?.fraudScores || [], 'No fraud-score data yet.');
+
+  const recentRows = (data?.recentRevokes || []).filter((r) => action !== 'ACTIVATIONS');
+  renderMiniTable("globalRevokes", [
+    { label: 'App', key: 'app' },
+    { label: 'Type', key: 'type' },
+    { label: 'License', render: (r) => `<code>${escHtml(r.licenseId || '-')}</code>` },
+    { label: 'Device', render: (r) => `<code>${escHtml(r.deviceId || '-')}</code>` },
+    { label: 'Reason', key: 'reason' },
+    { label: 'Date', render: (r) => escHtml(fmtTs(r.createdAt) || '-') },
+    { label: 'Open', render: (r) => `<button class="btn" onclick="openHistoryForApp('${escHtml(r.app || 'ALL')}', 'licenseAudit')">History</button>` },
+  ], recentRows, 'No recent revoke/reset activity.');
+}
+
+function openHistoryForApp(app, tab = "licenses") {
+  try {
+    const safeApp = String(app || 'ALL').toUpperCase();
+    const allowedTabs = new Set(["licenses", "licenseAudit", "trials", "trialAudit", "blocks", "restores"]);
+    const safeTab = allowedTabs.has(String(tab || "licenses")) ? String(tab) : "licenses";
+
+    const histSection = $("historySection") || document.getElementById("historySection");
+    const histApp = $("histApp") || document.getElementById("histApp");
+    const histButtons = Array.from(document.querySelectorAll("button[data-hist-tab]"));
+    const targetBtn = histButtons.find((b) => String(b.getAttribute("data-hist-tab") || "") === safeTab);
+
+    if (histApp) histApp.value = safeApp;
+    _histTab = safeTab;
+    _histPage = 1;
+
+    histButtons.forEach((b) => b.classList.toggle("active", b === targetBtn));
+    if (targetBtn && typeof targetBtn.click === 'function') {
+      targetBtn.click();
+    } else {
+      histRenderStats();
+      histRenderTable();
+    }
+
+    histRefresh(true);
+
+    if (histSection && typeof histSection.scrollIntoView === 'function') {
+      histSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  } catch (e) {
+    console.error('openHistoryForApp error:', e);
+    toast(e?.message || 'Unable to open history view');
+  }
+}
+
+
+window.openHistoryForApp = openHistoryForApp;
+
 window.addEventListener("load", () => {
   const b1 = $("btnBulkGenerate"); if (b1) b1.onclick = bulkGenerateSpng;
   const b2 = $("btnBulkCsv"); if (b2) b2.onclick = bulkCsvSpng;
@@ -1578,6 +2670,157 @@ window.addEventListener("load", () => {
   const smSz = $("smPageSize"); if (smSz) smSz.onchange = () => smFetch(1, { force: true });
   const smDel = $("btnSmDelete"); if (smDel) smDel.onclick = smDeleteSelected;
 
+  const gref = $("btnGlobalRefresh"); if (gref) gref.onclick = () => refreshGlobalDashboard().then(() => { _liveRefreshLastAt = Date.now(); _liveRefreshNextAt = Date.now() + autoRefreshEveryMs(); renderLiveRefreshMeta(); }).catch((e) => toast(e.message));
+  ["globalAppFilter", "globalActionFilter", "globalFrom", "globalTo"].forEach((id) => { const el = $(id); if (el) el.addEventListener(el.tagName === 'INPUT' ? 'change' : 'change', () => refreshGlobalDashboard().catch((e) => toast(e.message))); });
+  const gh = $("btnGlobalOpenHistory"); if (gh) gh.onclick = () => openHistoryForApp(String($("globalAppFilter")?.value || 'ALL'), 'licenses');
+  const gcsv = $("btnGlobalExportCsv"); if (gcsv) gcsv.onclick = () => {
+    const d = _globalDashboardCache;
+    if (!d) return toast('Load the global dashboard first');
+    const rows = [];
+    (d.appCards || []).forEach((x) => rows.push({ section:'appCards', ...x }));
+    (d.expiringSoonRows || []).forEach((x) => rows.push({ section:'expiringSoon', ...x }));
+    (d.recentRevokes || []).forEach((x) => rows.push({ section:'recentRevokes', ...x }));
+    (d.recentRestores || []).forEach((x) => rows.push({ section:'recentRestores', ...x }));
+    (d.topAbuse || []).forEach((x) => rows.push({ section:'topAbuse', ...x }));
+    (d.topReasons || []).forEach((x) => rows.push({ section:'topReasons', ...x }));
+    (d.trend || []).forEach((x) => rows.push({ section:'trend', ...x }));
+    const csv = histCsv(rows);
+    if (!csv) return toast('No rows to export');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `global_dashboard_${String(d?.uiFilters?.app || 'all').toLowerCase()}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const gpdf = $("btnGlobalExportPdf"); if (gpdf) gpdf.onclick = () => {
+    const d = _globalDashboardCache;
+    if (!d) return toast('Load the global dashboard first');
+    const ov = d.overview || {};
+    const html = `
+      <div class="muted">App ${escHtml(d.uiFilters?.app || 'ALL')} • Action ${escHtml(d.uiFilters?.action || 'ALL')} • ${(d.uiFilters?.from || d.uiFilters?.to) ? `Range ${escHtml(d.uiFilters?.from || 'start')} → ${escHtml(d.uiFilters?.to || 'today')}` : 'Default 6-month view'}</div>
+      <div class="grid">
+        <div class="card"><b>Total licenses</b><div>${Number(ov.totalLicenses || 0)}</div></div>
+        <div class="card"><b>Active licenses</b><div>${Number(ov.activeLicenses || 0)}</div></div>
+        <div class="card"><b>Expiring soon</b><div>${Number(ov.expiringSoon || 0)}</div></div>
+        <div class="card"><b>Revoked / blocked</b><div>${Number(ov.revokedToday || 0)} / ${Number(ov.blockedToday || 0)}</div></div>
+      </div>
+      <h2>By App</h2><table><thead><tr><th>App</th><th>Total</th><th>Active</th><th>Expiring Soon</th><th>Monthly</th><th>Yearly</th><th>Revoked</th><th>Blocked</th></tr></thead><tbody>${(d.appCards || []).map((x)=>`<tr><td>${escHtml(x.app || '')}</td><td>${Number(x.total || 0)}</td><td>${Number(x.active || 0)}</td><td>${Number(x.expiringSoon || 0)}</td><td>${Number(x.monthly || 0)}</td><td>${Number(x.yearly || 0)}</td><td>${Number(x.revokedToday || 0)}</td><td>${Number(x.blockedToday || 0)}</td></tr>`).join('')}</tbody></table>
+      <h2>Recent Revokes</h2><table><thead><tr><th>App</th><th>Type</th><th>License</th><th>Device</th><th>Reason</th><th>Date</th></tr></thead><tbody>${(d.recentRevokes || []).map((x)=>`<tr><td>${escHtml(x.app || '')}</td><td>${escHtml(x.type || '')}</td><td>${escHtml(x.licenseId || '')}</td><td>${escHtml(x.deviceId || '')}</td><td>${escHtml(x.reason || '')}</td><td>${escHtml(fmtTs(x.createdAt) || '')}</td></tr>`).join('') || '<tr><td colspan="6">No rows</td></tr>'}</tbody></table>
+      <h2>Recent Restores</h2><table><thead><tr><th>App</th><th>Action</th><th>Entity</th><th>Phone</th><th>Email</th><th>Date</th></tr></thead><tbody>${(d.recentRestores || []).map((x)=>`<tr><td>${escHtml(x.app || '')}</td><td>${escHtml(x.action || '')}</td><td>${escHtml(x.entityName || x.entityId || '')}</td><td>${escHtml(x.ownerPhone || '')}</td><td>${escHtml(x.ownerEmail || '')}</td><td>${escHtml(fmtTs(x.createdAt) || '')}</td></tr>`).join('') || '<tr><td colspan="6">No rows</td></tr>'}</tbody></table>
+    `;
+    printHtmlReport('Global License & Trial Report', html);
+  };
+
+  const autoT = $('autoRefreshToggle'); if (autoT) autoT.addEventListener('change', () => scheduleLiveRefresh());
+  const autoE = $('autoRefreshEvery'); if (autoE) autoE.addEventListener('change', () => scheduleLiveRefresh());
+
   // Load shops once key is present (or after user saves)
-  if (getKey()) smRefresh();
+  histBind();
+  if (getKey()) {
+    smRefresh();
+    Promise.all([
+      refreshGlobalDashboard().catch(() => {}),
+      refreshCpngStats().catch(() => {}),
+      refreshCpngTokenTable(true).catch(() => {}),
+      refreshCpngTrialDashboard().catch(() => {}),
+      refreshCpngLicenseAudit().catch(() => {}),
+      histRefresh(true).catch(() => {}),
+    ]).finally(() => { _liveRefreshLastAt = Date.now(); scheduleLiveRefresh(); });
+  } else {
+    renderLiveRefreshMeta();
+  }
 });
+let currentDeviceDetail = null;
+
+function deviceActionPayload() {
+  const d = currentDeviceDetail?.device || {};
+  const key = ($("deviceDetailKey")?.value || d.deviceKey || '').trim();
+  return {
+    app: ($("deviceDetailApp")?.value || d.app || 'CPNG').trim(),
+    deviceKey: key,
+    deviceId: d.deviceId || key,
+    androidId: d.androidId || '',
+    installId: d.installId || '',
+    fpHash: d.fpHash || '',
+    licenseId: (currentDeviceDetail?.related?.licenseIds || [])[0] || '',
+    token: (currentDeviceDetail?.related?.tokens || [])[0] || '',
+    reason: ($("deviceActionReason")?.value || '').trim(),
+  };
+}
+
+async function openDeviceDetail(app, deviceKey) {
+  if ($("deviceDetailApp")) $("deviceDetailApp").value = app || 'CPNG';
+  if ($("deviceDetailKey")) $("deviceDetailKey").value = deviceKey || '';
+  const sec = document.getElementById('deviceDetailSection');
+  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return loadDeviceDetail();
+}
+
+async function loadDeviceDetail() {
+  const app = ($("deviceDetailApp")?.value || 'CPNG').trim();
+  const deviceKey = ($("deviceDetailKey")?.value || '').trim();
+  if (!deviceKey) throw new Error('Device key is required');
+  const out = await api(`/api/dev/device-detail?app=${encodeURIComponent(app)}&deviceKey=${encodeURIComponent(deviceKey)}`);
+  currentDeviceDetail = out;
+  renderDeviceDetail(out);
+}
+
+function renderDeviceDetail(out) {
+  const d = out?.device || {};
+  setText('deviceDetailMeta', `${d.app || out.app || ''} • ${d.deviceKey || '-'} • Risk ${d.riskLevel || 'LOW'} ${Number(d.fraudScore || 0)}`);
+  const stats = [
+    ['Tracked events', out?.stats?.events || 0, 'Signals linked to this device'],
+    ['Active blocks', out?.stats?.activeBlocks || 0, 'Trial blocks / blacklist'],
+    ['License audit', out?.stats?.licenseAudit || 0, 'License actions found'],
+    ['Restores', out?.stats?.restores || 0, 'Restore / re-link activity'],
+    ['Accounts', d.accountCount || 0, 'Phones + emails + entities'],
+    ['Fraud score', d.fraudScore || 0, d.suspicious ? 'Suspicious device' : 'Normal watch'],
+  ];
+  const statsEl = $('deviceDetailStats');
+  if (statsEl) statsEl.innerHTML = stats.map(([a,b,c]) => `<div class="kpiCard"><div class="kpiLabel">${escHtml(a)}</div><div class="kpiValue">${Number(b||0)}</div><div class="kpiSub">${escHtml(c||'')}</div></div>`).join('');
+  const ids = [
+    ['Device key', d.deviceKey], ['Device ID', d.deviceId], ['Android ID', d.androidId], ['Install ID', d.installId], ['FP Hash', d.fpHash],
+    ['Phones', (d.phones||[]).join(' , ')], ['Emails', (d.emails||[]).join(' , ')], ['Entities', (d.entities||[]).join(' , ')],
+  ].filter(x => x[1]);
+  setHtml('deviceIdentityList', ids.map(([k,v]) => `<div class="stackItem"><div><b>${escHtml(k)}</b><div class="muted">${escHtml(String(v))}</div></div></div>`).join('') || '<div class="muted">No identities found.</div>');
+  const rel = [];
+  (out?.related?.licenseIds || []).forEach(x => rel.push({type:'License', value:x}));
+  (out?.related?.tokens || []).forEach(x => rel.push({type:'Token', value:x}));
+  (out?.blocks || []).slice(0,20).forEach(x => rel.push({type:'Block', value:`${x.reason || x.type || 'block'} • ${fmtTs(x.updatedAt || x.createdAt)}`}));
+  renderMiniTable('deviceRelatedTable', [{label:'Type', render:r=>escHtml(r.type||'')},{label:'Value', render:r=>escHtml(r.value||'')}], rel, 'No related license or block data.');
+  renderMiniTable('deviceTimeline', [{label:'Time', render:r=>fmtTs(r.updatedAt || r.createdAt)},{label:'Source', render:r=>escHtml(r.source||'')},{label:'Type', render:r=>escHtml(r.type||r.status||'')},{label:'Entity', render:r=>escHtml(r.entityId||'')}], out?.timeline || [], 'No timeline yet.');
+}
+
+async function doDeviceBlacklist() {
+  const p = deviceActionPayload();
+  await api('/api/trial/admin/blacklist', { method:'POST', body: JSON.stringify(p) });
+  toast('Device blacklisted');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+async function doDeviceUnblock() {
+  const p = deviceActionPayload();
+  await api('/api/trial/admin/unblock', { method:'POST', body: JSON.stringify(p) });
+  toast('Device unblocked');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+async function doDeviceRevoke() {
+  const p = deviceActionPayload();
+  if (!p.licenseId && !p.token) throw new Error('No linked license or token found for this device');
+  await api('/api/dev/revoke', { method:'POST', body: JSON.stringify({ app:p.app, licenseId:p.licenseId, token:p.token, deviceId:p.deviceId, reason:p.reason || 'Device drill-down revoke' }) });
+  toast('License revoked for device');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+async function doDeviceReset() {
+  const p = deviceActionPayload();
+  if (!p.licenseId && !p.token) throw new Error('No linked license or token found for this device');
+  await api('/api/dev/revoke', { method:'POST', body: JSON.stringify({ app:p.app, licenseId:p.licenseId, token:p.token, resetOnly:true, deviceId:p.deviceId, reason:p.reason || 'Device drill-down reset binding' }) });
+  toast('Binding reset for device');
+  await loadDeviceDetail();
+  await refreshGlobalDashboard(false);
+}
+
+

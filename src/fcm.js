@@ -432,3 +432,16 @@ export async function pushStmnChatMessage(shopId, payload, filter = {}) {
     return { ok:false, error:e?.message || String(e) };
   }
 }
+
+
+// Explicit export block for Node ESM compatibility
+export {
+  ensureFcm,
+  upsertDeviceToken,
+  upsertSpngDeviceToken,
+  removeSpngDeviceToken,
+  pushSpngShopChange,
+  removeDeviceToken,
+  pushShopChange,
+  pushStmnChatMessage
+};

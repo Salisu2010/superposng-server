@@ -7,66 +7,35 @@ const __dirname = path.dirname(__filename)
 
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, '../db.json')
 
+
+function buildInitialDB() {
+  return {
+    shops: [], devices: [], pairCodes: [], products: [], staffs: [], sales: [], debtors: [], debtorPayments: [],
+    licenses: [], pendingActivations: [], rmpLicenses: [], rmpPendingActivations: [], owners: [], shopAliases: [],
+    trials: [], trialAuditLogs: [], trialBlocks: [],
+    tgOrgs: [], tgDevices: [], tgEnrollTokens: [], tgCommands: [], tgLocations: [], tgHeartbeats: [], tgPairCodes: [],
+    stmnLicenses: [], stmnFcmTokens: [], stmnChatMessages: [], stmnChatSeen: [],
+    clinics: [], clinicDevices: [], clinicUsers: [], clinicSnapshots: [], clinicBackups: [], clinicNotifications: [], clinicEvents: [],
+    clinicBranches: [], clinicSyncCursor: [], clinicPatients: [], clinicBills: [], clinicVisits: [], clinicAdmissions: [],
+    clinicAppointments: [], clinicPharmacyDispenses: [], clinicPharmacyItems: [], clinicPharmacyReceipts: [], clinicStockMovements: [],
+    clinicSuppliers: [], clinicLabRequests: [], clinicPrescriptions: [], clinicNurseDesk: [], clinicDoctorQueue: [], clinicPairCodes: [],
+    clinicChangeLog: [], clinicLabOrders: []
+  }
+}
+
+function backupCorruptedDB(raw, reason) {
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const backupFile = `${DB_FILE}.corrupt-${stamp}.bak`
+    fs.writeFileSync(backupFile, raw || '', 'utf-8')
+    console.error('[db] Invalid db.json backed up before reset:', backupFile, reason || '')
+  } catch (e) {
+    try { console.error('[db] Failed to backup corrupted db.json:', e?.message || e) } catch {}
+  }
+}
 function initDB() {
   if (!fs.existsSync(DB_FILE)) {
-    const initialData = {
-      shops: [],
-      devices: [],
-      pairCodes: [],
-      products: [],
-      staffs: [],
-      sales: [],
-      debtors: [],
-      debtorPayments: [],
-      licenses: [],
-      pendingActivations: [],
-      rmpLicenses: [],
-      rmpPendingActivations: [],
-      owners: [],
-      shopAliases: [],
-
-      // Trial (server-backed) for SPNG + RMP
-      trials: [],
-      trialAuditLogs: [],
-      trialBlocks: [],
-
-      // TrackGuard Registry (Lite + Enterprise)
-      tgOrgs: [],
-      tgDevices: [],
-      tgEnrollTokens: [],
-      tgCommands: [],
-      tgLocations: [],
-      tgHeartbeats: [],
-      tgPairCodes: [],
-
-      // StayMasterNG FCM device tokens (background push notifications)
-      stmnLicenses: [],
-      stmnFcmTokens: [],
-      // StayMasterNG internal messaging
-      stmnChatMessages: [],
-      stmnChatSeen: [],
-
-      // Clinic Pro NG cloud
-      clinics: [],
-      clinicDevices: [],
-      clinicUsers: [],
-      clinicSnapshots: [],
-      clinicBackups: [],
-      clinicNotifications: [],
-      clinicEvents: [],
-      clinicBranches: [],
-      clinicSyncCursor: [],
-      clinicPatients: [],
-      clinicBills: [],
-      clinicVisits: [],
-      clinicAdmissions: [],
-      clinicAppointments: [],
-      clinicPharmacyDispenses: [],
-      clinicLabRequests: [],
-      clinicPrescriptions: [],
-      clinicNurseDesk: [],
-      clinicDoctorQueue: []
-    }
+    const initialData = buildInitialDB()
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
   }
 }
@@ -150,80 +119,34 @@ function readDB() {
     if (!Array.isArray(db.clinicAdmissions)) db.clinicAdmissions = []
     if (!Array.isArray(db.clinicAppointments)) db.clinicAppointments = []
     if (!Array.isArray(db.clinicPharmacyDispenses)) db.clinicPharmacyDispenses = []
+    if (!Array.isArray(db.clinicPharmacyItems)) db.clinicPharmacyItems = []
+    if (!Array.isArray(db.clinicPharmacyReceipts)) db.clinicPharmacyReceipts = []
+    if (!Array.isArray(db.clinicStockMovements)) db.clinicStockMovements = []
+    if (!Array.isArray(db.clinicSuppliers)) db.clinicSuppliers = []
     if (!Array.isArray(db.clinicLabRequests)) db.clinicLabRequests = []
     if (!Array.isArray(db.clinicPrescriptions)) db.clinicPrescriptions = []
     if (!Array.isArray(db.clinicNurseDesk)) db.clinicNurseDesk = []
     if (!Array.isArray(db.clinicDoctorQueue)) db.clinicDoctorQueue = []
+    if (!Array.isArray(db.clinicPairCodes)) db.clinicPairCodes = []
+    if (!Array.isArray(db.clinicChangeLog)) db.clinicChangeLog = []
+    if (!Array.isArray(db.clinicLabOrders)) db.clinicLabOrders = []
     return db
   } catch (e) {
-    // If db.json was corrupted or accidentally replaced with non-JSON content,
-    // reset it to a clean initial structure so the server won't 500.
-    const initialData = {
-      shops: [],
-      devices: [],
-      pairCodes: [],
-      products: [],
-      staffs: [],
-      sales: [],
-      debtors: [],
-      debtorPayments: [],
-      licenses: [],
-      pendingActivations: [],
-      rmpLicenses: [],
-      rmpPendingActivations: [],
-      owners: [],
-      shopAliases: [],
-
-      // Trial (server-backed) for SPNG + RMP
-      trials: [],
-      trialAuditLogs: [],
-      trialBlocks: [],
-
-      // TrackGuard Registry (Lite + Enterprise)
-      tgOrgs: [],
-      tgDevices: [],
-      tgEnrollTokens: [],
-      tgCommands: [],
-      tgLocations: [],
-      tgHeartbeats: [],
-      tgPairCodes: [],
-
-      stmnLicenses: [],
-
-      // StayMasterNG FCM device tokens (background push notifications)
-      stmnFcmTokens: [],
-      // StayMasterNG internal messaging
-      stmnChatMessages: [],
-      stmnChatSeen: [],
-
-      // Clinic Pro NG cloud
-      clinics: [],
-      clinicDevices: [],
-      clinicUsers: [],
-      clinicSnapshots: [],
-      clinicBackups: [],
-      clinicNotifications: [],
-      clinicEvents: [],
-      clinicBranches: [],
-      clinicSyncCursor: [],
-      clinicPatients: [],
-      clinicBills: [],
-      clinicVisits: [],
-      clinicAdmissions: [],
-      clinicAppointments: [],
-      clinicPharmacyDispenses: [],
-      clinicLabRequests: [],
-      clinicPrescriptions: [],
-      clinicNurseDesk: [],
-      clinicDoctorQueue: []
-    }
+    // If db.json was corrupted, preserve the bad file as a timestamped backup,
+    // then start a clean DB so production stays online without silent data loss.
+    backupCorruptedDB(data, e?.message || e)
+    const initialData = buildInitialDB()
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
     return initialData
   }
 }
 
 function writeDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2))
+  const dir = path.dirname(DB_FILE)
+  const tmp = path.join(dir, `.${path.basename(DB_FILE)}.${process.pid}.${Date.now()}.tmp`)
+  const payload = JSON.stringify(data || buildInitialDB(), null, 2)
+  fs.writeFileSync(tmp, payload)
+  fs.renameSync(tmp, DB_FILE)
 }
 
 export { readDB, writeDB }
