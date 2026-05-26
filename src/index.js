@@ -36,6 +36,8 @@ import { fileURLToPath } from "url";
 
 dotenv.config();
 
+const SERVER_PATCH_VERSION = "codex-v8-db-cache-timeout-fix-2026-05-23";
+
 function safeServerLog(level, message, extra) {
   try {
     const payload = extra ? ` ${JSON.stringify(extra)}` : '';
@@ -55,6 +57,40 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 app.set('trust proxy', true);
+
+app.get('/healthz', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.status(200).type('text/plain').send(`ok ${SERVER_PATCH_VERSION}`);
+});
+
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  const originalSend = res.send.bind(res);
+
+  res.json = function guardedJson(body) {
+    if (res.headersSent || res.writableEnded) {
+      safeServerLog('error', 'Ignored duplicate JSON response', {
+        method: req.method,
+        url: req.originalUrl || req.url
+      });
+      return res;
+    }
+    return originalJson(body);
+  };
+
+  res.send = function guardedSend(body) {
+    if (res.headersSent || res.writableEnded) {
+      safeServerLog('error', 'Ignored duplicate response send', {
+        method: req.method,
+        url: req.originalUrl || req.url
+      });
+      return res;
+    }
+    return originalSend(body);
+  };
+
+  return next();
+});
 
 // Resolve project root for serving local dashboard assets
 const __filename = fileURLToPath(import.meta.url);
@@ -209,6 +245,7 @@ app.get('/api/health/runtime', (_req, res) => {
     res.json({
       ok: true,
       status: 'healthy',
+      patchVersion: SERVER_PATCH_VERSION,
       node: process.version,
       pid: process.pid,
       uptime: process.uptime(),
@@ -264,6 +301,7 @@ app.get("/", (_req, res) => {
     ok: true,
     name: "SuperPOSNG + Clinic Pro NG Cloud Sync Server",
     version: "1.0.0",
+    patchVersion: SERVER_PATCH_VERSION,
     time: new Date().toISOString()
   });
 });
@@ -502,7 +540,7 @@ setInterval(() => {
 }, 5000);
 
 const PORT = parseInt(process.env.PORT || "8080", 10);
-const server = app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT}`));
+const server = app.listen(PORT, () => console.log(`SuperPOSNG Cloud Sync running on :${PORT} (${SERVER_PATCH_VERSION})`));
 server.on('error', (err) => {
   safeServerLog('error', 'HTTP server error', { error: String(err?.stack || err || '') });
 });

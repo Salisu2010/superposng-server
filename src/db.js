@@ -7,6 +7,10 @@ const __dirname = path.dirname(__filename)
 
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, '../db.json')
 
+let cachedDb = null
+let cachedMtimeMs = 0
+let cachedSize = -1
+
 
 function buildInitialDB() {
   return {
@@ -15,11 +19,16 @@ function buildInitialDB() {
     trials: [], trialAuditLogs: [], trialBlocks: [],
     tgOrgs: [], tgDevices: [], tgEnrollTokens: [], tgCommands: [], tgLocations: [], tgHeartbeats: [], tgPairCodes: [],
     stmnLicenses: [], stmnFcmTokens: [], stmnChatMessages: [], stmnChatSeen: [],
+    spngFcmTokens: [], stmnRooms: [], stmnBookings: [], stmnReminderLog: [],
     clinics: [], clinicDevices: [], clinicUsers: [], clinicSnapshots: [], clinicBackups: [], clinicNotifications: [], clinicEvents: [],
     clinicBranches: [], clinicSyncCursor: [], clinicPatients: [], clinicBills: [], clinicVisits: [], clinicAdmissions: [],
     clinicAppointments: [], clinicPharmacyDispenses: [], clinicPharmacyItems: [], clinicPharmacyReceipts: [], clinicStockMovements: [],
     clinicSuppliers: [], clinicLabRequests: [], clinicPrescriptions: [], clinicNurseDesk: [], clinicDoctorQueue: [], clinicPairCodes: [],
-    clinicChangeLog: [], clinicLabOrders: []
+    clinicChangeLog: [], clinicLabOrders: [], clinicProfiles: [], clinicAuditLogs: [], clinicVitals: [],
+    clinicInpatientTreatment: [], clinicTreatmentNotes: [], clinicMedicationSchedule: [], clinicMedicationLogs: [],
+    clinicLabSamples: [], clinicDischargeSummary: [], clinicNurseTasks: [], clinicCashierShifts: [],
+    clinicPaymentRefunds: [], clinicTheatreSchedules: [], clinicCloudPrintJobs: [], clinicCloudPrintHosts: [],
+    tgIntruders: []
   }
 }
 
@@ -37,14 +46,17 @@ function initDB() {
   if (!fs.existsSync(DB_FILE)) {
     const initialData = buildInitialDB()
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
+    cachedDb = initialData
+    try {
+      const st = fs.statSync(DB_FILE)
+      cachedMtimeMs = st.mtimeMs
+      cachedSize = st.size
+    } catch {}
   }
 }
 
-function readDB() {
-  initDB()
-  const data = fs.readFileSync(DB_FILE, 'utf-8')
-  try {
-    const db = JSON.parse(data)
+function normalizeDB(db) {
+    db = db && typeof db === 'object' ? db : buildInitialDB()
     // Backward-compatible: add missing collections without overwriting existing data.
     if (!Array.isArray(db.shops)) db.shops = []
     if (!Array.isArray(db.devices)) db.devices = []
@@ -104,6 +116,10 @@ function readDB() {
     if (!Array.isArray(db.stmnFcmTokens)) db.stmnFcmTokens = []
     if (!Array.isArray(db.stmnChatMessages)) db.stmnChatMessages = []
     if (!Array.isArray(db.stmnChatSeen)) db.stmnChatSeen = []
+    if (!Array.isArray(db.spngFcmTokens)) db.spngFcmTokens = []
+    if (!Array.isArray(db.stmnRooms)) db.stmnRooms = []
+    if (!Array.isArray(db.stmnBookings)) db.stmnBookings = []
+    if (!Array.isArray(db.stmnReminderLog)) db.stmnReminderLog = []
     if (!Array.isArray(db.clinics)) db.clinics = []
     if (!Array.isArray(db.clinicDevices)) db.clinicDevices = []
     if (!Array.isArray(db.clinicUsers)) db.clinicUsers = []
@@ -130,6 +146,53 @@ function readDB() {
     if (!Array.isArray(db.clinicPairCodes)) db.clinicPairCodes = []
     if (!Array.isArray(db.clinicChangeLog)) db.clinicChangeLog = []
     if (!Array.isArray(db.clinicLabOrders)) db.clinicLabOrders = []
+    if (!Array.isArray(db.clinicProfiles)) db.clinicProfiles = []
+    if (!Array.isArray(db.clinicAuditLogs)) db.clinicAuditLogs = []
+    if (!Array.isArray(db.clinicVitals)) db.clinicVitals = []
+    if (!Array.isArray(db.clinicInpatientTreatment)) db.clinicInpatientTreatment = []
+    if (!Array.isArray(db.clinicTreatmentNotes)) db.clinicTreatmentNotes = []
+    if (!Array.isArray(db.clinicMedicationSchedule)) db.clinicMedicationSchedule = []
+    if (!Array.isArray(db.clinicMedicationLogs)) db.clinicMedicationLogs = []
+    if (!Array.isArray(db.clinicLabSamples)) db.clinicLabSamples = []
+    if (!Array.isArray(db.clinicDischargeSummary)) db.clinicDischargeSummary = []
+    if (!Array.isArray(db.clinicNurseTasks)) db.clinicNurseTasks = []
+    if (!Array.isArray(db.clinicCashierShifts)) db.clinicCashierShifts = []
+    if (!Array.isArray(db.clinicPaymentRefunds)) db.clinicPaymentRefunds = []
+    if (!Array.isArray(db.clinicTheatreSchedules)) db.clinicTheatreSchedules = []
+    if (!Array.isArray(db.clinicCloudPrintJobs)) db.clinicCloudPrintJobs = []
+    if (!Array.isArray(db.clinicCloudPrintHosts)) db.clinicCloudPrintHosts = []
+    if (!Array.isArray(db.tgIntruders)) db.tgIntruders = []
+    return db
+}
+
+function updateCache(db) {
+  cachedDb = db
+  try {
+    const st = fs.statSync(DB_FILE)
+    cachedMtimeMs = st.mtimeMs
+    cachedSize = st.size
+  } catch {
+    cachedMtimeMs = 0
+    cachedSize = -1
+  }
+}
+
+function readDB() {
+  initDB()
+  let stat = null
+  try {
+    stat = fs.statSync(DB_FILE)
+    if (cachedDb && cachedMtimeMs === stat.mtimeMs && cachedSize === stat.size) {
+      return cachedDb
+    }
+  } catch {}
+
+  const data = fs.readFileSync(DB_FILE, 'utf-8')
+  try {
+    const db = normalizeDB(JSON.parse(data))
+    cachedDb = db
+    cachedMtimeMs = stat?.mtimeMs || 0
+    cachedSize = stat?.size ?? -1
     return db
   } catch (e) {
     // If db.json was corrupted, preserve the bad file as a timestamped backup,
@@ -137,6 +200,7 @@ function readDB() {
     backupCorruptedDB(data, e?.message || e)
     const initialData = buildInitialDB()
     fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2))
+    updateCache(initialData)
     return initialData
   }
 }
@@ -147,6 +211,7 @@ function writeDB(data) {
   const payload = JSON.stringify(data || buildInitialDB(), null, 2)
   fs.writeFileSync(tmp, payload)
   fs.renameSync(tmp, DB_FILE)
+  updateCache(data || buildInitialDB())
 }
 
 export { readDB, writeDB }

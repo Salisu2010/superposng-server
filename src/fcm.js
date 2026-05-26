@@ -9,17 +9,26 @@
  *
  * Notes:
  *  - This project runs as ESM (package.json "type": "module").
- *  - firebase-admin is imported as default to support Node 20 ESM.
+ *  - firebase-admin is loaded lazily so sync can still run when FCM is not configured.
  */
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import admin from "firebase-admin";
+import { createRequire } from "module";
 import { fileURLToPath } from "url";
 import { readDB, writeDB } from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+
+let admin = null;
+let _adminLoadError = "";
+try {
+  admin = require("firebase-admin");
+} catch (e) {
+  _adminLoadError = e?.message || String(e);
+}
 
 // ---- Config helpers ----
 function resolveCredPath(p) {
@@ -61,6 +70,12 @@ function fcmLog(...args) {
 
 export function ensureFcm() {
   if (_fcmReady) return { ok: true, disabled: false };
+
+  if (!admin) {
+    _fcmDisabledReason = `firebase-admin unavailable: ${_adminLoadError || "package not installed"}`;
+    fcmLog("disabled:", _fcmDisabledReason);
+    return { ok: true, disabled: true, reason: _fcmDisabledReason };
+  }
 
   // If already initialized by other code, mark ready
   if (admin?.apps?.length) {
